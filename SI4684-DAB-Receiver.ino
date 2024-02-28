@@ -242,7 +242,7 @@ void setup() {
   delay(100);
   EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
   EEPROM.get(EE_UINT32_COMPONENTID, _componentID);
-  DAB.setService(_serviceID, _componentID);
+  if (_serviceID != 0 && _componentID != 0) DAB.setService(_serviceID, _componentID);
 
   BuildDisplay();
 
@@ -759,6 +759,19 @@ void read_encoder2() {
 }
 
 void DefaultSettings() {
+  EEPROM.writeByte(EE_BYTE_CHECKBYTE, EE_CHECKBYTE_VALUE);
+  EEPROM.writeByte(EE_BYTE_CONTRASTSET, 100);
+  EEPROM.writeByte(EE_BYTE_LANGUAGE, 0);
+  EEPROM.writeByte(EE_BYTE_DISPLAYFLIP, 0);
+  EEPROM.writeByte(EE_BYTE_ROTARYMODE, 0);
+  EEPROM.writeByte(EE_BYTE_TUNEMODE, 0);
+  EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
+  EEPROM.writeByte(EE_BYTE_WIFI, 0);
+  EEPROM.writeByte(EE_BYTE_UNIT, 0);
+  EEPROM.put(EE_UINT32_SERVICEID, 0);
+  EEPROM.put(EE_UINT32_COMPONENTID, 0);
+  EEPROM.put(EE_BYTE_DABFREQ, 0);
+  EEPROM.commit();
 }
 
 void tftReplace(int8_t offset, const String & textold, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize) {
