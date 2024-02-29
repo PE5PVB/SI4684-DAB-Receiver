@@ -132,7 +132,7 @@ void DAB::begin(uint8_t SSpin, uint8_t RSTpin) {
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
   slaveSelectPin = SSpin;
   pinMode(slaveSelectPin, OUTPUT);                                        // Configure SPI
-  pinMode(RSTpin, OUTPUT);
+/*  pinMode(RSTpin, OUTPUT);
   digitalWrite(RSTpin, HIGH);
   delay(50);
   digitalWrite(RSTpin, LOW);
@@ -142,7 +142,7 @@ void DAB::begin(uint8_t SSpin, uint8_t RSTpin) {
   digitalWrite(RSTpin, LOW);
   delay(50);
   digitalWrite(RSTpin, HIGH);
-  digitalWrite(slaveSelectPin, HIGH);
+*/  digitalWrite(slaveSelectPin, HIGH);
   SPI.begin(14, 16, 13, 15);
   SPIbuffer[0] = 0x09;
   SPIbuffer[1] = 0x00;
@@ -277,7 +277,7 @@ void DAB::EnsembleInfo(void) {
         numberofcomponents = SPIbuffer[offset + 5] & 0x0F;
 
         for (uint16_t j = 0; j < 16; j++) service[i].Label[j] = SPIbuffer[offset + 8 + j];
-        service[i].Label[15] = '\0';
+        service[i].Label[16] = '\0';
         offset += 24;
 
         for (uint16_t j = 0; j < numberofcomponents; j++) {
@@ -323,7 +323,7 @@ void DAB::EnsembleInfo(void) {
           }
 
           for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = ((char)SPIbuffer[7 + i]);
-          EnsembleLabel[15] = '\0';
+          EnsembleLabel[16] = '\0';
 
           ecc = SPIbuffer[23];
         } else {

@@ -45,7 +45,7 @@ static const char* const ProtectionText[] {
 typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
-  char      Label[16];
+  char      Label[17];
 } DABService;
 
 class DAB {
@@ -62,7 +62,7 @@ class DAB {
     const char* getChannel(uint8_t freq);
     String ASCII(const char* input);
 
-    DABService service[32];
+    DABService service[33];
     char* getChipID(void);
     char* getFirmwareVersion(void);
     uint16_t getRSSI(void);
@@ -103,7 +103,7 @@ class DAB {
     uint32_t  componentID;
     char ChipType[7];
     char FirmwVersion[6];
-    char EnsembleLabel[16];
+    char EnsembleLabel[17];
     uint32_t SlideShowByteCounter;
     uint32_t SlideShowLengthOld;
     bool SlideShowNew;

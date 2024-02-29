@@ -16,12 +16,16 @@
 #include "src/gui.h"
 #include "src/comms.h"
 #include "src/si4684.h"
+#include "src/TPA6130A2.h"
 #include <JPEGDecoder.h>
 #include <PNGdec.h>
 #include "FS.h"
 #include <LittleFS.h>
 
 PNG png;
+TPA6130A2 Headphones;
+DAB DAB;
+
 File pngfile;
 File jpgfile;
 
@@ -43,6 +47,7 @@ uint8_t service = 0;
 uint8_t freq = 0;
 bool direction;
 bool memorystore;
+bool trysetservice;
 bool setupmode;
 bool menu;
 bool tuning;
@@ -58,7 +63,6 @@ bool wificonnected;
 byte ContrastSet;
 byte displayflip;
 byte language;
-byte memorypos;
 byte rotarymode;
 byte subnetclient;
 byte tunemode;
@@ -106,12 +110,12 @@ String PLold;
 String SIDold;
 uint32_t _serviceID;
 uint32_t _componentID;
+char _serviceName[17];
 unsigned long tuningtimer;
 unsigned long rtticker;
 unsigned long rttickerhold;
 unsigned long rssitimer;
 
-DAB DAB;
 ESP32Time rtc(0);
 TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
 TFT_eSprite FrequencySprite = TFT_eSprite(&tft);
@@ -124,6 +128,11 @@ void setup() {
   LittleFS.format();
 
   setupmode = true;
+  Headphones.Init();
+  delay(100);
+  Headphones.SetHiZ(0);
+  delay(100);
+  Headphones.SetVolume(63);
 
   EEPROM.begin(EE_TOTAL_CNT);
   if (EEPROM.readByte(EE_BYTE_CHECKBYTE) != EE_CHECKBYTE_VALUE) DefaultSettings();
@@ -132,7 +141,6 @@ void setup() {
   displayflip = EEPROM.readByte(EE_BYTE_DISPLAYFLIP);
   rotarymode = EEPROM.readByte(EE_BYTE_ROTARYMODE);
   tunemode = EEPROM.readByte(EE_BYTE_TUNEMODE);
-  memorypos = EEPROM.readByte(EE_BYTE_MEMORYPOS);
   wifi = EEPROM.readByte(EE_BYTE_WIFI);
   unit = EEPROM.readByte(EE_BYTE_UNIT);
   dabfreq = EEPROM.readByte(EE_BYTE_DABFREQ);
@@ -239,10 +247,15 @@ void setup() {
   }
 
   DAB.setFreq(dabfreq);
-  delay(100);
   EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
   EEPROM.get(EE_UINT32_COMPONENTID, _componentID);
-  if (_serviceID != 0 && _componentID != 0) DAB.setService(_serviceID, _componentID);
+  for (int i = 0; i < 16; i++) {
+    _serviceName[i] = EEPROM.readByte(i + EE_CHAR17_SERVICENAME);
+  }
+  if (_serviceID != 0 && _componentID != 0) {
+    trysetservice = true;
+    Serial.println(String(DAB.ASCII(_serviceName)));
+  }
 
   BuildDisplay();
 
@@ -292,7 +305,10 @@ void loop() {
   }
 
   if (digitalRead(MODEBUTTON) == LOW) {
+    tunemode++;
+    if (tunemode > 2) tunemode = 0;
     ShowTuneMode();
+    while (digitalRead(MODEBUTTON) == LOW);
   }
 
   if (digitalRead(SLBUTTON) == LOW) {
@@ -302,6 +318,12 @@ void loop() {
 
 void ProcessDAB(void) {
   DAB.Update();
+
+  if (trysetservice && DAB.signallock) {
+    DAB.setService(_serviceID, _componentID);
+    trysetservice = false;
+  }
+
   if (!SlideShowView) {
     ShowRSSI();
     ShowBitrate();
@@ -425,8 +447,7 @@ void ShowSlideShow(void) {
     pngfile = LittleFS.open(filename.c_str(), "rb");
 
     if (pngfile) {
-      int16_t rc = png.open(
-                     filename.c_str(),
+      int16_t rc = png.open(filename.c_str(),
       [pngfile](const char *filename, int32_t *size) -> void * {
         pngfile = LittleFS.open(filename, "rb");
         *size = pngfile.size();
@@ -490,6 +511,9 @@ void StoreFrequency() {
   EEPROM.put(EE_UINT32_SERVICEID, DAB.service[DAB.ServiceIndex].ServiceID);
   EEPROM.put(EE_UINT32_COMPONENTID, DAB.service[DAB.ServiceIndex].CompID);
   EEPROM.put(EE_BYTE_DABFREQ, dabfreq);
+  for (int i = 0; i < 16; i++) {
+    EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, DAB.service[DAB.ServiceIndex].Label[i]);
+  }
   EEPROM.commit();
 }
 
@@ -765,12 +789,12 @@ void DefaultSettings() {
   EEPROM.writeByte(EE_BYTE_DISPLAYFLIP, 0);
   EEPROM.writeByte(EE_BYTE_ROTARYMODE, 0);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, 0);
-  EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
   EEPROM.writeByte(EE_BYTE_WIFI, 0);
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
   EEPROM.put(EE_UINT32_SERVICEID, 0);
   EEPROM.put(EE_UINT32_COMPONENTID, 0);
   EEPROM.put(EE_BYTE_DABFREQ, 0);
+  EEPROM.writeByte(EE_CHAR17_SERVICENAME, 0x00);
   EEPROM.commit();
 }
 
