@@ -46,6 +46,7 @@ TFT_eSPI tft = TFT_eSPI(240, 320);
 uint8_t service = 0;
 uint8_t freq = 0;
 bool direction;
+byte charwidth = 8;
 bool memorystore;
 bool trysetservice;
 bool setupmode;
@@ -73,7 +74,8 @@ int ActiveColor;
 int ActiveColorSmooth;
 int BarSignificantColor;
 int BarInsignificantColor;
-int charWidth = tft.textWidth("AA");
+int RTWidth;
+
 uint16_t BitrateOld;
 int Bitrateupdatetimer;
 int FrameColor;
@@ -85,7 +87,7 @@ int PrimaryColor;
 int PrimaryColorSmooth;
 int SignificantColor;
 int SignificantColorSmooth;
-
+int RTlengthold;
 int rotary;
 int rotary2;
 int rssi;
@@ -304,16 +306,8 @@ void loop() {
   if (digitalRead(ROTARY_BUTTON) == LOW) {
   }
 
-  if (digitalRead(MODEBUTTON) == LOW) {
-    tunemode++;
-    if (tunemode > 2) tunemode = 0;
-    ShowTuneMode();
-    while (digitalRead(MODEBUTTON) == LOW);
-  }
-
-  if (digitalRead(SLBUTTON) == LOW) {
-    SlideShowButtonPress();
-  }
+  if (digitalRead(MODEBUTTON) == LOW) ModeButtonPress();
+  if (digitalRead(SLBUTTON) == LOW) SlideShowButtonPress();
 }
 
 void ProcessDAB(void) {
@@ -343,6 +337,11 @@ void ProcessDAB(void) {
 
 void ShowRT() {
   if (DAB.ASCII(DAB.ServiceData).length() > 0) {
+    if (String(DAB.ASCII(DAB.ServiceData)).length() != RTlengthold) {
+      RTWidth = (String(DAB.ASCII(DAB.ServiceData)).length() * charwidth) + 3 * charwidth;
+      RTlengthold = String(DAB.ASCII(DAB.ServiceData)).length();
+    }
+
     if (DAB.ASCII(DAB.ServiceData).length() < 29) {
       xPos = 0;
       RadiotextSprite.fillSprite(BackgroundColor);
@@ -350,9 +349,9 @@ void ShowRT() {
       RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos, 2);
       RadiotextSprite.pushSprite(38, 220);
     } else {
-      if (millis() - rtticker >= 5) {
+      if (millis() - rtticker >= 20) {
         if (xPos == 0) {
-          if (millis() - rttickerhold >= 2000) {
+          if (millis() - rttickerhold >= 1000) {
             xPos --;
             rttickerhold = millis();
           }
@@ -360,13 +359,15 @@ void ShowRT() {
           xPos --;
           rttickerhold = millis();
         }
-        if (xPos < -tft.textWidth(DAB.ASCII(DAB.ServiceData)) + (charWidth * 20)) xPos = 0;
+
+        if (xPos < -RTWidth) xPos = 0;
         RadiotextSprite.fillSprite(BackgroundColor);
         RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos, 2);
+        RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos + RTWidth, 2);
         RadiotextSprite.pushSprite(38, 220);
+        rtticker = millis();
       }
-      rtticker = millis();
     }
   } else {
     RadiotextSprite.fillSprite(BackgroundColor);
@@ -526,11 +527,14 @@ void SlideShowButtonPress() {
     if (SlideShowView) BuildDisplay();
     SlideShowView = false;
   }
-  while (digitalRead(SLBUTTON) == LOW) delay(100);
+  while (digitalRead(SLBUTTON) == LOW);
 }
 
 void ModeButtonPress() {
-  while (digitalRead(MODEBUTTON) == LOW) delay(50);
+  tunemode++;
+  if (tunemode > 2) tunemode = 0;
+  ShowTuneMode();
+  while (digitalRead(MODEBUTTON) == LOW);
 }
 
 void KeyUp() {
