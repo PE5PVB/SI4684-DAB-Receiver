@@ -24,7 +24,7 @@
 
 PNG png;
 TPA6130A2 Headphones;
-DAB DAB;
+DAB radio;
 
 File pngfile;
 File jpgfile;
@@ -34,12 +34,12 @@ File jpgfile;
 #define ROTARY_PIN_2A   33
 #define ROTARY_PIN_2B   32
 #define ROTARY_BUTTON   25
+#define ROTARY_BUTTON2  35
 #define PIN_POT         33
 #define BANDBUTTON      36
 #define SLBUTTON        26
 #define MODEBUTTON      39
 #define CONTRASTPIN     2
-#define DABRESET        12
 
 TFT_eSPI tft = TFT_eSPI(240, 320);
 
@@ -60,6 +60,7 @@ bool SlideShowView;
 bool store;
 bool tuned;
 bool wifi;
+bool setvolume;
 bool wificonnected;
 byte ContrastSet;
 byte displayflip;
@@ -75,7 +76,7 @@ int ActiveColorSmooth;
 int BarSignificantColor;
 int BarInsignificantColor;
 int RTWidth;
-
+bool channellistview;
 uint16_t BitrateOld;
 int Bitrateupdatetimer;
 int FrameColor;
@@ -94,7 +95,7 @@ int rssi;
 int rssiold = 200;
 int SecondaryColor;
 int SecondaryColorSmooth;
-
+byte volume = 63;
 int SNRupdatetimer;
 int xPos;
 int SignalLevelold;
@@ -121,20 +122,16 @@ unsigned long rssitimer;
 ESP32Time rtc(0);
 TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
 TFT_eSprite FrequencySprite = TFT_eSprite(&tft);
+TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
 WiFiConnect wc;
 WiFiServer Server(7373);
 WiFiClient RemoteClient;
 
 void setup() {
+  setupmode = true;
   LittleFS.begin();
   LittleFS.format();
-
-  setupmode = true;
   Headphones.Init();
-  delay(100);
-  Headphones.SetHiZ(0);
-  delay(100);
-  Headphones.SetVolume(63);
 
   EEPROM.begin(EE_TOTAL_CNT);
   if (EEPROM.readByte(EE_BYTE_CHECKBYTE) != EE_CHECKBYTE_VALUE) DefaultSettings();
@@ -146,22 +143,23 @@ void setup() {
   wifi = EEPROM.readByte(EE_BYTE_WIFI);
   unit = EEPROM.readByte(EE_BYTE_UNIT);
   dabfreq = EEPROM.readByte(EE_BYTE_DABFREQ);
+  volume = EEPROM.readByte(EE_BYTE_VOLUME);
 
-  btStop();
+  Headphones.SetHiZ(1);
+  delay(100);
+  Headphones.SetVolume(volume);
+
   Serial.begin(115200);
 
   tft.init();
   doTheme();
-  if (displayflip == 0) {
-    tft.setRotation(3);
-  } else {
-    tft.setRotation(1);
-  }
+  if (displayflip == 0) tft.setRotation(3); else tft.setRotation(1);
 
   pinMode(BANDBUTTON, INPUT);
   pinMode(MODEBUTTON, INPUT);
   pinMode(SLBUTTON, INPUT);
   pinMode(ROTARY_BUTTON, INPUT);
+  pinMode(ROTARY_BUTTON2, INPUT);
   pinMode(ROTARY_PIN_A, INPUT);
   pinMode(ROTARY_PIN_B, INPUT);
   pinMode(ROTARY_PIN_2A, INPUT);
@@ -170,12 +168,17 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_B), read_encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_2A), read_encoder2, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_2B), read_encoder2, CHANGE);
+
   tft.setSwapBytes(true);
   tft.fillScreen(BackgroundColor);
 
   RadiotextSprite.createSprite(270, 19);
   RadiotextSprite.setTextDatum(TL_DATUM);
   RadiotextSprite.loadFont(FONT16);
+
+  VolumeSprite.createSprite(230, 50);
+  VolumeSprite.setTextDatum(TL_DATUM);
+  VolumeSprite.setSwapBytes(true);
 
   FrequencySprite.createSprite(200, 50);
   FrequencySprite.setTextDatum(TR_DATUM);
@@ -189,7 +192,7 @@ void setup() {
     analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
     tftPrint(0, myLanguage[language][1], 155, 70, ActiveColor, ActiveColorSmooth, 28);
     tftPrint(0, myLanguage[language][2], 155, 130, ActiveColor, ActiveColorSmooth, 28);
-    while (digitalRead(SLBUTTON) == LOW) delay(50);
+    while (digitalRead(SLBUTTON) == LOW);
   }
 
   if (digitalRead(MODEBUTTON) == LOW) {
@@ -206,14 +209,7 @@ void setup() {
     analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
     tftPrint(0, myLanguage[language][3], 155, 70, ActiveColor, ActiveColorSmooth, 28);
     tftPrint(0, myLanguage[language][2], 155, 130, ActiveColor, ActiveColorSmooth, 28);
-    while (digitalRead(MODEBUTTON) == LOW) delay(50);
-  }
-
-  if (digitalRead(ROTARY_BUTTON) == LOW && digitalRead(SLBUTTON) == HIGH) {
-    analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
-
-    tftPrint(0, myLanguage[language][2], 155, 130, ActiveColor, ActiveColorSmooth, 28);
-    while (digitalRead(ROTARY_BUTTON) == LOW) delay(50);
+    while (digitalRead(MODEBUTTON) == LOW);
   }
 
   if (digitalRead(ROTARY_BUTTON) == LOW && digitalRead(SLBUTTON) == LOW) {
@@ -222,7 +218,7 @@ void setup() {
     analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
     tftPrint(0, myLanguage[language][10], 155, 70, ActiveColor, ActiveColorSmooth, 28);
     tftPrint(0, myLanguage[language][2], 155, 130, ActiveColor, ActiveColorSmooth, 28);
-    while (digitalRead(ROTARY_BUTTON) == LOW && digitalRead(SLBUTTON) == LOW) delay(50);
+    while (digitalRead(ROTARY_BUTTON) == LOW && digitalRead(SLBUTTON) == LOW);
     ESP.restart();
   }
 
@@ -236,8 +232,8 @@ void setup() {
     delay(30);
   }
 
-  DAB.begin(15, DABRESET);
-  tftPrint(0, String(DAB.getChipID()) + " v" + String(DAB.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+  radio.begin(15, -1);
+  tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
 
   delay(1500);
 
@@ -248,7 +244,7 @@ void setup() {
     Server.end();
   }
 
-  DAB.setFreq(dabfreq);
+  radio.setFreq(dabfreq);
   EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
   EEPROM.get(EE_UINT32_COMPONENTID, _componentID);
   for (int i = 0; i < 16; i++) {
@@ -256,11 +252,10 @@ void setup() {
   }
   if (_serviceID != 0 && _componentID != 0) {
     trysetservice = true;
-    Serial.println(String(DAB.ASCII(_serviceName)));
+    Serial.println(String(radio.ASCII(_serviceName)));
   }
 
   BuildDisplay();
-
   setupmode = false;
 }
 
@@ -276,30 +271,50 @@ void loop() {
       attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), read_encoder, CHANGE);
       attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_B), read_encoder, CHANGE);
     } else if (tuning) {
-      DAB.setFreq(dabfreq);
+      radio.setFreq(dabfreq);
       tuning = false;
     }
   }
 
   if (rotary2 == -1) {
-    if (DAB.numberofservices > 0) DABSelectService(1);
-    if (SlideShowView) SlideShowButtonPress();
-    store = true;
-    tuningtimer = millis();
+    if (setvolume) {
+      if (volume < 62) volume++;
+      ShowVolume();
+      rotary2 = 0;
+    } else {
+      if (radio.numberofservices > 0) DABSelectService(1);
+      if (SlideShowView) SlideShowButtonPress();
+      store = true;
+      tuningtimer = millis();
+    }
   }
 
   if (rotary2 == 1) {
-    if (DAB.numberofservices > 0) DABSelectService(0);
-    if (SlideShowView) SlideShowButtonPress();
-    store = true;
-    tuningtimer = millis();
+    if (setvolume) {
+      if (volume > 0) volume--;
+      ShowVolume();
+      rotary2 = 0;
+    } else {
+      if (radio.numberofservices > 0) DABSelectService(0);
+      if (SlideShowView) SlideShowButtonPress();
+      store = true;
+      tuningtimer = millis();
+    }
   }
 
   if (rotary == -1) {
+    if (channellistview) {
+      channellistview = false;
+      BuildDisplay();
+    }
     KeyUp();
   }
 
   if (rotary == 1) {
+    if (channellistview) {
+      channellistview = false;
+      BuildDisplay();
+    }
     KeyDown();
   }
 
@@ -308,45 +323,69 @@ void loop() {
 
   if (digitalRead(MODEBUTTON) == LOW) ModeButtonPress();
   if (digitalRead(SLBUTTON) == LOW) SlideShowButtonPress();
+
+  if (digitalRead(ROTARY_BUTTON) == LOW) {
+    if (channellistview) {
+      channellistview = false;
+      BuildDisplay();
+    } else {
+      channellistview = true;
+      BuildChannelList();
+    }
+    while (digitalRead(ROTARY_BUTTON) == LOW);
+  }
+
+  if (digitalRead(ROTARY_BUTTON2) == LOW) {
+    if (setvolume) {
+      setvolume = false;
+      if (!channellistview) BuildDisplay(); else BuildChannelList();
+    } else {
+      setvolume = true;
+      ShowVolume();
+    }
+    while (digitalRead(ROTARY_BUTTON2) == LOW);
+  }
 }
 
 void ProcessDAB(void) {
-  DAB.Update();
+  radio.Update();
 
-  if (trysetservice && DAB.signallock) {
-    DAB.setService(_serviceID, _componentID);
+  if (trysetservice && radio.signallock) {
+    radio.setService(_serviceID, _componentID);
     trysetservice = false;
   }
 
   if (!SlideShowView) {
-    ShowRSSI();
-    ShowBitrate();
-    ShowSignalLevel();
-    ShowEID();
-    ShowSID();
-    ShowProtectionlevel();
-    ShowPS();
+    if (!channellistview) {
+      ShowRSSI();
+      ShowBitrate();
+      ShowSignalLevel();
+      ShowEID();
+      ShowSID();
+      ShowProtectionlevel();
+      ShowPS();
+    }
     ShowRT();
   } else {
-    if (DAB.SlideShowAvailable && DAB.SlideShowUpdate) {
+    if (radio.SlideShowAvailable && radio.SlideShowUpdate) {
       ShowSlideShow();
-      DAB.SlideShowUpdate = false;
+      radio.SlideShowUpdate = false;
     }
   }
 }
 
 void ShowRT() {
-  if (DAB.ASCII(DAB.ServiceData).length() > 0) {
-    if (String(DAB.ASCII(DAB.ServiceData)).length() != RTlengthold) {
-      RTWidth = (String(DAB.ASCII(DAB.ServiceData)).length() * charwidth) + 3 * charwidth;
-      RTlengthold = String(DAB.ASCII(DAB.ServiceData)).length();
+  if (radio.ASCII(radio.ServiceData).length() > 0) {
+    if (String(radio.ASCII(radio.ServiceData)).length() != RTlengthold) {
+      RTWidth = (String(radio.ASCII(radio.ServiceData)).length() * charwidth) + 3 * charwidth;
+      RTlengthold = String(radio.ASCII(radio.ServiceData)).length();
     }
 
-    if (DAB.ASCII(DAB.ServiceData).length() < 29) {
+    if (radio.ASCII(radio.ServiceData).length() < 29) {
       xPos = 0;
       RadiotextSprite.fillSprite(BackgroundColor);
       RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-      RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos, 2);
+      RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 2);
       RadiotextSprite.pushSprite(38, 220);
     } else {
       if (millis() - rtticker >= 20) {
@@ -363,8 +402,8 @@ void ShowRT() {
         if (xPos < -RTWidth) xPos = 0;
         RadiotextSprite.fillSprite(BackgroundColor);
         RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos, 2);
-        RadiotextSprite.drawString(String(DAB.ASCII(DAB.ServiceData)), xPos + RTWidth, 2);
+        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 2);
+        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth, 2);
         RadiotextSprite.pushSprite(38, 220);
         rtticker = millis();
       }
@@ -373,40 +412,40 @@ void ShowRT() {
     RadiotextSprite.fillSprite(BackgroundColor);
     RadiotextSprite.pushSprite(38, 220);
   }
-  if (RTold != DAB.ASCII(DAB.ServiceData)) xPos = 0;
-  RTold = DAB.ASCII(DAB.ServiceData);
+  if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
+  RTold = radio.ASCII(radio.ServiceData);
 }
 
 void ShowSID() {
-  if (String(DAB.SID) != SIDold) {
-    tftReplace(-1, SIDold, String(DAB.SID), 143, 135 , PrimaryColor, PrimaryColorSmooth, 28);
-    SIDold = String(DAB.SID);
+  if (String(radio.SID) != SIDold) {
+    tftReplace(-1, SIDold, String(radio.SID), 143, 135 , PrimaryColor, PrimaryColorSmooth, 28);
+    SIDold = String(radio.SID);
   }
 }
 
 void ShowEID() {
-  if (String(DAB.EID) != EIDold) {
-    tftReplace(-1, EIDold, String(DAB.EID), 38, 135 , PrimaryColor, PrimaryColorSmooth, 28);
-    EIDold = String(DAB.EID);
+  if (String(radio.EID) != EIDold) {
+    tftReplace(-1, EIDold, String(radio.EID), 38, 135 , PrimaryColor, PrimaryColorSmooth, 28);
+    EIDold = String(radio.EID);
   }
 }
 
 void ShowPS() {
-  if ((DAB.ServiceStart ? DAB.ASCII(DAB.service[DAB.ServiceIndex].Label) : DAB.getEnsembleLabel()) != PSold) {
-    tftReplace(-1, PSold, String((DAB.ServiceStart ? DAB.ASCII(DAB.service[DAB.ServiceIndex].Label) : DAB.getEnsembleLabel())), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
-    PSold = (DAB.ServiceStart ? DAB.ASCII(DAB.service[DAB.ServiceIndex].Label) : DAB.getEnsembleLabel());
+  if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel()) != PSold) {
+    tftReplace(-1, PSold, String((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel())), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
+    PSold = (radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel());
   }
 }
 
 void ShowProtectionlevel() {
-  if (String(ProtectionText[DAB.protectionlevel]) != PLold) {
-    if (DAB.ServiceStart) tftReplace(0, PLold, String(ProtectionText[DAB.protectionlevel]), 105, 4, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, PLold, 105, 4, BackgroundColor, BackgroundColor, 28);
-    PLold = String(ProtectionText[DAB.protectionlevel]);
+  if (String(ProtectionText[radio.protectionlevel]) != PLold) {
+    if (radio.ServiceStart) tftReplace(0, PLold, String(ProtectionText[radio.protectionlevel]), 105, 4, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, PLold, 105, 4, BackgroundColor, BackgroundColor, 28);
+    PLold = String(ProtectionText[radio.protectionlevel]);
   }
 }
 
 void ShowSlideShow(void) {
-  if (DAB.isJPG) {
+  if (radio.isJPG) {
     tft.fillScreen(TFT_BLACK);
     jpgfile = LittleFS.open("/slideshow.img", "rb");
     if (!jpgfile) {
@@ -442,7 +481,7 @@ void ShowSlideShow(void) {
       }
     }
     jpgfile.close();
-  } else if (DAB.isPNG) {
+  } else if (radio.isPNG) {
     tft.fillScreen(TFT_BLACK);
     String filename = "/slideshow.img";
     pngfile = LittleFS.open(filename.c_str(), "rb");
@@ -456,9 +495,7 @@ void ShowSlideShow(void) {
       },
       [pngfile](void *handle) {
         File *file = static_cast<File *>(handle);
-        if (file && file->available()) {
-          file->close();
-        }
+        if (file) file->close();
       },
       [pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
         if (!pngfile || !pngfile.available()) return 0;
@@ -485,43 +522,44 @@ void ShowSlideShow(void) {
 }
 
 void DABSelectService(bool dir) {
-  if (DAB.numberofservices > 0) {
+  if (radio.numberofservices > 0) {
     if (dir) {
-      if (DAB.ServiceIndex < (DAB.numberofservices - 1)) {
-        if (DAB.ServiceStart) DAB.ServiceIndex++;
+      if (radio.ServiceIndex < (radio.numberofservices - 1)) {
+        if (radio.ServiceStart) radio.ServiceIndex++;
       } else {
-        DAB.ServiceIndex = 0;
+        radio.ServiceIndex = 0;
       }
     } else {
-      if (DAB.ServiceIndex > 0) {
-        DAB.ServiceIndex--;
+      if (radio.ServiceIndex > 0) {
+        radio.ServiceIndex--;
       } else {
-        DAB.ServiceIndex = DAB.numberofservices - 1;
+        radio.ServiceIndex = radio.numberofservices - 1;
       }
     }
-    DAB.setService(DAB.ServiceIndex);
+    radio.setService(radio.ServiceIndex);
   }
   rotary2 = 0;
-  DAB.ServiceStart = true;
+  radio.ServiceStart = true;
+  if (channellistview) BuildChannelList();
 }
 
 void BANDBUTTONPress() {
 }
 
 void StoreFrequency() {
-  EEPROM.put(EE_UINT32_SERVICEID, DAB.service[DAB.ServiceIndex].ServiceID);
-  EEPROM.put(EE_UINT32_COMPONENTID, DAB.service[DAB.ServiceIndex].CompID);
+  EEPROM.put(EE_UINT32_SERVICEID, radio.service[radio.ServiceIndex].ServiceID);
+  EEPROM.put(EE_UINT32_COMPONENTID, radio.service[radio.ServiceIndex].CompID);
   EEPROM.put(EE_BYTE_DABFREQ, dabfreq);
   for (int i = 0; i < 16; i++) {
-    EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, DAB.service[DAB.ServiceIndex].Label[i]);
+    EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, radio.service[radio.ServiceIndex].Label[i]);
   }
   EEPROM.commit();
 }
 
 void SlideShowButtonPress() {
-  if (!SlideShowView && DAB.SlideShowAvailable) {
+  if (!SlideShowView && radio.SlideShowAvailable) {
     tft.fillScreen(TFT_BLACK);
-    DAB.SlideShowUpdate = true;
+    radio.SlideShowUpdate = true;
     SlideShowView = true;
   } else {
     if (SlideShowView) BuildDisplay();
@@ -588,8 +626,8 @@ void ShowFreq() {
   detachInterrupt(digitalPinToInterrupt(ROTARY_PIN_B));
   FrequencySprite.fillSprite(BackgroundColor);
   FrequencySprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-  FrequencySprite.drawString(String(DAB.getFreq(dabfreq) / 1000) + "." + (DAB.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(DAB.getFreq(dabfreq) % 1000), 200, -6) + " ";
-  tftReplace(1, DAB.getChannel(dabfreqold), DAB.getChannel(dabfreq), 316, 38, SecondaryColor, SecondaryColorSmooth, 28);
+  FrequencySprite.drawString(String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000), 200, -6) + " ";
+  tftReplace(1, radio.getChannel(dabfreqold), radio.getChannel(dabfreq), 316, 38, SecondaryColor, SecondaryColorSmooth, 28);
   FrequencySprite.pushSprite(46, 46);
   dabfreqold = dabfreq;
   attachInterrupt(digitalPinToInterrupt(ROTARY_PIN_A), read_encoder, CHANGE);
@@ -599,8 +637,8 @@ void ShowFreq() {
 void ShowSignalLevel() {
   if (millis() >= rssitimer + 100) {
     rssitimer = millis();
-    SignalLevel = DAB.getRSSI();
-    CNR = DAB.cnr;
+    SignalLevel = radio.getRSSI();
+    CNR = radio.cnr;
   }
 
   SAvg = (((SAvg * 9) + 5) / 10) + SignalLevel;
@@ -641,7 +679,7 @@ void ShowSignalLevel() {
   }
 
   if (CNRold != CNR) {
-    if (DAB.signallock) {
+    if (radio.signallock) {
       tftPrint(1, String("--"), 295, 163, BackgroundColor, BackgroundColor, 16);
       tftReplace(1, String(CNRold), String(CNR), 295, 163, PrimaryColor, PrimaryColorSmooth, 16);
     } else {
@@ -651,15 +689,29 @@ void ShowSignalLevel() {
   }
 }
 
+void ShowVolume() {
+  uint8_t segments = map(volume, 0, 63, 0, 94);
+  VolumeSprite.drawRoundRect(0, 0, 230, 50, 5, ActiveColor);
+  VolumeSprite.pushImage (4, 13, 24, 24, headphones);
+  VolumeSprite.fillRect(36, 20, 2 * constrain(segments, 0, 74), 10, BarInsignificantColor);
+  VolumeSprite.fillRect(36 + 2 * 74, 20, 2 * (constrain(segments, 74, 94) - 74), 10, BarSignificantColor);
+  VolumeSprite.fillRect(36 + 2 * constrain(segments, 0, 94), 20, 2 * (94 - constrain(segments, 0, 94)), 10, GreyoutColor);
+  VolumeSprite.pushSprite(46, 46);
+  Headphones.SetVolume(volume);
+  EEPROM.writeByte(EE_BYTE_VOLUME, volume);
+  EEPROM.commit();
+}
+
+
 void ShowBitrate() {
-  if (DAB.bitrate != BitrateOld) {
-    if (DAB.bitrate == 0) {
+  if (radio.bitrate != BitrateOld) {
+    if (radio.bitrate == 0) {
       tftReplace(1, String (BitrateOld, DEC), "-", 201, 4, ActiveColor, ActiveColorSmooth, 28);
     } else {
       tftPrint(1, "-", 201, 4, BackgroundColor, BackgroundColor, 28);
-      tftReplace(1, String (BitrateOld, DEC), String (DAB.bitrate, DEC), 201, 4, ActiveColor, ActiveColorSmooth, 28);
+      tftReplace(1, String (BitrateOld, DEC), String (radio.bitrate, DEC), 201, 4, ActiveColor, ActiveColorSmooth, 28);
     }
-    BitrateOld = DAB.bitrate;
+    BitrateOld = radio.bitrate;
   }
 }
 
@@ -731,8 +783,8 @@ void TuneUp() {
   if (dabfreq > 37) dabfreq = 0;
   tuning = true;
   tuningtimer = millis();
-  DAB.ServiceIndex = 0;
-  DAB.ServiceStart = false;
+  radio.ServiceIndex = 0;
+  radio.ServiceStart = false;
   ShowFreq();
 }
 
@@ -741,8 +793,8 @@ void TuneDown() {
   if (dabfreq > 37) dabfreq = 37;
   tuning = true;
   tuningtimer = millis();
-  DAB.ServiceIndex = 0;
-  DAB.ServiceStart = false;
+  radio.ServiceIndex = 0;
+  radio.ServiceStart = false;
   ShowFreq();
 }
 
@@ -795,6 +847,7 @@ void DefaultSettings() {
   EEPROM.writeByte(EE_BYTE_TUNEMODE, 0);
   EEPROM.writeByte(EE_BYTE_WIFI, 0);
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
+  EEPROM.writeByte(EE_BYTE_VOLUME, 40);
   EEPROM.put(EE_UINT32_SERVICEID, 0);
   EEPROM.put(EE_UINT32_COMPONENTID, 0);
   EEPROM.put(EE_BYTE_DABFREQ, 0);

@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[2][11] = {
+static const char* const myLanguage[2][12] = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -16,7 +16,8 @@ static const char* const myLanguage[2][11] = {
     "encoder set to standard", // 7
     "SI-DAB receiver", // 8
 	"Software", // 9
-	"Defaults loaded" // 10
+	"Defaults loaded", // 10
+	"Channel list" // 11
   },
 
   { "Nederlands", // Dutch
@@ -29,7 +30,8 @@ static const char* const myLanguage[2][11] = {
     "encoder ingesteld als standaard", // 7
     "SI-DAB ontvanger", // 8
 	"Software", // 9
-	"Opnieuw geconfigureerd" // 10
+	"Opnieuw geconfigureerd", // 10
+	"Kanalen lijst" // 11
   }
 };
 #endif

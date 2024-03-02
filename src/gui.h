@@ -5,6 +5,7 @@
 #include <TFT_eSPI.h>
 #include "WiFiConnect.h"
 #include "WiFiConnectParam.h"
+#include "si4684.h"
 
 #define CONTRASTPIN     2
 
@@ -62,7 +63,10 @@ extern int16_t SignalLevel;
 extern TFT_eSPI tft;
 extern WiFiConnect wc;
 extern TFT_eSprite MenuInfobox;
+extern TFT_eSprite ChannellistSprite;
+extern DAB radio;
 
+void BuildChannelList();
 void BuildMenu();
 void BuildDisplay();
 void MenuUp();

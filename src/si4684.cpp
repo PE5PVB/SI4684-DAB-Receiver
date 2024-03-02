@@ -132,7 +132,7 @@ void DAB::begin(uint8_t SSpin, uint8_t RSTpin) {
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
   slaveSelectPin = SSpin;
   pinMode(slaveSelectPin, OUTPUT);                                        // Configure SPI
-/*  pinMode(RSTpin, OUTPUT);
+  pinMode(RSTpin, OUTPUT);
   digitalWrite(RSTpin, HIGH);
   delay(50);
   digitalWrite(RSTpin, LOW);
@@ -142,7 +142,7 @@ void DAB::begin(uint8_t SSpin, uint8_t RSTpin) {
   digitalWrite(RSTpin, LOW);
   delay(50);
   digitalWrite(RSTpin, HIGH);
-*/  digitalWrite(slaveSelectPin, HIGH);
+  digitalWrite(slaveSelectPin, HIGH);
   SPI.begin(14, 16, 13, 15);
   SPIbuffer[0] = 0x09;
   SPIbuffer[1] = 0x00;
