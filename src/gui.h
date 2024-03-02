@@ -21,12 +21,10 @@
 #define ITEM9			190
 #define ITEM10			210
 
-enum menupage {INDEX, MAINSETTINGS, AUDIOSETTINGS, DISPLAYSETTINGS, RDSSETTINGS, FMSETTINGS, AMSETTINGS, CONNECTIVITY};
-
 extern byte menuitem;
-extern byte items[8];
 
 extern bool change;
+extern byte tot;
 extern bool SlideShowView;
 extern bool wifi;
 extern byte ContrastSet;
@@ -41,6 +39,8 @@ extern String EIDold;
 extern String SIDold;
 extern String PLold;
 extern String PSold;
+extern bool highz;
+extern bool autoslideshow;
 extern int BarInsignificantColor;
 extern int BarSignificantColor;
 extern int BitrateAutoColor;

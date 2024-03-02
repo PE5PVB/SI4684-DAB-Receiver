@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[2][12] = {
+static const char* const myLanguage[2][27] = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -17,7 +17,22 @@ static const char* const myLanguage[2][12] = {
     "SI-DAB receiver", // 8
 	"Software", // 9
 	"Defaults loaded", // 10
-	"Channel list" // 11
+	"Channel list", // 11
+	"Language", // 12
+	"Brightness", // 13
+	"Headphones impedance", // 14
+	"Auto slideshow", // 15
+	"Signal units", // 16
+	"WiFi", // 17
+	"Configure WiFi", // 18
+	"PRESS MODE TO RETURN", // 19
+	"CONFIGURATION", // 20
+	"High", // 21
+	"Low", // 22
+	"On", // 23
+	"Off", // 24
+	"Time-out Timer", // 25
+	"Min." // 26
   },
 
   { "Nederlands", // Dutch
@@ -31,7 +46,22 @@ static const char* const myLanguage[2][12] = {
     "SI-DAB ontvanger", // 8
 	"Software", // 9
 	"Opnieuw geconfigureerd", // 10
-	"Kanalen lijst" // 11
+	"Kanalen lijst", // 11
+	"Language", // 12
+	"Brightness", // 13
+	"Headphones impedance", // 14
+	"Auto slideshow", // 15
+	"Signal units", // 16
+	"WiFi", // 17
+	"Configure WiFi", // 18	
+	"DRUK MODE OM AF TE SLUITEN", // 19	
+	"CONFIGURATIE", // 20
+	"Hoog", // 21
+	"Laag", // 22	
+	"Aan", // 23
+	"Uit", // 24
+	"Automatisch uitschakelen", // 25
+	"Min." // 26
   }
 };
 #endif

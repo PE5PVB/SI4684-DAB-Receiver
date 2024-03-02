@@ -52,7 +52,10 @@ bool trysetservice;
 bool setupmode;
 bool menu;
 bool tuning;
+bool highz;
+bool autoslideshow;
 bool seek;
+byte tot;
 bool resetFontOnNextCall;
 byte dabfreq;
 byte dabfreqold;
@@ -261,6 +264,7 @@ void setup() {
 
 void loop() {
   ProcessDAB();
+  if (seek) Seek(direction);
 
   if (millis() >= tuningtimer + 500) {
     if (store) {
@@ -276,29 +280,31 @@ void loop() {
     }
   }
 
-  if (rotary2 == -1) {
-    if (setvolume) {
-      if (volume < 62) volume++;
-      ShowVolume();
-      rotary2 = 0;
-    } else {
-      if (radio.numberofservices > 0) DABSelectService(1);
-      if (SlideShowView) SlideShowButtonPress();
-      store = true;
-      tuningtimer = millis();
+  if (!menu) {
+    if (rotary2 == -1) {
+      if (setvolume) {
+        if (volume < 62) volume++;
+        ShowVolume();
+        rotary2 = 0;
+      } else {
+        if (radio.numberofservices > 0) DABSelectService(1);
+        if (SlideShowView) SlideShowButtonPress();
+        store = true;
+        tuningtimer = millis();
+      }
     }
-  }
 
-  if (rotary2 == 1) {
-    if (setvolume) {
-      if (volume > 0) volume--;
-      ShowVolume();
-      rotary2 = 0;
-    } else {
-      if (radio.numberofservices > 0) DABSelectService(0);
-      if (SlideShowView) SlideShowButtonPress();
-      store = true;
-      tuningtimer = millis();
+    if (rotary2 == 1) {
+      if (setvolume) {
+        if (volume > 0) volume--;
+        ShowVolume();
+        rotary2 = 0;
+      } else {
+        if (radio.numberofservices > 0) DABSelectService(0);
+        if (SlideShowView) SlideShowButtonPress();
+        store = true;
+        tuningtimer = millis();
+      }
     }
   }
 
@@ -318,24 +324,25 @@ void loop() {
     KeyDown();
   }
 
-  if (digitalRead(ROTARY_BUTTON) == LOW) {
-  }
-
   if (digitalRead(MODEBUTTON) == LOW) ModeButtonPress();
-  if (digitalRead(SLBUTTON) == LOW) SlideShowButtonPress();
+  if (!menu && digitalRead(SLBUTTON) == LOW) SlideShowButtonPress();
 
   if (digitalRead(ROTARY_BUTTON) == LOW) {
-    if (channellistview) {
-      channellistview = false;
-      BuildDisplay();
+    if (!menu) {
+      if (channellistview) {
+        channellistview = false;
+        BuildDisplay();
+      } else {
+        channellistview = true;
+        BuildChannelList();
+      }
     } else {
-      channellistview = true;
-      BuildChannelList();
+
     }
     while (digitalRead(ROTARY_BUTTON) == LOW);
   }
 
-  if (digitalRead(ROTARY_BUTTON2) == LOW) {
+  if (!menu && digitalRead(ROTARY_BUTTON2) == LOW) {
     if (setvolume) {
       setvolume = false;
       if (!channellistview) BuildDisplay(); else BuildChannelList();
@@ -355,7 +362,7 @@ void ProcessDAB(void) {
     trysetservice = false;
   }
 
-  if (!SlideShowView) {
+  if (!SlideShowView && !menu) {
     if (!channellistview) {
       ShowRSSI();
       ShowBitrate();
@@ -367,7 +374,7 @@ void ProcessDAB(void) {
     }
     ShowRT();
   } else {
-    if (radio.SlideShowAvailable && radio.SlideShowUpdate) {
+    if (radio.SlideShowAvailable && radio.SlideShowUpdate && !menu) {
       ShowSlideShow();
       radio.SlideShowUpdate = false;
     }
@@ -569,9 +576,28 @@ void SlideShowButtonPress() {
 }
 
 void ModeButtonPress() {
-  tunemode++;
-  if (tunemode > 2) tunemode = 0;
-  ShowTuneMode();
+  seek = false;
+  unsigned long counterold = millis();
+  unsigned long counter = millis();
+  while (digitalRead(MODEBUTTON) == LOW && counter - counterold <= 1000) counter = millis();
+
+  if (menu) {
+    menu = false;
+    BuildDisplay();
+  } else if (SlideShowView) {
+    SlideShowView = false;
+    BuildDisplay();
+  } else {
+    if (counter - counterold <= 1000) {
+      tunemode++;
+      if (tunemode > 2) tunemode = 0;
+      ShowTuneMode();
+    } else {
+      menu = true;
+      BuildMenu();
+
+    }
+  }
   while (digitalRead(MODEBUTTON) == LOW);
 }
 
@@ -582,7 +608,13 @@ void KeyUp() {
   if (!menu) {
     switch (tunemode) {
       case TUNE_MAN:
-        TuneUp();
+        dabfreq++;
+        if (dabfreq > 37) dabfreq = 0;
+        tuning = true;
+        tuningtimer = millis();
+        radio.ServiceIndex = 0;
+        radio.ServiceStart = false;
+        ShowFreq();
         break;
 
       case TUNE_AUTO:
@@ -605,7 +637,13 @@ void KeyDown() {
   if (!menu) {
     switch (tunemode) {
       case TUNE_MAN:
-        TuneDown();
+        dabfreq--;
+        if (dabfreq > 37) dabfreq = 37;
+        tuning = true;
+        tuningtimer = millis();
+        radio.ServiceIndex = 0;
+        radio.ServiceStart = false;
+        ShowFreq();
         break;
 
       case TUNE_AUTO:
@@ -778,24 +816,20 @@ void ShowRSSI() {
   }
 }
 
-void TuneUp() {
-  dabfreq++;
-  if (dabfreq > 37) dabfreq = 0;
-  tuning = true;
-  tuningtimer = millis();
+void Seek(bool mode) {
+  if (mode) {
+    dabfreq++;
+    if (dabfreq > 37) dabfreq = 0;
+  } else {
+    dabfreq--;
+    if (dabfreq > 37) dabfreq = 37;
+  }
+  radio.setFreq(dabfreq);
   radio.ServiceIndex = 0;
   radio.ServiceStart = false;
   ShowFreq();
-}
-
-void TuneDown() {
-  dabfreq--;
-  if (dabfreq > 37) dabfreq = 37;
-  tuning = true;
-  tuningtimer = millis();
-  radio.ServiceIndex = 0;
-  radio.ServiceStart = false;
-  ShowFreq();
+  radio.Update();
+  if (radio.signallock) seek = false;
 }
 
 void read_encoder() {

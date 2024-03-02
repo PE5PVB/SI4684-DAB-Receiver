@@ -9,7 +9,6 @@
 #include <cstring>
 
 byte menuitem;
-byte items[8] = {8, 2, 7, 10, 9, 10, 10, 5};
 
 void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
   PrimaryColor = TFT_YELLOW;
@@ -79,6 +78,33 @@ void BuildChannelList() {
 }
 
 void BuildMenu() {
+  SlideShowView = false;
+  tft.fillScreen(BackgroundColor);
+  tft.drawRect(0, 0, 320, 240, FrameColor);
+  tft.drawLine(0, 30, 320, 30, FrameColor);
+  tft.drawLine(0, 217, 320, 217, FrameColor);
+  tftPrint(0, myLanguage[language][20], 155, 4, PrimaryColor, PrimaryColorSmooth, 28);
+  tftPrint(0, myLanguage[language][19], 155, 222, SecondaryColor, SecondaryColorSmooth, 16);
+  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
+
+  tftPrint(-1, myLanguage[language][12], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][13], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][14], 8, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][15], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][16], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][25], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
+  if (wifi) tftPrint(-1, String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()), 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16); else tftPrint(-1, myLanguage[language][17], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);  
+  tftPrint(-1, myLanguage[language][18], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
+
+  tftPrint(1, myLanguage[language][0], 310, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(1, "%", 310, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(1, String(ContrastSet, DEC), 270, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  if (highz) tftPrint(1, myLanguage[language][21], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][22], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);  
+  if (autoslideshow) tftPrint(1, myLanguage[language][23], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);  
+  tftPrint(1, unitString[unit], 310, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  if (tot != 0) tftPrint(1, String(tot), 270, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  if (tot != 0) tftPrint(1, myLanguage[language][26], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  if (wifi) tftPrint(1, myLanguage[language][23], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);    
 }
 
 void BuildDisplay() {
@@ -149,9 +175,25 @@ void BuildDisplay() {
 }
 
 void MenuUp() {
+	tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+      menuoption += ITEM_GAP;
+      menuitem++;
+      if (menuitem > 7) {
+        menuitem = 0;
+        menuoption = ITEM1;
+      }
+tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);	  
 }
 
 void MenuDown() {
+	    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+		      menuoption -= ITEM_GAP;
+      menuitem--;
+      if (menuitem > 7) {
+        menuoption = ITEM8;
+        menuitem = 7;
+      }
+tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
 }
 
 void DoMenu() {
