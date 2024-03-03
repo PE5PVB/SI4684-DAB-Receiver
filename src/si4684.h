@@ -42,6 +42,25 @@ static const char* const ProtectionText[] {
   "EEP-B4"
 };
 
+static const char* const AudioModeText[] {
+	"Dual",
+	"Mono",
+	"Stereo",
+	"Joint stereo"
+};
+
+static const char* const ServiceTypeText[] {
+	"Audio",
+	"Data",
+	"FIDC",
+	"MSC",
+	"DAB+",
+	"DAB",
+	"FIC",
+	"XPAD data",
+	"-"
+};
+
 typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
@@ -50,14 +69,13 @@ typedef struct _Services {
 
 class DAB {
   public:
-    void begin(uint8_t SSpin, uint8_t RSTpin);
+    void begin(uint8_t SSpin);
     void EnsembleInfo(void);
     void ServiceInfo(void);
     void getServiceData(void);
     void Update(void);
     void setFreq(uint8_t freq_index);
     void setService(uint8_t index);
-    void setService(uint32_t _serviceid, uint32_t _componentid);
     uint32_t getFreq(uint8_t freq);
     const char* getChannel(uint8_t freq);
     String ASCII(const char* input);

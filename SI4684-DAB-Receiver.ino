@@ -36,7 +36,7 @@ File jpgfile;
 #define ROTARY_BUTTON   25
 #define ROTARY_BUTTON2  35
 #define PIN_POT         33
-#define BANDBUTTON      36
+#define STANDBYBUTTON   36
 #define SLBUTTON        26
 #define MODEBUTTON      39
 #define CONTRASTPIN     2
@@ -48,12 +48,13 @@ uint8_t freq = 0;
 bool direction;
 byte charwidth = 8;
 bool memorystore;
+bool ShowServiceInformation;
 bool trysetservice;
 bool setupmode;
 bool menu;
 bool tuning;
 bool highz;
-bool autoslideshow;
+bool autoslideshow = true;
 bool seek;
 byte tot;
 bool resetFontOnNextCall;
@@ -66,7 +67,9 @@ bool wifi;
 bool setvolume;
 bool wificonnected;
 byte ContrastSet;
+byte ptyold;
 byte displayflip;
+byte memoryposstatus;
 byte language;
 byte rotarymode;
 byte subnetclient;
@@ -77,6 +80,7 @@ const uint8_t* currentFont = nullptr;
 int ActiveColor;
 int ActiveColorSmooth;
 int BarSignificantColor;
+byte memorypos;
 int BarInsignificantColor;
 int RTWidth;
 bool channellistview;
@@ -94,6 +98,7 @@ int SignificantColorSmooth;
 int RTlengthold;
 int rotary;
 int rotary2;
+byte memoryposold;
 int rssi;
 int rssiold = 200;
 int SecondaryColor;
@@ -102,6 +107,7 @@ byte volume = 63;
 int SNRupdatetimer;
 int xPos;
 int SignalLevelold;
+String SignalLeveloldString;
 int16_t SAvg;
 int16_t SAvg2;
 int16_t SignalLevel;
@@ -115,12 +121,14 @@ String RTold;
 String PLold;
 String SIDold;
 uint32_t _serviceID;
-uint32_t _componentID;
 char _serviceName[17];
 unsigned long tuningtimer;
 unsigned long rtticker;
 unsigned long rttickerhold;
 unsigned long rssitimer;
+byte memorydabchannel[EE_PRESETS_CNT];
+uint32_t memorydabservice[EE_PRESETS_CNT];
+char memorydabname[EE_PRESETS_CNT][17];
 
 ESP32Time rtc(0);
 TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
@@ -135,6 +143,7 @@ void setup() {
   LittleFS.begin();
   LittleFS.format();
   Headphones.Init();
+  Serial.begin(115200);
 
   EEPROM.begin(EE_TOTAL_CNT);
   if (EEPROM.readByte(EE_BYTE_CHECKBYTE) != EE_CHECKBYTE_VALUE) DefaultSettings();
@@ -147,18 +156,36 @@ void setup() {
   unit = EEPROM.readByte(EE_BYTE_UNIT);
   dabfreq = EEPROM.readByte(EE_BYTE_DABFREQ);
   volume = EEPROM.readByte(EE_BYTE_VOLUME);
+  memorypos = EEPROM.readByte(EE_BYTE_MEMORYPOS);
+
+  for (int i = 0; i < EE_PRESETS_CNT; i++) {
+    memorydabchannel[i] = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
+    EEPROM.get((i * 8) + EE_PRESETS_SERVICEID_START, memorydabservice[i]);
+    for (int y = 0; y < 16; y++) {
+      memorydabname[i][y] = EEPROM.readByte((i * 17) + y + EE_PRESETS_NAME_START);
+    }
+    memorydabname[i][16] = '\0';
+  }
+
+  for (int i = 0; i < EE_PRESETS_CNT; i++) {
+    Serial.print(i);
+    Serial.print("\t");
+    Serial.print(memorydabchannel[i]);
+    Serial.print("\t");
+    Serial.print(memorydabservice[i], HEX);
+    Serial.print("\t");
+    Serial.println(String(radio.ASCII(memorydabname[i])));
+  }
 
   Headphones.SetHiZ(1);
   delay(100);
   Headphones.SetVolume(volume);
 
-  Serial.begin(115200);
-
   tft.init();
   doTheme();
   if (displayflip == 0) tft.setRotation(3); else tft.setRotation(1);
 
-  pinMode(BANDBUTTON, INPUT);
+  pinMode(STANDBYBUTTON, INPUT);
   pinMode(MODEBUTTON, INPUT);
   pinMode(SLBUTTON, INPUT);
   pinMode(ROTARY_BUTTON, INPUT);
@@ -235,7 +262,7 @@ void setup() {
     delay(30);
   }
 
-  radio.begin(15, -1);
+  radio.begin(15);
   tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
 
   delay(1500);
@@ -247,13 +274,16 @@ void setup() {
     Server.end();
   }
 
-  radio.setFreq(dabfreq);
-  EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
-  EEPROM.get(EE_UINT32_COMPONENTID, _componentID);
-  for (int i = 0; i < 16; i++) {
-    _serviceName[i] = EEPROM.readByte(i + EE_CHAR17_SERVICENAME);
+  if (tunemode == TUNE_MEM) {
+    DoMemoryPosTune();
+  } else {
+    radio.setFreq(dabfreq);
+    EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
+    for (int i = 0; i < 16; i++) {
+      _serviceName[i] = EEPROM.readByte(i + EE_CHAR17_SERVICENAME);
+    }
   }
-  if (_serviceID != 0 && _componentID != 0) {
+  if (_serviceID != 0 ) {
     trysetservice = true;
     Serial.println(String(radio.ASCII(_serviceName)));
   }
@@ -326,15 +356,46 @@ void loop() {
 
   if (digitalRead(MODEBUTTON) == LOW) ModeButtonPress();
   if (!menu && digitalRead(SLBUTTON) == LOW) SlideShowButtonPress();
+  if (!menu && digitalRead(STANDBYBUTTON) == LOW) StandbyButtonPress();
 
   if (digitalRead(ROTARY_BUTTON) == LOW) {
     if (!menu) {
-      if (channellistview) {
-        channellistview = false;
-        BuildDisplay();
+      if (tunemode == TUNE_MEM) {
+        if (!memorystore) {
+          memorystore = true;
+          if (!IsStationEmpty()) memoryposstatus = MEM_EXIST;
+          else memoryposstatus = MEM_NORMAL;
+          ShowMemoryPos();
+          ShowTuneMode();
+        } else {
+          memorystore = false;
+          EEPROM.writeByte(memorypos + EE_PRESETS_FREQ_START, dabfreq);
+          EEPROM.put((memorypos * 8) + EE_PRESETS_SERVICEID_START, radio.service[radio.ServiceIndex].ServiceID);
+          for (int x = 0; x < 16; x++) {
+            char character = radio.service[radio.ServiceIndex].Label[x];
+            EEPROM.writeByte((memorypos * 17) + x + EE_PRESETS_NAME_START, character);
+            memorydabname[memorypos][x] = character;
+          }
+          EEPROM.writeByte((memorypos * 17) + 16 + EE_PRESETS_NAME_START, '\0');
+          memorydabname[memorypos][16] = '\0';
+          memorydabchannel[memorypos] = dabfreq;
+          memorydabservice[memorypos] = radio.service[radio.ServiceIndex].ServiceID;
+          EEPROM.commit();
+
+          ShowTuneMode();
+          if (memoryposstatus == MEM_DARK || memoryposstatus == MEM_EXIST) {
+            memoryposstatus = MEM_NORMAL;
+            ShowMemoryPos();
+          }
+        }
       } else {
-        channellistview = true;
-        BuildChannelList();
+        if (channellistview) {
+          channellistview = false;
+          BuildDisplay();
+        } else {
+          channellistview = true;
+          BuildChannelList();
+        }
       }
     } else {
 
@@ -357,20 +418,35 @@ void loop() {
 void ProcessDAB(void) {
   radio.Update();
 
+  if (tunemode == TUNE_MEM && radio.service[radio.ServiceIndex].ServiceID != _serviceID) {
+    for (byte x; x < radio.numberofservices; x++) {
+      if (radio.service[x].ServiceID == _serviceID) radio.ServiceIndex = x;
+    }
+  }
+
   if (trysetservice && radio.signallock) {
-    radio.setService(_serviceID, _componentID);
-    trysetservice = false;
+    for (byte x; x < radio.numberofservices; x++) {
+      if (_serviceID == radio.service[x].ServiceID) {
+        radio.setService(x);
+        radio.ServiceStart = true;
+        trysetservice = false;
+      }
+    }
   }
 
   if (!SlideShowView && !menu) {
     if (!channellistview) {
-      ShowRSSI();
-      ShowBitrate();
+      if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) SlideShowButtonPress();
+      if (!ShowServiceInformation) {
+        ShowRSSI();
+        ShowBitrate();
+        ShowEID();
+        ShowSID();
+        ShowPTY();
+        ShowProtectionlevel();
+        ShowPS();
+      }
       ShowSignalLevel();
-      ShowEID();
-      ShowSID();
-      ShowProtectionlevel();
-      ShowPS();
     }
     ShowRT();
   } else {
@@ -378,6 +454,13 @@ void ProcessDAB(void) {
       ShowSlideShow();
       radio.SlideShowUpdate = false;
     }
+  }
+}
+
+void ShowPTY() {
+  if (radio.pty != ptyold) {
+    tftReplace(-1, myLanguage[language][37 + ptyold], myLanguage[language][37 + radio.pty], 36, 163, PrimaryColor, PrimaryColorSmooth, 16);
+    ptyold = radio.pty;
   }
 }
 
@@ -550,12 +633,8 @@ void DABSelectService(bool dir) {
   if (channellistview) BuildChannelList();
 }
 
-void BANDBUTTONPress() {
-}
-
 void StoreFrequency() {
   EEPROM.put(EE_UINT32_SERVICEID, radio.service[radio.ServiceIndex].ServiceID);
-  EEPROM.put(EE_UINT32_COMPONENTID, radio.service[radio.ServiceIndex].CompID);
   EEPROM.put(EE_BYTE_DABFREQ, dabfreq);
   for (int i = 0; i < 16; i++) {
     EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, radio.service[radio.ServiceIndex].Label[i]);
@@ -563,11 +642,43 @@ void StoreFrequency() {
   EEPROM.commit();
 }
 
+void ShowMemoryPos() {
+  if (tunemode == TUNE_MEM) {
+    if (!IsStationEmpty()) {
+      EEPROM.writeByte(EE_BYTE_MEMORYPOS, memorypos);
+      EEPROM.commit();
+    }
+    int memposcolor = 0;
+    int memposcolorsmooth = 0;
+    switch (memoryposstatus) {
+      case MEM_DARK:
+        memposcolor = InsignificantColor;
+        memposcolorsmooth = InsignificantColorSmooth;
+        break;
+
+      case MEM_NORMAL:
+        memposcolor = PrimaryColor;
+        memposcolorsmooth = PrimaryColorSmooth;
+        break;
+
+      case MEM_EXIST:
+        memposcolor = SignificantColor;
+        memposcolorsmooth = SignificantColorSmooth;
+        break;
+    }
+    tftReplace(-1, String(memoryposold + 1), String(memorypos + 1), 50, 32, memposcolor, memposcolorsmooth, 16);
+    memoryposold = memorypos;
+  } else {
+    tftPrint(-1, String(memorypos + 1), 50, 32, BackgroundColor, BackgroundColor, 16);
+  }
+}
+
 void SlideShowButtonPress() {
   if (!SlideShowView && radio.SlideShowAvailable) {
     tft.fillScreen(TFT_BLACK);
     radio.SlideShowUpdate = true;
     SlideShowView = true;
+    ShowServiceInformation = false;
   } else {
     if (SlideShowView) BuildDisplay();
     SlideShowView = false;
@@ -592,6 +703,7 @@ void ModeButtonPress() {
       tunemode++;
       if (tunemode > 2) tunemode = 0;
       ShowTuneMode();
+      ShowMemoryPos();
     } else {
       menu = true;
       BuildMenu();
@@ -599,6 +711,17 @@ void ModeButtonPress() {
     }
   }
   while (digitalRead(MODEBUTTON) == LOW);
+}
+
+void StandbyButtonPress() {
+  if (!ShowServiceInformation) {
+    ShowServiceInfo();
+    ShowServiceInformation = true;
+    SlideShowView = false;
+  } else {
+    BuildDisplay();
+  }
+  while (digitalRead(STANDBYBUTTON) == LOW);
 }
 
 void KeyUp() {
@@ -623,6 +746,15 @@ void KeyUp() {
         break;
 
       case TUNE_MEM:
+        memorypos++;
+        if (memorypos > EE_PRESETS_CNT - 1) memorypos = 0;
+        if (!memorystore) {
+          DoMemoryPosTune();
+        } else {
+          if (!IsStationEmpty()) memoryposstatus = MEM_EXIST;
+          else memoryposstatus = MEM_NORMAL;
+        }
+        ShowMemoryPos();
         break;
     }
   } else {
@@ -652,11 +784,40 @@ void KeyDown() {
         break;
 
       case TUNE_MEM:
+        memorypos--;
+        if (memorypos > EE_PRESETS_CNT - 1) memorypos = EE_PRESETS_CNT - 1;
+        if (!memorystore) {
+          DoMemoryPosTune();
+        } else {
+          if (!IsStationEmpty()) memoryposstatus = MEM_EXIST;
+          else memoryposstatus = MEM_NORMAL;
+        }
+        ShowMemoryPos();
         break;
     }
   } else {
     MenuDown();
   }
+}
+
+void DoMemoryPosTune() {
+  if (IsStationEmpty()) {
+    memoryposstatus = MEM_DARK;
+  } else {
+    memoryposstatus = MEM_NORMAL;
+    dabfreq = memorydabchannel[memorypos];
+    _serviceID = memorydabservice[memorypos];
+    radio.setFreq(dabfreq);
+    trysetservice = true;
+    ShowFreq();
+  }
+}
+
+bool IsStationEmpty() {
+  if (memorydabchannel[memorypos] == EE_PRESETS_FREQUENCY) {
+    return true;
+  }
+  return false;
 }
 
 void ShowFreq() {
@@ -704,26 +865,36 @@ void ShowSignalLevel() {
   if (unit == 1) SignalLevelprint = ((SignalLevel * 100) + 10875) / 100;
   if (unit == 2) SignalLevelprint = round((float(SignalLevel) / 10.0 - 10.0 * log10(75) - 90.0) * 10.0);
 
-  if (SignalLevelprint > (SignalLevelold + 3) || SignalLevelprint < (SignalLevelold - 3)) {
-    tftReplace(1, String(SignalLevelold / 10), String(SignalLevelprint / 10), 288, 105, PrimaryColor, PrimaryColorSmooth, 48);
-    tftReplace(1, "." + String(abs(SignalLevelold % 10)), "." + String(abs(SignalLevelprint % 10)), 310, 105, PrimaryColor, PrimaryColorSmooth, 28);
+  if (!ShowServiceInformation) {
+    if (SignalLevelprint > (SignalLevelold + 3) || SignalLevelprint < (SignalLevelold - 3)) {
+      tftReplace(1, String(SignalLevelold / 10), String(SignalLevelprint / 10), 288, 105, PrimaryColor, PrimaryColorSmooth, 48);
+      tftReplace(1, "." + String(abs(SignalLevelold % 10)), "." + String(abs(SignalLevelprint % 10)), 310, 105, PrimaryColor, PrimaryColorSmooth, 28);
 
-    segments = (SignalLevel + 200) / 10;
+      segments = (SignalLevel + 200) / 10;
 
-    tft.fillRect(16, 105, 2 * constrain(segments, 0, 54), 6, BarInsignificantColor);
-    tft.fillRect(16 + 2 * 54, 105, 2 * (constrain(segments, 54, 94) - 54), 6, BarSignificantColor);
-    tft.fillRect(16 + 2 * constrain(segments, 0, 94), 105, 2 * (94 - constrain(segments, 0, 94)), 6, GreyoutColor);
-    SignalLevelold = SignalLevelprint;
-  }
-
-  if (CNRold != CNR) {
-    if (radio.signallock) {
-      tftPrint(1, String("--"), 295, 163, BackgroundColor, BackgroundColor, 16);
-      tftReplace(1, String(CNRold), String(CNR), 295, 163, PrimaryColor, PrimaryColorSmooth, 16);
-    } else {
-      tftReplace(1, String(CNRold), "--", 295, 163, PrimaryColor, PrimaryColorSmooth, 16);
+      tft.fillRect(16, 105, 2 * constrain(segments, 0, 54), 6, BarInsignificantColor);
+      tft.fillRect(16 + 2 * 54, 105, 2 * (constrain(segments, 54, 94) - 54), 6, BarSignificantColor);
+      tft.fillRect(16 + 2 * constrain(segments, 0, 94), 105, 2 * (94 - constrain(segments, 0, 94)), 6, GreyoutColor);
+      SignalLevelold = SignalLevelprint;
     }
-    CNRold = CNR;
+
+    if (CNRold != CNR) {
+      if (radio.signallock) {
+        tftPrint(1, String("--"), 295, 163, BackgroundColor, BackgroundColor, 16);
+        tftReplace(1, String(CNRold), String(CNR), 295, 163, PrimaryColor, PrimaryColorSmooth, 16);
+      } else {
+        tftReplace(1, String(CNRold), "--", 295, 163, PrimaryColor, PrimaryColorSmooth, 16);
+      }
+      CNRold = CNR;
+    }
+  } else {
+    if (CNRold != CNR || SignalLevelprint != SignalLevelold) {
+      String SignalLevelString = String(String(SignalLevelprint / 10)) + "." + String(abs(SignalLevelprint % 10)) + String(unitString[unit]) + " | MER: " + String(CNR) + "dB";
+      if (SignalLevelString != SignalLeveloldString) {
+        tftReplace(-1, SignalLeveloldString, SignalLevelString, 155, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+        SignalLeveloldString = SignalLevelString;
+      }
+    }
   }
 }
 
@@ -793,6 +964,8 @@ void ShowTuneMode() {
       }
       break;
   }
+  EEPROM.writeByte(EE_BYTE_TUNEMODE, tunemode);
+  EEPROM.commit();
 }
 
 void ShowRSSI() {
@@ -800,18 +973,18 @@ void ShowRSSI() {
   if (rssiold != rssi) {
     rssiold = rssi;
     if (rssi == 0) {
-      tft.drawBitmap(250, 4, WiFi4, 25, 25, GreyoutColor);
+      tft.drawBitmap(290, 4, WiFi4, 25, 25, GreyoutColor);
     } else if (rssi > -50 && rssi < 0) {
-      tft.drawBitmap(250, 4, WiFi4, 25, 25, PrimaryColor);
+      tft.drawBitmap(290, 4, WiFi4, 25, 25, PrimaryColor);
     } else if (rssi > -60) {
-      tft.drawBitmap(250, 4, WiFi4, 25, 25, GreyoutColor);
-      tft.drawBitmap(250, 4, WiFi3, 25, 25, PrimaryColor);
+      tft.drawBitmap(290, 4, WiFi4, 25, 25, GreyoutColor);
+      tft.drawBitmap(290, 4, WiFi3, 25, 25, PrimaryColor);
     } else if (rssi > -70) {
-      tft.drawBitmap(250, 4, WiFi4, 25, 25, GreyoutColor);
-      tft.drawBitmap(250, 4, WiFi2, 25, 25, PrimaryColor);
+      tft.drawBitmap(290, 4, WiFi4, 25, 25, GreyoutColor);
+      tft.drawBitmap(290, 4, WiFi2, 25, 25, PrimaryColor);
     } else if (rssi < -70) {
-      tft.drawBitmap(250, 4, WiFi4, 25, 25, GreyoutColor);
-      tft.drawBitmap(250, 4, WiFi1, 25, 25, PrimaryColor);
+      tft.drawBitmap(290, 4, WiFi4, 25, 25, GreyoutColor);
+      tft.drawBitmap(290, 4, WiFi1, 25, 25, PrimaryColor);
     }
   }
 }
@@ -883,9 +1056,16 @@ void DefaultSettings() {
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
   EEPROM.writeByte(EE_BYTE_VOLUME, 40);
   EEPROM.put(EE_UINT32_SERVICEID, 0);
-  EEPROM.put(EE_UINT32_COMPONENTID, 0);
   EEPROM.put(EE_BYTE_DABFREQ, 0);
   EEPROM.writeByte(EE_CHAR17_SERVICENAME, 0x00);
+
+  for (int i = 0; i < EE_PRESETS_CNT; i++) {
+    EEPROM.writeByte(i + EE_PRESETS_FREQ_START, EE_PRESETS_FREQUENCY);
+    EEPROM.put((i * 8) + EE_PRESETS_SERVICEID_START, 0);
+    for (int y = 0; y < 16; y++) {
+      EEPROM.writeByte((i * 17) + y + EE_PRESETS_NAME_START, 0);
+    }
+  }
   EEPROM.commit();
 }
 

@@ -24,6 +24,7 @@
 extern byte menuitem;
 
 extern bool change;
+extern bool ShowServiceInformation;
 extern byte tot;
 extern bool SlideShowView;
 extern bool wifi;
@@ -59,6 +60,8 @@ extern int SignificantColor;
 extern int SignificantColorSmooth;
 extern int SignalLevelold;
 extern int16_t SignalLevel;
+extern String SignalLeveloldString;
+extern byte dabfreq;
 
 extern TFT_eSPI tft;
 extern WiFiConnect wc;
@@ -74,10 +77,12 @@ void MenuDown();
 void DoMenu();
 void doTheme();
 void Infoboxprint(const char* input);
+void ShowServiceInfo();
 
 extern void ShowFreq();
 extern void ShowTuneMode();
 extern void tryWiFi();
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
+extern void ShowMemoryPos();
 
 #endif

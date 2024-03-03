@@ -127,21 +127,11 @@ static void cts(void) {
   }
 }
 
-void DAB::begin(uint8_t SSpin, uint8_t RSTpin) {
+void DAB::begin(uint8_t SSpin) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
   slaveSelectPin = SSpin;
   pinMode(slaveSelectPin, OUTPUT);                                        // Configure SPI
-  pinMode(RSTpin, OUTPUT);
-  digitalWrite(RSTpin, HIGH);
-  delay(50);
-  digitalWrite(RSTpin, LOW);
-  delay(50);
-  digitalWrite(RSTpin, HIGH);
-  delay(50);
-  digitalWrite(RSTpin, LOW);
-  delay(50);
-  digitalWrite(RSTpin, HIGH);
   digitalWrite(slaveSelectPin, HIGH);
   SPI.begin(14, 16, 13, 15);
   SPIbuffer[0] = 0x09;
@@ -559,58 +549,6 @@ void DAB::setService(uint8_t _index) {
     }
   }
   ServiceInfo();
-}
-
-void DAB::setService(uint32_t _serviceid, uint32_t _componentid) {
-  protectionlevel = 0;
-  ServiceData[0] = '\0';
-  SlideShowByteCounter = 0;
-  SlideShowLength = 0;
-  SlideShowLengthOld = 0;
-  SlideShowAvailable = false;
-  SlideShowNew = true;
-  isJPG = false;
-  isPNG = false;
-  if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
-
-  EnsembleInfo();
-  if (signallock) ServiceStart = true;
-
-  for (byte x; x < 20; x++) {
-    if (service[x].ServiceID == _serviceid) {
-      ServiceIndex = x;
-      break;
-    }
-  }
-
-  SPIbuffer[0] = 0x81;
-  SPIbuffer[1] = 0x00;
-  SPIbuffer[2] = 0x00;
-  SPIbuffer[3] = 0x00;
-  SPIbuffer[4] = _serviceid & 0xff;
-  SPIbuffer[5] = (_serviceid >> 8) & 0xff;
-  SPIbuffer[6] = (_serviceid >> 16) & 0xff;
-  SPIbuffer[7] = (_serviceid >> 24) & 0xff;
-  SPIbuffer[8] = _componentid & 0xff;
-  SPIbuffer[9] = (_componentid >> 8) & 0xff;
-  SPIbuffer[10] = (_componentid >> 16) & 0xff;
-  SPIbuffer[11] = (_componentid >> 24) & 0xff;
-  SPIwrite(SPIbuffer, 12);
-  cts();
-
-  SID[0] = (_serviceid >> 12) & 0xF;
-  SID[1] = (_serviceid >> 8) & 0xF;
-  SID[2] = (_serviceid >> 4) & 0xF;
-  SID[3] = _serviceid & 0xF;
-  SID[4] = '\0';
-
-  for (int i = 0; i < 4; i++) {
-    if (SID[i] < 10) {
-      SID[i] += '0';
-    } else {
-      SID[i] += 'A' - 10;
-    }
-  }
 }
 
 void DAB::Update(void) {

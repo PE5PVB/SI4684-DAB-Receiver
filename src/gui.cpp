@@ -28,11 +28,41 @@ void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de
   BarInsignificantColor = TFT_GREEN;
 }
 
+void ShowServiceInfo() {
+  tft.fillScreen(BackgroundColor);
+  tft.drawRect(0, 0, 320, 240, FrameColor);
+  tft.drawLine(0, 30, 320, 30, FrameColor);
+  tft.drawLine(0, 217, 320, 217, FrameColor);
+  tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
+  tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][29], 8, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][30], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][31], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][32], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][33], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][34], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][35], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
+
+  tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 155, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.EID) + ": " + String(radio.getEnsembleLabel()), 155, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.SID) + ": " + radio.ASCII(radio.service[radio.ServiceIndex].Label), 155, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 155, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, ProtectionText[radio.protectionlevel], 155, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  String bitrateString = String(radio.samplerate);
+  bitrateString = bitrateString.substring(0, 2) + "." + bitrateString.substring(2);
+  tftPrint(-1, bitrateString + " Hz", 155, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.bitrate, DEC) + " kb/s", 155, ITEM8 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 155, ITEM9 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+
+  SignalLeveloldString = "";
+}
+
 void BuildChannelList() {
   tft.fillScreen(BackgroundColor);
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
-  tft.drawLine(0, 217, 320, 217, FrameColor);  
+  tft.drawLine(0, 217, 320, 217, FrameColor);
   tftPrint(0, myLanguage[language][11], 155, 4, ActiveColor, ActiveColorSmooth, 28);
 
   byte y = 0;
@@ -93,18 +123,18 @@ void BuildMenu() {
   tftPrint(-1, myLanguage[language][15], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][16], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][25], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
-  if (wifi) tftPrint(-1, String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()), 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16); else tftPrint(-1, myLanguage[language][17], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);  
+  if (wifi) tftPrint(-1, String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()), 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16); else tftPrint(-1, myLanguage[language][17], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][18], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
 
   tftPrint(1, myLanguage[language][0], 310, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(1, "%", 310, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(1, String(ContrastSet, DEC), 270, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (highz) tftPrint(1, myLanguage[language][21], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][22], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);  
-  if (autoslideshow) tftPrint(1, myLanguage[language][23], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);  
+  if (highz) tftPrint(1, myLanguage[language][21], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][22], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  if (autoslideshow) tftPrint(1, myLanguage[language][23], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(1, unitString[unit], 310, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   if (tot != 0) tftPrint(1, String(tot), 270, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   if (tot != 0) tftPrint(1, myLanguage[language][26], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (wifi) tftPrint(1, myLanguage[language][23], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);    
+  if (wifi) tftPrint(1, myLanguage[language][23], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
 }
 
 void BuildDisplay() {
@@ -159,9 +189,10 @@ void BuildDisplay() {
 
   tftPrint(-1, "DAB", 70, 32, PrimaryColor, PrimaryColorSmooth, 16);
 
+  ShowServiceInformation = false;
   ShowFreq();
   ShowTuneMode();
-
+  ShowMemoryPos();
 
   rssiold = 2000;
 
@@ -175,25 +206,25 @@ void BuildDisplay() {
 }
 
 void MenuUp() {
-	tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
-      menuoption += ITEM_GAP;
-      menuitem++;
-      if (menuitem > 7) {
-        menuitem = 0;
-        menuoption = ITEM1;
-      }
-tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);	  
+  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+  menuoption += ITEM_GAP;
+  menuitem++;
+  if (menuitem > 7) {
+    menuitem = 0;
+    menuoption = ITEM1;
+  }
+  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
 }
 
 void MenuDown() {
-	    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
-		      menuoption -= ITEM_GAP;
-      menuitem--;
-      if (menuitem > 7) {
-        menuoption = ITEM8;
-        menuitem = 7;
-      }
-tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
+  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+  menuoption -= ITEM_GAP;
+  menuitem--;
+  if (menuitem > 7) {
+    menuoption = ITEM8;
+    menuitem = 7;
+  }
+  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
 }
 
 void DoMenu() {
