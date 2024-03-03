@@ -43,48 +43,49 @@ File jpgfile;
 
 TFT_eSPI tft = TFT_eSPI(240, 320);
 
-uint8_t service = 0;
-uint8_t freq = 0;
-bool direction;
-byte charwidth = 8;
-bool memorystore;
-bool ShowServiceInformation;
-bool trysetservice;
-bool setupmode;
-bool menu;
-bool tuning;
-bool highz;
 bool autoslideshow = true;
-bool seek;
-byte tot;
+bool channellistview;
+bool direction;
+bool memorystore;
+bool menu;
+bool menuopen;
 bool resetFontOnNextCall;
-byte dabfreq;
-byte dabfreqold;
+bool seek;
+bool setupmode;
+bool setvolume;
+bool ShowServiceInformation;
 bool SlideShowView;
 bool store;
+bool trysetservice;
 bool tuned;
+bool tuning;
 bool wifi;
-bool setvolume;
 bool wificonnected;
+byte charwidth = 8;
 byte ContrastSet;
-byte ptyold;
+byte dabfreq;
+byte dabfreqold;
 byte displayflip;
-byte memoryposstatus;
 byte language;
+byte memorydabchannel[EE_PRESETS_CNT];
+byte memorypos;
+byte memoryposold;
+byte memoryposstatus;
+byte ptyold;
 byte rotarymode;
 byte subnetclient;
+byte tot;
 byte tunemode;
 byte unit;
-int BackgroundColor;
+byte volume;
+char _serviceName[17];
+char memorydabname[EE_PRESETS_CNT][17];
 const uint8_t* currentFont = nullptr;
 int ActiveColor;
 int ActiveColorSmooth;
-int BarSignificantColor;
-byte memorypos;
+int BackgroundColor;
 int BarInsignificantColor;
-int RTWidth;
-bool channellistview;
-uint16_t BitrateOld;
+int BarSignificantColor;
 int Bitrateupdatetimer;
 int FrameColor;
 int GreyoutColor;
@@ -93,42 +94,40 @@ int InsignificantColorSmooth;
 int menuoption = ITEM1;
 int PrimaryColor;
 int PrimaryColorSmooth;
-int SignificantColor;
-int SignificantColorSmooth;
-int RTlengthold;
 int rotary;
 int rotary2;
-byte memoryposold;
 int rssi;
 int rssiold = 200;
+int RTlengthold;
+int RTWidth;
 int SecondaryColor;
 int SecondaryColorSmooth;
-byte volume = 63;
+int SignalLevelold;
+int SignificantColor;
+int SignificantColorSmooth;
 int SNRupdatetimer;
 int xPos;
-int SignalLevelold;
-String SignalLeveloldString;
 int16_t SAvg;
 int16_t SAvg2;
 int16_t SignalLevel;
 int8_t CNR;
 int8_t CNRold;
 IPAddress remoteip;
-String AIDString;
 String EIDold;
+String PLold;
 String PSold;
 String RTold;
-String PLold;
 String SIDold;
+String SignalLeveloldString;
+uint16_t BitrateOld;
 uint32_t _serviceID;
-char _serviceName[17];
-unsigned long tuningtimer;
+uint32_t memorydabservice[EE_PRESETS_CNT];
+uint8_t freq = 0;
+uint8_t service = 0;
+unsigned long rssitimer;
 unsigned long rtticker;
 unsigned long rttickerhold;
-unsigned long rssitimer;
-byte memorydabchannel[EE_PRESETS_CNT];
-uint32_t memorydabservice[EE_PRESETS_CNT];
-char memorydabname[EE_PRESETS_CNT][17];
+unsigned long tuningtimer;
 
 ESP32Time rtc(0);
 TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
@@ -157,6 +156,9 @@ void setup() {
   dabfreq = EEPROM.readByte(EE_BYTE_DABFREQ);
   volume = EEPROM.readByte(EE_BYTE_VOLUME);
   memorypos = EEPROM.readByte(EE_BYTE_MEMORYPOS);
+  autoslideshow = EEPROM.readByte(EE_BYTE_AUTOSLIDESHOW);
+  tot = EEPROM.readByte(EE_BYTE_TOT);
+  wifi = EEPROM.readByte(EE_BYTE_WIFI);
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
     memorydabchannel[i] = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
@@ -167,17 +169,7 @@ void setup() {
     memorydabname[i][16] = '\0';
   }
 
-  for (int i = 0; i < EE_PRESETS_CNT; i++) {
-    Serial.print(i);
-    Serial.print("\t");
-    Serial.print(memorydabchannel[i]);
-    Serial.print("\t");
-    Serial.print(memorydabservice[i], HEX);
-    Serial.print("\t");
-    Serial.println(String(radio.ASCII(memorydabname[i])));
-  }
-
-  Headphones.SetHiZ(1);
+  Headphones.SetHiZ(0);
   delay(100);
   Headphones.SetVolume(volume);
 
@@ -274,9 +266,10 @@ void setup() {
     Server.end();
   }
 
-  if (tunemode == TUNE_MEM) {
+  if (tunemode == TUNE_MEM && !IsStationEmpty()) {
     DoMemoryPosTune();
   } else {
+    if (tunemode == TUNE_MEM) tunemode = TUNE_MAN;
     radio.setFreq(dabfreq);
     EEPROM.get(EE_UINT32_SERVICEID, _serviceID);
     for (int i = 0; i < 16; i++) {
@@ -312,7 +305,8 @@ void loop() {
 
   if (!menu) {
     if (rotary2 == -1) {
-      if (setvolume) {
+      if (setvolume || tunemode == TUNE_MEM) {
+        if (tunemode == TUNE_MEM) setvolume = true;
         if (volume < 62) volume++;
         ShowVolume();
         rotary2 = 0;
@@ -325,7 +319,8 @@ void loop() {
     }
 
     if (rotary2 == 1) {
-      if (setvolume) {
+      if (setvolume || tunemode == TUNE_MEM) {
+        if (tunemode == TUNE_MEM) setvolume = true;
         if (volume > 0) volume--;
         ShowVolume();
         rotary2 = 0;
@@ -398,7 +393,7 @@ void loop() {
         }
       }
     } else {
-
+      DoMenu();
     }
     while (digitalRead(ROTARY_BUTTON) == LOW);
   }
@@ -418,13 +413,9 @@ void loop() {
 void ProcessDAB(void) {
   radio.Update();
 
-  if (tunemode == TUNE_MEM && radio.service[radio.ServiceIndex].ServiceID != _serviceID) {
-    for (byte x; x < radio.numberofservices; x++) {
-      if (radio.service[x].ServiceID == _serviceID) radio.ServiceIndex = x;
-    }
-  }
-
   if (trysetservice && radio.signallock) {
+    delay(100);
+    radio.Update();
     for (byte x; x < radio.numberofservices; x++) {
       if (_serviceID == radio.service[x].ServiceID) {
         radio.setService(x);
@@ -521,9 +512,9 @@ void ShowEID() {
 }
 
 void ShowPS() {
-  if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel()) != PSold) {
-    tftReplace(-1, PSold, String((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel())), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
-    PSold = (radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.getEnsembleLabel());
+  if ((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold) {
+    tftReplace(-1, PSold, String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
+    PSold = (radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName));
   }
 }
 
@@ -693,6 +684,13 @@ void ModeButtonPress() {
   while (digitalRead(MODEBUTTON) == LOW && counter - counterold <= 1000) counter = millis();
 
   if (menu) {
+    EEPROM.writeByte(EE_BYTE_LANGUAGE, language);
+    EEPROM.writeByte(EE_BYTE_CONTRASTSET, ContrastSet);
+    EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, autoslideshow);
+    EEPROM.writeByte(EE_BYTE_UNIT, unit);
+    EEPROM.writeByte(EE_BYTE_TOT, tot);
+    EEPROM.writeByte(EE_BYTE_WIFI, wifi);
+    EEPROM.commit();
     menu = false;
     BuildDisplay();
   } else if (SlideShowView) {
@@ -714,12 +712,32 @@ void ModeButtonPress() {
 }
 
 void StandbyButtonPress() {
-  if (!ShowServiceInformation) {
-    ShowServiceInfo();
-    ShowServiceInformation = true;
-    SlideShowView = false;
+  if (memorystore) {
+    EEPROM.writeByte(memorypos + EE_PRESETS_FREQ_START, EE_PRESETS_FREQUENCY);
+    EEPROM.put((memorypos * 8) + EE_PRESETS_SERVICEID_START, 0);
+    for (int x = 0; x < 16; x++) {
+      EEPROM.writeByte((memorypos * 17) + x + EE_PRESETS_NAME_START, '\0');
+      memorydabname[memorypos][x] = '\0';
+    }
+    EEPROM.writeByte((memorypos * 17) + 16 + EE_PRESETS_NAME_START, '\0');
+    memorydabname[memorypos][16] = '\0';
+    memorydabchannel[memorypos] = EE_PRESETS_FREQUENCY;
+    memorydabservice[memorypos] = 0;
+    EEPROM.commit();
+    memorystore = false;
+    ShowTuneMode();
+    if (memoryposstatus == MEM_DARK || memoryposstatus == MEM_EXIST) {
+      memoryposstatus = MEM_NORMAL;
+      ShowMemoryPos();
+    }
   } else {
-    BuildDisplay();
+    if (!ShowServiceInformation) {
+      ShowServiceInfo();
+      ShowServiceInformation = true;
+      SlideShowView = false;
+    } else {
+      BuildDisplay();
+    }
   }
   while (digitalRead(STANDBYBUTTON) == LOW);
 }
@@ -737,6 +755,7 @@ void KeyUp() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
@@ -748,6 +767,15 @@ void KeyUp() {
       case TUNE_MEM:
         memorypos++;
         if (memorypos > EE_PRESETS_CNT - 1) memorypos = 0;
+        if (!memorystore) {
+          while (IsStationEmpty()) {
+            memorypos++;
+            if (memorypos > EE_PRESETS_CNT - 1) {
+              memorypos = 0;
+              break;
+            }
+          }
+        }
         if (!memorystore) {
           DoMemoryPosTune();
         } else {
@@ -775,6 +803,7 @@ void KeyDown() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
@@ -786,6 +815,15 @@ void KeyDown() {
       case TUNE_MEM:
         memorypos--;
         if (memorypos > EE_PRESETS_CNT - 1) memorypos = EE_PRESETS_CNT - 1;
+        if (!memorystore) {
+          while (IsStationEmpty()) {
+            memorypos--;
+            if (memorypos > EE_PRESETS_CNT - 1) {
+              memorypos = EE_PRESETS_CNT - 1;
+              break;
+            }
+          }
+        }
         if (!memorystore) {
           DoMemoryPosTune();
         } else {
@@ -1055,15 +1093,20 @@ void DefaultSettings() {
   EEPROM.writeByte(EE_BYTE_WIFI, 0);
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
   EEPROM.writeByte(EE_BYTE_VOLUME, 40);
+  EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
+  EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, 0);
+  EEPROM.writeByte(EE_BYTE_TOT, 0);
   EEPROM.put(EE_UINT32_SERVICEID, 0);
   EEPROM.put(EE_BYTE_DABFREQ, 0);
-  EEPROM.writeByte(EE_CHAR17_SERVICENAME, 0x00);
+  for (int y = 0; y < 17; y++) {
+    EEPROM.writeByte(EE_CHAR17_SERVICENAME + y, '\0');
+  }
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
     EEPROM.writeByte(i + EE_PRESETS_FREQ_START, EE_PRESETS_FREQUENCY);
     EEPROM.put((i * 8) + EE_PRESETS_SERVICEID_START, 0);
-    for (int y = 0; y < 16; y++) {
-      EEPROM.writeByte((i * 17) + y + EE_PRESETS_NAME_START, 0);
+    for (int y = 0; y < 17; y++) {
+      EEPROM.writeByte((i * 17) + y + EE_PRESETS_NAME_START, '\0');
     }
   }
   EEPROM.commit();

@@ -3,33 +3,32 @@
 #define EE_PRESETS_FREQUENCY        255
 #define EE_CHECKBYTE_VALUE          2 // 0 ~ 255,add new entry, change for new value
 
-#define EE_TOTAL_CNT                2611
-#define EE_BYTE_CHECKBYTE      0
-#define EE_BYTE_LANGUAGE      1
+#define EE_TOTAL_CNT                2614
+#define EE_BYTE_CHECKBYTE           0
+#define EE_BYTE_LANGUAGE            1
 #define EE_BYTE_CONTRASTSET         2
 #define EE_BYTE_DISPLAYFLIP         3
 #define EE_BYTE_ROTARYMODE          4
-#define EE_BYTE_TUNEMODE      5
-#define EE_BYTE_WIFI        6
+#define EE_BYTE_TUNEMODE            5
+#define EE_BYTE_WIFI                6
 #define EE_BYTE_UNIT                7
-#define EE_BYTE_DABFREQ       8
-#define EE_BYTE_VOLUME        9
-#define EE_BYTE_MEMORYPOS     10
-#define EE_UINT32_SERVICEID     11
-#define EE_CHAR17_SERVICENAME   19 // 17 bytes!
-#define EE_PRESETS_FREQ_START   36
-#define EE_PRESETS_SERVICEID_START  135
-#define EE_PRESETS_NAME_START   927
-
-//Last address: 2610
-
-
+#define EE_BYTE_DABFREQ             8
+#define EE_BYTE_VOLUME              9
+#define EE_BYTE_MEMORYPOS           10
+#define EE_BYTE_HIGHZ               11
+#define EE_BYTE_AUTOSLIDESHOW       12
+#define EE_BYTE_TOT                 13
+#define EE_UINT32_SERVICEID         14
+#define EE_CHAR17_SERVICENAME       22 // 17 bytes!
+#define EE_PRESETS_FREQ_START       39
+#define EE_PRESETS_SERVICEID_START  138
+#define EE_PRESETS_NAME_START       930
 // End of EEPROM index defines
 
 static const char* const unitString[] = {"dBμV", "dBf", "dBm"};
 
 enum RADIO_TUNE_MODE {
-  TUNE_MAN, TUNE_AUTO, TUNE_MEM, TUNE_MI_BAND
+  TUNE_MAN, TUNE_AUTO, TUNE_MEM
 };
 
 enum RADIO_MEM_POS_STATUS {

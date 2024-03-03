@@ -21,27 +21,23 @@
 #define ITEM9			190
 #define ITEM10			210
 
-extern byte menuitem;
-
+extern bool autoslideshow;
 extern bool change;
+extern bool highz;
+extern bool menuopen;
 extern bool ShowServiceInformation;
-extern byte tot;
 extern bool SlideShowView;
 extern bool wifi;
 extern byte ContrastSet;
+extern byte dabfreq;
 extern byte language;
+extern byte menuitem;
+extern byte ptyold;
+extern byte tot;
 extern byte unit;
 extern int ActiveColor;
 extern int ActiveColorSmooth;
 extern int BackgroundColor;
-extern int8_t CNRold;
-extern uint16_t BitrateOld;
-extern String EIDold;
-extern String SIDold;
-extern String PLold;
-extern String PSold;
-extern bool highz;
-extern bool autoslideshow;
 extern int BarInsignificantColor;
 extern int BarSignificantColor;
 extern int BitrateAutoColor;
@@ -56,12 +52,17 @@ extern int PrimaryColorSmooth;
 extern int rssiold;
 extern int SecondaryColor;
 extern int SecondaryColorSmooth;
+extern int SignalLevelold;
 extern int SignificantColor;
 extern int SignificantColorSmooth;
-extern int SignalLevelold;
 extern int16_t SignalLevel;
+extern int8_t CNRold;
+extern String EIDold;
+extern String PLold;
+extern String PSold;
+extern String SIDold;
 extern String SignalLeveloldString;
-extern byte dabfreq;
+extern uint16_t BitrateOld;
 
 extern TFT_eSPI tft;
 extern WiFiConnect wc;

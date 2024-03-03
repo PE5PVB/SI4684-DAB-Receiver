@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[2][67] = {
+static const char* const myLanguage[2][72] = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -20,7 +20,7 @@ static const char* const myLanguage[2][67] = {
     "Channel list", // 11
     "Language", // 12
     "Brightness", // 13
-    "Headphones impedance", // 14
+    "", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
     "WiFi", // 17
@@ -72,7 +72,12 @@ static const char* const myLanguage[2][67] = {
     "National Music", // 63
     "Oldies Music", // 64
     "Folk Music", // 65
-    "Documentary" // 66
+    "Documentary", // 66
+	"to configure Wi-Fi", // 67
+	"Connect to", // 68
+	"Trying to connect Wi-Fi", // 69
+	"FAILED!", // 70
+    "CONNECTED!" // 71
   },
 
   { "Nederlands", // Dutch
@@ -89,7 +94,7 @@ static const char* const myLanguage[2][67] = {
     "Kanalen lijst", // 11
     "Language", // 12
     "Brightness", // 13
-    "Headphones impedance", // 14
+    "", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
     "WiFi", // 17
@@ -100,7 +105,7 @@ static const char* const myLanguage[2][67] = {
     "Laag", // 22
     "Aan", // 23
     "Uit", // 24
-    "Automatisch uitschakelen", // 25
+    "Automatisch\nuitschakelen", // 25
     "Min.", // 26
     "Service informatie", // 27
     "Frequentie", // 28
@@ -141,7 +146,12 @@ static const char* const myLanguage[2][67] = {
     "Nationale muziek", // 63
     "Gouwe ouwe", // 64
     "Volksmuziek", // 65
-    "Documentaires" // 66
+    "Documentaires", // 66
+	"om WiFi te configureren", // 67
+	"Maak verbinding met", // 68
+	"Verbinden met Wi-Fi...", // 69
+	"MISLUKT!", // 70
+    "VERBONDEN!" // 71
   }
 };
 #endif
