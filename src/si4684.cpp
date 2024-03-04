@@ -509,6 +509,9 @@ void DAB::setFreq(uint8_t freq) {
 }
 
 void DAB::setService(uint8_t _index) {
+  pty = 0;
+  protectionlevel = 0;
+  bitrate = 0;
   protectionlevel = 0;
   ServiceData[0] = '\0';
   SlideShowByteCounter = 0;

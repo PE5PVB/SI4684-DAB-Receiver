@@ -33,6 +33,7 @@ void ShowServiceInfo() {
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
+tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);  
   tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
   tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -45,8 +46,8 @@ void ShowServiceInfo() {
   tftPrint(-1, myLanguage[language][35], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
 
   tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 155, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.EID) + ": " + String(radio.getEnsembleLabel()), 155, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.SID) + ": " + radio.ASCII(radio.service[radio.ServiceIndex].Label), 155, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.getEnsembleLabel()), 155, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 155, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 155, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, ProtectionText[radio.protectionlevel], 155, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   String bitrateString = String(radio.samplerate);
@@ -64,6 +65,7 @@ void BuildChannelList() {
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
   tftPrint(0, myLanguage[language][11], 155, 4, ActiveColor, ActiveColorSmooth, 28);
+  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
 
   byte y = 0;
   if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {

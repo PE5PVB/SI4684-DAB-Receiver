@@ -755,11 +755,16 @@ void KeyUp() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
+        radio.pty = 0;
         for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
       case TUNE_AUTO:
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        radio.ServiceIndex = 0;
+        radio.ServiceStart = false;
+        radio.pty = 0;
         direction = true;
         seek = true;
         break;
@@ -803,11 +808,16 @@ void KeyDown() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
+        radio.pty = 0;
         for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
       case TUNE_AUTO:
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        radio.ServiceIndex = 0;
+        radio.ServiceStart = false;
+        radio.pty = 0;
         direction = false;
         seek = true;
         break;
