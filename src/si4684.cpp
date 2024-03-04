@@ -286,7 +286,7 @@ void DAB::EnsembleInfo(void) {
         service[i].CompID = componentID;
       }
 
-      qsort(service, numberofservices, sizeof(DABService), compareCompID);
+      if (!directtune) qsort(service, numberofservices, sizeof(DABService), compareCompID);
 
       if (EID[0] == '\0' || EnsembleLabel[0] == '\0') {
         for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;

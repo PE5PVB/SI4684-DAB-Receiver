@@ -278,7 +278,7 @@ void setup() {
   }
   if (_serviceID != 0 ) {
     trysetservice = true;
-    Serial.println(String(radio.ASCII(_serviceName)));
+    radio.directtune = true;
   }
 
   BuildDisplay();
@@ -300,6 +300,7 @@ void loop() {
     } else if (tuning) {
       radio.setFreq(dabfreq);
       tuning = false;
+      if (tunemode == TUNE_MEM) trysetservice = true;
     }
   }
 
@@ -414,8 +415,6 @@ void ProcessDAB(void) {
   radio.Update();
 
   if (trysetservice && radio.signallock) {
-    delay(100);
-    radio.Update();
     for (byte x; x < radio.numberofservices; x++) {
       if (_serviceID == radio.service[x].ServiceID) {
         radio.setService(x);
@@ -621,6 +620,7 @@ void DABSelectService(bool dir) {
   }
   rotary2 = 0;
   radio.ServiceStart = true;
+  radio.directtune = false;
   if (channellistview) BuildChannelList();
 }
 
@@ -855,9 +855,15 @@ void DoMemoryPosTune() {
     memoryposstatus = MEM_NORMAL;
     dabfreq = memorydabchannel[memorypos];
     _serviceID = memorydabservice[memorypos];
-    radio.setFreq(dabfreq);
-    trysetservice = true;
+    for (int i = 0; i < 16; i++) {
+      _serviceName[i] = memorydabname[memorypos][i];
+    }
+
     ShowFreq();
+    radio.ServiceStart = false;
+    tuningtimer = millis();
+    tuning = true;
+    radio.directtune = true;
   }
 }
 

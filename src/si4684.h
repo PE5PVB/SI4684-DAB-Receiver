@@ -113,6 +113,7 @@ class DAB {
     bool SlideShowUpdate;
     bool isJPG;
     bool isPNG;
+	bool directtune;
 
   private:
     void ParseServiceList(void);
