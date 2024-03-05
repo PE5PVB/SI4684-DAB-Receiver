@@ -356,6 +356,7 @@ void loop() {
 
   if (digitalRead(ROTARY_BUTTON) == LOW) {
     if (!menu) {
+      if (SlideShowView) BuildDisplay();
       if (tunemode == TUNE_MEM) {
         if (!memorystore) {
           memorystore = true;
@@ -512,7 +513,9 @@ void ShowEID() {
 
 void ShowPS() {
   if ((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold) {
-    tftReplace(-1, PSold, String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
+    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))).length() != 0)) {
+      tftReplace(-1, PSold, String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 38, 187, PrimaryColor, PrimaryColorSmooth, 28);
+    }
     PSold = (radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName));
   }
 }
