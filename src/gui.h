@@ -7,8 +7,6 @@
 #include "WiFiConnectParam.h"
 #include "si4684.h"
 
-#define CONTRASTPIN     2
-
 #define ITEM_GAP		20
 #define ITEM1			30
 #define ITEM2			50
@@ -38,6 +36,7 @@ extern byte unit;
 extern int ActiveColor;
 extern int ActiveColorSmooth;
 extern int BackgroundColor;
+extern int BackgroundColor2;
 extern int BarInsignificantColor;
 extern int BarSignificantColor;
 extern int BitrateAutoColor;

@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[2][72] = {
+static const char* const myLanguage[2][73] = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -77,7 +77,8 @@ static const char* const myLanguage[2][72] = {
 	"Connect to", // 68
 	"Trying to connect Wi-Fi", // 69
 	"FAILED!", // 70
-    "CONNECTED!" // 71
+    "CONNECTED!", // 71
+	"DAB Receiver" // 72
   },
 
   { "Nederlands", // Dutch
@@ -151,7 +152,8 @@ static const char* const myLanguage[2][72] = {
 	"Maak verbinding met", // 68
 	"Verbinden met Wi-Fi...", // 69
 	"MISLUKT!", // 70
-    "VERBONDEN!" // 71
+    "VERBONDEN!", // 71
+	"DAB Ontvanger" // 72
   }
 };
 #endif

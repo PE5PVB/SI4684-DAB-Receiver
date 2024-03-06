@@ -11,21 +11,22 @@
 byte menuitem;
 
 void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
-  PrimaryColor = 0x4548;
-  PrimaryColorSmooth = 0x1122;
-  SecondaryColor = 0x3d1d;
-  SecondaryColorSmooth = 0x10E4;
-  FrameColor = TFT_BLUE;
+  PrimaryColor = 0x24e4;
+  PrimaryColorSmooth = 0x09a1;
+  SecondaryColor = 0x051f;
+  SecondaryColorSmooth = 0x08e5;
+  FrameColor = 0x001F;
   GreyoutColor = 0x5b0d;
-  BackgroundColor = 0x0063;
-  ActiveColor = TFT_WHITE;
+  BackgroundColor = 0x016b;
+  BackgroundColor2 = 0x00a4;
+  ActiveColor = 0xFFFF;
   ActiveColorSmooth = 0x18E3;
-  SignificantColor = TFT_RED;
+  SignificantColor = 0xF800;
   SignificantColorSmooth = 0x2000;
-  InsignificantColor = TFT_GREEN;
+  InsignificantColor = 0x07E0;
   InsignificantColorSmooth = 0x00C0;
-  BarSignificantColor = TFT_RED;
-  BarInsignificantColor = TFT_GREEN;
+  BarSignificantColor = 0xF800;
+  BarInsignificantColor = 0x051f;
 }
 
 void ShowServiceInfo() {
@@ -33,7 +34,7 @@ void ShowServiceInfo() {
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
-tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);  
+//tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);  
   tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
   tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -65,7 +66,7 @@ void BuildChannelList() {
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
   tftPrint(0, myLanguage[language][11], 155, 4, ActiveColor, ActiveColorSmooth, 28);
-  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
+//  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
 
   byte y = 0;
   if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -142,67 +143,24 @@ void BuildMenu() {
 void BuildDisplay() {
   SlideShowView = false;
   tft.pushImage (0, 0, 320, 240, Background);
-  tftPrint(1, "PR:", 80, 65, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "RT:", 5, 221, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "PTY:", 5, 162, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(1, "PR:", 84, 65, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, "EID", 10, 105, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, "SID", 10, 120, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(1, "MHz", 310, 55, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "SIG:", 124, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, unitString[unit], 190, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "MER:", 238, 115, ActiveColor, ActiveColorSmooth, 16);
-/*
-  tft.fillScreen(BackgroundColor);
-  tft.drawRect(0, 0, 320, 240, FrameColor);
-  tft.drawLine(0, 30, 320, 30, FrameColor);
-  tft.drawLine(0, 100, 320, 100, FrameColor);
-  tft.drawLine(210, 100, 210, 180, FrameColor);
-  tft.drawLine(248, 30, 248, 0, FrameColor);
-  tft.drawLine(0, 130, 210, 130, FrameColor);
-  tft.drawLine(105, 130, 105, 160, FrameColor);
-  tft.drawLine(0, 160, 210, 160, FrameColor);
-  tft.drawLine(0, 180, 320, 180, FrameColor);
-  tft.drawLine(0, 217, 320, 217, FrameColor);
-  tft.drawLine(53, 30, 53, 0, FrameColor);
-  tft.drawLine(158, 30, 158, 0, FrameColor);
+  tftPrint(-1, "SIG:", 123, 109, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, unitString[unit], 183, 109, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "MER:", 237, 109, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(1, "dB", 309, 109, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "Q", 122, 90, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "S", 122, 127, SecondaryColor, SecondaryColorSmooth, 16);
+  tftPrint(1, "ECC", 110, 90, ActiveColor, ActiveColorSmooth, 16);
+  tft.pushImage (130, 5, 19, 19, ClockSymbol);
   
-  tft.drawLine(20, 114, 204, 114, TFT_DARKGREY);
-  for (byte segments = 0; segments < 94; segments++) {
-    if (segments > 54) {
-      if (((segments - 53) % 10) == 0) {
-        tft.fillRect(16 + (2 * segments), 112, 2, 2, BarSignificantColor);
-      }
-    } else {
-      if (((segments + 1) % 6) == 0) {
-        tft.fillRect(16 + (2 * segments), 112, 2, 2, BarInsignificantColor);
-      }
-    }
-  }
-  tftPrint(1, "MER", 270, 163, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "dB", 300, 163, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "PS:", 3, 193, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "PTY:", 3, 163, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "EID:", 3, 140, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "SID:", 111, 140, ActiveColor, ActiveColorSmooth, 16);
+  for (byte segments = 0; segments < 11; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 7 ? BarInsignificantColor : BarSignificantColor));
+  tft.drawLine(134, 138, 275, 138, ActiveColor);
+  tftPrint(-1, "1   3   5   7   9  +10   +30", 134, 140, ActiveColor, ActiveColorSmooth, 16);
+  tft.drawRect(134, 90, 143, 12, ActiveColor);
 
-  tftPrint(0, "S", 7, 101, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "1", 24, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "3", 48, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "5", 72, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "7", ITEM4 + 6, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "9", 120, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "+10", 134, 115, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, "+30", 174, 115, ActiveColor, ActiveColorSmooth, 16);
-
-  tftPrint(-1, "kb/s", 203, 4, ActiveColor, ActiveColorSmooth, 28);
-  
-
-  tftPrint(-1, "MHz", 258, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 28);
-
-
-  tftPrint(-1, "DAB", 70, 32, PrimaryColor, PrimaryColorSmooth, 16);
-*/
   ShowServiceInformation = false;
   ShowFreq();
   ShowTuneMode();
@@ -210,9 +168,9 @@ void BuildDisplay() {
 
   rssiold = 2000;
 
-  SignalLevelold = 65535;
+  SignalLevelold = 0;
   CNRold = 254;
-  BitrateOld = 65535;
+  BitrateOld = 0;
   EIDold = "";
   SIDold = "";
   PLold = "";
