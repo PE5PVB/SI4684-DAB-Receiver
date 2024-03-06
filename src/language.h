@@ -43,7 +43,7 @@ static const char* const myLanguage[2][72] = {
     "Bitrate", // 34
     "Audio mode", // 35
     "Signal information", // 36
-    "No programme type", // 37
+    "Unknown", // 37
     "News", // 38
     "Current Affairs", // 39
     "Information", // 40
@@ -55,13 +55,13 @@ static const char* const myLanguage[2][72] = {
     "Varied", // 46
     "Pop Music", // 47
     "Rock Music", // 48
-    "Easy Listening Music", // 49
+    "Easy Listening", // 49
     "Light Classical", // 50
     "Serious Classical", // 51
     "Other Music", // 52
-    "Weather/meteorology", // 53
-    "Finance/Business", // 54
-    "Children's programmes", // 55
+    "Weather", // 53
+    "Finance", // 54
+    "Children's", // 55
     "Social Affairs", // 56
     "Religion", // 57
     "Phone In", // 58
@@ -126,7 +126,7 @@ static const char* const myLanguage[2][72] = {
     "Drama", // 43
     "Cultuur", // 44
     "Wetenschap", // 45
-    "Varia en gesprekken", // 46
+    "Varia", // 46
     "Popmuziek", // 47
     "Rockmuziek", // 48
     "Ontspanningsmuziek", // 49
@@ -135,7 +135,7 @@ static const char* const myLanguage[2][72] = {
     "Overige muziek", // 52
     "Weerbericht", // 53
     "Economie", // 54
-    "Voor kinderen", // 55
+    "Kinderen", // 55
     "Maatschappelijk", // 56
     "Religie", // 57
     "Doe mee!", // 58
@@ -143,7 +143,7 @@ static const char* const myLanguage[2][72] = {
     "Vrije tijd", // 60
     "Jazz", // 61
     "Country", // 62
-    "Nationale muziek", // 63
+    "Nat. muziek", // 63
     "Gouwe ouwe", // 64
     "Volksmuziek", // 65
     "Documentaires", // 66

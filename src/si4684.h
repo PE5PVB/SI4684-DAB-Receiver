@@ -85,7 +85,8 @@ class DAB {
     char* getFirmwareVersion(void);
     uint16_t getRSSI(void);
     uint8_t getFIC(void);
-    String getEnsembleLabel(void);
+//    String getEnsembleLabel(void);
+	char EnsembleLabel[17];
     bool signallock;
     char ServiceData[128];
     uint16_t bitrate;
@@ -122,7 +123,6 @@ class DAB {
     uint32_t  componentID;
     char ChipType[7];
     char FirmwVersion[6];
-    char EnsembleLabel[17];
     uint32_t SlideShowByteCounter;
     uint32_t SlideShowLengthOld;
     bool SlideShowNew;

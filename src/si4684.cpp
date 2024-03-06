@@ -66,14 +66,16 @@ uint16_t DAB::getRSSI(void) {
     SPIread(6);
     int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
     RSSIUpdateTimer = millis();
+	if (rssi > 1200) rssi = 1200;
+	if (rssi < -1000) rssi = -1000;
     return rssi;
   }
 }
 
 
-String DAB::getEnsembleLabel(void) {
-  return String(EnsembleLabel);
-}
+//String DAB::getEnsembleLabel(void) {
+//  return String(EnsembleLabel);
+//}
 
 uint32_t DAB::getFreq(uint8_t freq) {
   return DABfrequencyTable_DAB[freq].frequency;

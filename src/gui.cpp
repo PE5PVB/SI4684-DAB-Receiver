@@ -11,13 +11,13 @@
 byte menuitem;
 
 void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
-  PrimaryColor = TFT_YELLOW;
-  PrimaryColorSmooth = 0x2120;
-  SecondaryColor = TFT_SKYBLUE;
+  PrimaryColor = 0x4548;
+  PrimaryColorSmooth = 0x1122;
+  SecondaryColor = 0x3d1d;
   SecondaryColorSmooth = 0x10E4;
   FrameColor = TFT_BLUE;
-  GreyoutColor = 0x39A7;
-  BackgroundColor = TFT_BLACK;
+  GreyoutColor = 0x5b0d;
+  BackgroundColor = 0x0063;
   ActiveColor = TFT_WHITE;
   ActiveColorSmooth = 0x18E3;
   SignificantColor = TFT_RED;
@@ -46,7 +46,7 @@ tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][35], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
 
   tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 155, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.getEnsembleLabel()), 155, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 155, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 155, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 155, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, ProtectionText[radio.protectionlevel], 155, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
@@ -141,6 +141,17 @@ void BuildMenu() {
 
 void BuildDisplay() {
   SlideShowView = false;
+  tft.pushImage (0, 0, 320, 240, Background);
+  tftPrint(1, "PR:", 80, 65, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "RT:", 5, 221, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "PTY:", 5, 162, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "EID", 10, 105, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "SID", 10, 120, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(1, "MHz", 310, 55, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "SIG:", 124, 115, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, unitString[unit], 190, 115, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "MER:", 238, 115, ActiveColor, ActiveColorSmooth, 16);
+/*
   tft.fillScreen(BackgroundColor);
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
@@ -154,6 +165,7 @@ void BuildDisplay() {
   tft.drawLine(0, 217, 320, 217, FrameColor);
   tft.drawLine(53, 30, 53, 0, FrameColor);
   tft.drawLine(158, 30, 158, 0, FrameColor);
+  
   tft.drawLine(20, 114, 204, 114, TFT_DARKGREY);
   for (byte segments = 0; segments < 94; segments++) {
     if (segments > 54) {
@@ -184,13 +196,13 @@ void BuildDisplay() {
   tftPrint(-1, "+30", 174, 115, ActiveColor, ActiveColorSmooth, 16);
 
   tftPrint(-1, "kb/s", 203, 4, ActiveColor, ActiveColorSmooth, 28);
-  tftPrint(-1, unitString[unit], 282, 145, ActiveColor, ActiveColorSmooth, 16);
+  
 
   tftPrint(-1, "MHz", 258, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 28);
 
 
   tftPrint(-1, "DAB", 70, 32, PrimaryColor, PrimaryColorSmooth, 16);
-
+*/
   ShowServiceInformation = false;
   ShowFreq();
   ShowTuneMode();
@@ -205,7 +217,7 @@ void BuildDisplay() {
   SIDold = "";
   PLold = "";
   PSold = "";
-  ptyold = 254;
+  ptyold = 0;
 }
 
 void MenuUp() {
