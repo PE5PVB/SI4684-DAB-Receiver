@@ -21,6 +21,7 @@
 
 extern bool autoslideshow;
 extern bool change;
+extern bool displayreset;
 extern bool highz;
 extern bool menuopen;
 extern bool ShowServiceInformation;
@@ -37,6 +38,10 @@ extern int ActiveColor;
 extern int ActiveColorSmooth;
 extern int BackgroundColor;
 extern int BackgroundColor2;
+extern int BackgroundColor3;
+extern int BackgroundColor4;
+extern int BackgroundColor5;
+extern int BackgroundColor6;
 extern int BarInsignificantColor;
 extern int BarSignificantColor;
 extern int BitrateAutoColor;

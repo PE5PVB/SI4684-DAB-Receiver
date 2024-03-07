@@ -43,22 +43,23 @@ static const char* const ProtectionText[] {
 };
 
 static const char* const AudioModeText[] {
-	"Dual",
-	"Mono",
-	"Stereo",
-	"Joint stereo"
+  "Dual",
+  "Mono",
+  "Stereo",
+  "Joint stereo"
 };
 
 static const char* const ServiceTypeText[] {
-	"Audio",
-	"Data",
-	"FIDC",
-	"MSC",
-	"DAB+",
-	"DAB",
-	"FIC",
-	"XPAD data",
-	"-"
+  "Audio",
+  "Data",
+  "FIDC",
+  "MSC",
+  "DAB+",
+  "DAB",
+  "FIC",
+  "XPAD data",
+  "-",
+  ""
 };
 
 typedef struct _Services {
@@ -85,8 +86,7 @@ class DAB {
     char* getFirmwareVersion(void);
     uint16_t getRSSI(void);
     uint8_t getFIC(void);
-//    String getEnsembleLabel(void);
-	char EnsembleLabel[17];
+    char EnsembleLabel[17];
     bool signallock;
     char ServiceData[128];
     uint16_t bitrate;
@@ -114,7 +114,7 @@ class DAB {
     bool SlideShowUpdate;
     bool isJPG;
     bool isPNG;
-	bool directtune;
+    bool directtune;
 
   private:
     void ParseServiceList(void);

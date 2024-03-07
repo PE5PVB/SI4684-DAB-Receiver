@@ -11,14 +11,18 @@
 byte menuitem;
 
 void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
-  PrimaryColor = 0x24e4;
+  PrimaryColor = 0x2e65;
   PrimaryColorSmooth = 0x09a1;
   SecondaryColor = 0x051f;
   SecondaryColorSmooth = 0x08e5;
   FrameColor = 0x001F;
   GreyoutColor = 0x5b0d;
   BackgroundColor = 0x016b;
-  BackgroundColor2 = 0x00a4;
+  BackgroundColor2 = 0x016a;
+  BackgroundColor3 = 0x0108;
+  BackgroundColor4 = 0x00c6;
+  BackgroundColor5 = 0x00a5;
+  BackgroundColor6 = 0x00a4;
   ActiveColor = 0xFFFF;
   ActiveColorSmooth = 0x18E3;
   SignificantColor = 0xF800;
@@ -34,7 +38,7 @@ void ShowServiceInfo() {
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
-//tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);  
+  //tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
   tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -66,7 +70,7 @@ void BuildChannelList() {
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
   tftPrint(0, myLanguage[language][11], 155, 4, ActiveColor, ActiveColorSmooth, 28);
-//  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
+  //  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
 
   byte y = 0;
   if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -155,27 +159,18 @@ void BuildDisplay() {
   tftPrint(-1, "S", 122, 127, SecondaryColor, SecondaryColorSmooth, 16);
   tftPrint(1, "ECC", 110, 90, ActiveColor, ActiveColorSmooth, 16);
   tft.pushImage (130, 5, 19, 19, ClockSymbol);
-  
-  for (byte segments = 0; segments < 11; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 7 ? BarInsignificantColor : BarSignificantColor));
-  tft.drawLine(134, 138, 275, 138, ActiveColor);
-  tftPrint(-1, "1   3   5   7   9  +10   +30", 134, 140, ActiveColor, ActiveColorSmooth, 16);
-  tft.drawRect(134, 90, 143, 12, ActiveColor);
+
+  for (byte segments = 0; segments < 13; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 8 ? BarInsignificantColor : BarSignificantColor));
+  tft.drawLine(134, 138, 302, 138, ActiveColor);
+  tftPrint(-1, "1   3   5   7   9  +10  +30 +60", 134, 140, ActiveColor, ActiveColorSmooth, 16);
+  tft.drawRect(134, 90, 141, 12, GreyoutColor);
 
   ShowServiceInformation = false;
   ShowFreq();
   ShowTuneMode();
   ShowMemoryPos();
 
-  rssiold = 2000;
-
-  SignalLevelold = 0;
-  CNRold = 254;
-  BitrateOld = 0;
-  EIDold = "";
-  SIDold = "";
-  PLold = "";
-  PSold = "";
-  ptyold = 0;
+  displayreset = true;
 }
 
 void MenuUp() {

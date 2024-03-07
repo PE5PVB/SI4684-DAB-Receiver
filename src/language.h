@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[2][73] = {
+static const char* const myLanguage[2][77] = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -73,12 +73,16 @@ static const char* const myLanguage[2][73] = {
     "Oldies Music", // 64
     "Folk Music", // 65
     "Documentary", // 66
-	"to configure Wi-Fi", // 67
-	"Connect to", // 68
-	"Trying to connect Wi-Fi", // 69
-	"FAILED!", // 70
+    "to configure Wi-Fi", // 67
+    "Connect to", // 68
+    "Trying to connect Wi-Fi", // 69
+    "FAILED!", // 70
     "CONNECTED!", // 71
-	"DAB Receiver" // 72
+    "DAB Receiver", // 72
+    "", // 73
+    "Select service", // 74
+    "Tuning...", // 75
+    "No signal" // 76
   },
 
   { "Nederlands", // Dutch
@@ -148,12 +152,16 @@ static const char* const myLanguage[2][73] = {
     "Gouwe ouwe", // 64
     "Volksmuziek", // 65
     "Documentaires", // 66
-	"om WiFi te configureren", // 67
-	"Maak verbinding met", // 68
-	"Verbinden met Wi-Fi...", // 69
-	"MISLUKT!", // 70
+    "om WiFi te configureren", // 67
+    "Maak verbinding met", // 68
+    "Verbinden met Wi-Fi...", // 69
+    "MISLUKT!", // 70
     "VERBONDEN!", // 71
-	"DAB Ontvanger" // 72
+    "DAB Ontvanger", // 72
+    "", // 73
+    "Kies service", // 74
+    "Afstemmen....", // 75
+    "Geen signaal" // 76
   }
 };
 #endif

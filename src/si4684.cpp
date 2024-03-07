@@ -66,16 +66,11 @@ uint16_t DAB::getRSSI(void) {
     SPIread(6);
     int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
     RSSIUpdateTimer = millis();
-	if (rssi > 1200) rssi = 1200;
-	if (rssi < -1000) rssi = -1000;
+    if (rssi > 1200) rssi = 1200;
+    if (rssi < -1000) rssi = -1000;
     return rssi;
   }
 }
-
-
-//String DAB::getEnsembleLabel(void) {
-//  return String(EnsembleLabel);
-//}
 
 uint32_t DAB::getFreq(uint8_t freq) {
   return DABfrequencyTable_DAB[freq].frequency;
@@ -269,7 +264,14 @@ void DAB::EnsembleInfo(void) {
         numberofcomponents = SPIbuffer[offset + 5] & 0x0F;
 
         for (uint16_t j = 0; j < 16; j++) service[i].Label[j] = SPIbuffer[offset + 8 + j];
-        service[i].Label[16] = '\0';
+
+        for (int16_t j = 15; j >= 0; j--) {
+          if (service[i].Label[j] == ' ' && service[i].Label[j + 1] == '\0') {
+            service[i].Label[j] = '\0';
+          } else {
+            break;
+          }
+        }
         offset += 24;
 
         for (uint16_t j = 0; j < numberofcomponents; j++) {
@@ -314,9 +316,15 @@ void DAB::EnsembleInfo(void) {
             }
           }
 
-          for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = ((char)SPIbuffer[7 + i]);
-          EnsembleLabel[16] = '\0';
+          for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
 
+          for (int8_t i = 15; i >= 0; i--) {
+            if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
+              EnsembleLabel[i] = '\0';
+            } else {
+              break;
+            }
+          }
           ecc = SPIbuffer[23];
         } else {
           EnsembleInfoSet = false;
@@ -486,12 +494,15 @@ void DAB::setFreq(uint8_t freq) {
   EnsembleLabel[0] = '\0';
   EID[0] = '\0';
   SID[0] = '\0';
-  pty = 0;
+  pty = 36;
   ecc = 0;
   protectionlevel = 0;
   bitrate = 0;
   ServiceStart = false;
   SlideShowInit = false;
+  SlideShowAvailable = false;
+  isJPG = false;
+  isPNG = false;
   SPIbuffer[0] = 0xB0;
   SPIbuffer[1] = 0x00;
   SPIbuffer[2] = freq;
@@ -511,7 +522,7 @@ void DAB::setFreq(uint8_t freq) {
 }
 
 void DAB::setService(uint8_t _index) {
-  pty = 0;
+  pty = 36;
   protectionlevel = 0;
   bitrate = 0;
   protectionlevel = 0;
