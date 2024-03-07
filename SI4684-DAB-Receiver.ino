@@ -134,6 +134,7 @@ unsigned long tuningtimer;
 TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
 TFT_eSprite SignalSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
+TFT_eSprite PSSprite = TFT_eSprite(&tft);
 WiFiConnect wc;
 WiFiServer Server(7373);
 WiFiClient RemoteClient;
@@ -207,6 +208,10 @@ void setup() {
   SignalSprite.setTextDatum(TR_DATUM);
   SignalSprite.loadFont(FONT16);
 
+  PSSprite.createSprite(260, 28);
+  PSSprite.setTextDatum(TC_DATUM);
+  PSSprite.loadFont(FONT28);
+
   if (digitalRead(SLBUTTON) == LOW && digitalRead(ROTARY_BUTTON) == HIGH) {
     if (rotarymode == 0) rotarymode = 1; else rotarymode = 0;
     EEPROM.writeByte(EE_BYTE_ROTARYMODE, rotarymode);
@@ -278,10 +283,7 @@ void setup() {
       _serviceName[i] = EEPROM.readByte(i + EE_CHAR17_SERVICENAME);
     }
   }
-  if (_serviceID != 0 ) {
-    trysetservice = true;
-    radio.directtune = true;
-  }
+  if (_serviceID != 0 ) trysetservice = true;
 
   BuildDisplay();
   setupmode = false;
@@ -416,7 +418,7 @@ void loop() {
 }
 
 void ProcessDAB(void) {
-  radio.Update();
+  if (!tuning) radio.Update();
 
   if (trysetservice && radio.signallock) {
     for (byte x; x < radio.numberofservices; x++) {
@@ -518,15 +520,25 @@ void ShowEID() {
 }
 
 void ShowPS() {
-  if (tunemode != TUNE_MEM && radio.signallock && !radio.ServiceStart && !tuning) {
-    strncpy(_serviceName, myLanguage[language][74], sizeof(_serviceName));
-    _serviceName[sizeof(_serviceName) - 1] = '\0';
-  }
-  if ((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
-    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))).length() != 0)) {
-      tftReplace(0, PSold, String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 170, 187, SecondaryColor, SecondaryColorSmooth, BackgroundColor5, 28);
+  if (tunemode != TUNE_MEM && !radio.ServiceStart && !tuning) {
+    if (radio.signallock) {
+      strncpy(_serviceName, myLanguage[language][74], sizeof(_serviceName));
+      _serviceName[sizeof(_serviceName) - 1] = '\0';
+    } else {
+      for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
     }
-    PSold = (radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName));
+  } else if (tunemode != TUNE_MEM) {
+    strcpy(_serviceName, radio.service[radio.ServiceIndex].Label);
+  }
+
+  if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
+    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))).length() != 0)) {
+      PSSprite.fillSprite(BackgroundColor5);
+      PSSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 130, 0);
+      PSSprite.pushSprite(50, 187);
+    }
+    PSold = (radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName));
   }
 }
 
@@ -604,7 +616,7 @@ void ShowECC() {
         //        if (radio.ecc == 0xe3) tft.pushImage(81, 110, 35, 23, az); ITU = "AZE";
         break;
     }
-    tftReplace(0, ITUold, ITU, 98, 140, ActiveColor, ActiveColorSmooth, BackgroundColor3, 16);
+    tftReplace(0, ITUold, ITU, 98, 140, SecondaryColor, SecondaryColorSmooth, BackgroundColor3, 16);
     eccold = radio.ecc;
     ITUold = ITU;
   }
@@ -706,7 +718,6 @@ void DABSelectService(bool dir) {
   }
   rotary2 = 0;
   radio.ServiceStart = true;
-  radio.directtune = false;
   if (channellistview) BuildChannelList();
 }
 
@@ -838,16 +849,16 @@ void KeyUp() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
-        radio.pty = 0;
+        radio.clearData();
         for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
       case TUNE_AUTO:
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
-        radio.pty = 0;
+        radio.clearData();
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         direction = true;
         seek = true;
         break;
@@ -891,16 +902,16 @@ void KeyDown() {
         tuningtimer = millis();
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
-        radio.pty = 0;
+        radio.clearData();
         for (byte x; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
       case TUNE_AUTO:
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
-        radio.pty = 0;
+        radio.clearData();
+        for (byte x; x < 17; x++) _serviceName[x] = '\0';
         direction = false;
         seek = true;
         break;
@@ -946,7 +957,6 @@ void DoMemoryPosTune() {
     radio.ServiceStart = false;
     tuningtimer = millis();
     tuning = true;
-    radio.directtune = true;
   }
 }
 
@@ -1021,7 +1031,7 @@ void ShowSignalLevel() {
 
 
   } else {
-    if (CNRold != CNR || SignalLevelprint != SignalLevelold) {
+    if (CNRold != CNR || SignalLevelprint != SignalLevelold && !setvolume) {
       String SignalLevelString = String(String(SignalLevelprint / 10)) + "." + String(abs(SignalLevelprint % 10)) + String(unitString[unit]) + " | MER: " + String(CNR) + "dB";
       if (SignalLevelString != SignalLeveloldString) {
         tftReplace(-1, SignalLeveloldString, SignalLevelString, 155, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
@@ -1048,7 +1058,7 @@ void ShowVolume() {
 void ShowBitrate() {
   if (tuning) radio.bitrate = 0;
   if (radio.bitrate != BitrateOld || displayreset) {
-    tftReplace(0, String (BitrateOld, DEC) + " kbit/s", (radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 39, 140, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
+    tftReplace(0, String (BitrateOld, DEC) + " kbit/s", (radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 39, 140, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
     BitrateOld = radio.bitrate;
   }
 }

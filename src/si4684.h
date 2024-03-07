@@ -75,13 +75,14 @@ class DAB {
     void ServiceInfo(void);
     void getServiceData(void);
     void Update(void);
+	void clearData(void);
     void setFreq(uint8_t freq_index);
     void setService(uint8_t index);
     uint32_t getFreq(uint8_t freq);
     const char* getChannel(uint8_t freq);
     String ASCII(const char* input);
 
-    DABService service[33];
+    DABService service[32];
     char* getChipID(void);
     char* getFirmwareVersion(void);
     uint16_t getRSSI(void);
@@ -114,13 +115,13 @@ class DAB {
     bool SlideShowUpdate;
     bool isJPG;
     bool isPNG;
-    bool directtune;
 
   private:
     void ParseServiceList(void);
     bool ParseServiceList(bool first, uint8_t* data, uint16_t len);
-    uint32_t  serviceID;
-    uint32_t  componentID;
+    uint32_t CurrentServiceID;
+	uint32_t serviceID;
+    uint32_t componentID;
     char ChipType[7];
     char FirmwVersion[6];
     uint32_t SlideShowByteCounter;

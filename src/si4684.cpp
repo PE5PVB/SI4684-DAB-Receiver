@@ -244,7 +244,8 @@ void DAB::EnsembleInfo(void) {
     SPIwrite(SPIbuffer, 2);
     cts();
     SPIread(6);
-    if (SPIbuffer[5] + (SPIbuffer[6] << 8) + 6 < sizeof(SPIbuffer)) {
+
+    if (SPIbuffer[6] != 0 && SPIbuffer[5] + (SPIbuffer[6] << 8) + 6 < sizeof(SPIbuffer)) {
       SPIread(SPIbuffer[5] + (SPIbuffer[6] << 8) + 6);
       uint8_t numberofcomponents;
 
@@ -290,7 +291,17 @@ void DAB::EnsembleInfo(void) {
         service[i].CompID = componentID;
       }
 
-      if (!directtune) qsort(service, numberofservices, sizeof(DABService), compareCompID);
+
+      qsort(service, numberofservices, sizeof(DABService), compareCompID);
+
+      if (CurrentServiceID != service[ServiceIndex].ServiceID) {
+        for (byte x = 0; x < numberofservices; x++) {
+          if (CurrentServiceID == service[x].ServiceID) {
+            ServiceIndex = x;
+            break;
+          }
+        }
+      }
 
       if (EID[0] == '\0' || EnsembleLabel[0] == '\0') {
         for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
@@ -330,12 +341,14 @@ void DAB::EnsembleInfo(void) {
           EnsembleInfoSet = false;
         }
       }
+    }
+    SPIbuffer[0] = 0xBC;
+    SPIbuffer[1] = 0x00;
+    SPIwrite(SPIbuffer, 2);
+    cts();
+    SPIread(11);
 
-      SPIbuffer[0] = 0xBC;
-      SPIbuffer[1] = 0x00;
-      SPIwrite(SPIbuffer, 2);
-      cts();
-      SPIread(11);
+    if (SPIbuffer[5] + ((uint16_t)SPIbuffer[6] << 8) != 0) {
       Year = SPIbuffer[5] + ((uint16_t)SPIbuffer[6] << 8);
       Months = SPIbuffer[7];
       Days = SPIbuffer[8];
@@ -357,83 +370,85 @@ void DAB::getServiceData(void) {
     cts();
     SPIread(20);
     if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
-      SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
-      byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
+      if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) > 0) {
+        SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
+        byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
 
 
-      // Read Radiotext
-      if (((SPIbuffer[8] >> 6) & 0x03) == 0x02 && !((SPIbuffer[25] & 0x10) == 0x10)) {
-        for (byte_number = 0; byte_number < byte_count; byte_number++) ServiceData[byte_number] = (char)SPIbuffer[27 + byte_number];
-        ServiceData[byte_number] = '\0';
+        // Read Radiotext
+        if (((SPIbuffer[8] >> 6) & 0x03) == 0x02 && !((SPIbuffer[25] & 0x10) == 0x10)) {
+          for (byte_number = 0; byte_number < byte_count; byte_number++) ServiceData[byte_number] = (char)SPIbuffer[27 + byte_number];
+          ServiceData[byte_number] = '\0';
 
-        // Read Slideshow initialisation and finish Slideshow
-      } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 65) {
-        if (SlideShowLength == SlideShowByteCounter && SlideShowInit) {
-          // Open source file
-          File sourceFile = LittleFS.open("/temp.img", "rb");
-          if (!sourceFile) return;
+          // Read Slideshow initialisation and finish Slideshow
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 65) {
+          if (SlideShowLength == SlideShowByteCounter && SlideShowInit) {
+            // Open source file
+            File sourceFile = LittleFS.open("/temp.img", "rb");
+            if (!sourceFile) return;
 
-          // Remove existing slideshow file
-          LittleFS.remove("/slideshow.img");
+            // Remove existing slideshow file
+            LittleFS.remove("/slideshow.img");
 
-          // Create and copy to destination file
-          File destinationFile = LittleFS.open("/slideshow.img", "wb");
-          if (destinationFile) {
-            while (sourceFile.available()) {
-              destinationFile.write(sourceFile.read());
+            // Create and copy to destination file
+            File destinationFile = LittleFS.open("/slideshow.img", "wb");
+            if (destinationFile) {
+              while (sourceFile.available()) {
+                destinationFile.write(sourceFile.read());
+              }
+              destinationFile.close();
             }
-            destinationFile.close();
+
+            // Close source file and remove it
+            sourceFile.close();
+            LittleFS.remove("/temp.img");
+
+            // Update variables
+            SlideShowLengthOld = SlideShowLength;
+            SlideShowUpdate = true;
+            SlideShowAvailable = true;
+            SlideShowInit = false;
           }
 
-          // Close source file and remove it
-          sourceFile.close();
-          LittleFS.remove("/temp.img");
+          SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37]  >> 4)) & 0x00FFFF;
 
-          // Update variables
-          SlideShowLengthOld = SlideShowLength;
-          SlideShowUpdate = true;
-          SlideShowAvailable = true;
-          SlideShowInit = false;
-        }
-
-        SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37]  >> 4)) & 0x00FFFF;
-
-        if (SlideShowLength > 0 && SlideShowLength != SlideShowLengthOld) {
-          SlideShowNew = true;
-          SlideShowInit = true;
-          SlideShowByteCounter = 0;
-          if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
-        } else {
-          SlideShowNew = false;
-        }
-
-        // Read Slideshow packets
-      } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12 && SlideShowNew) {
-        File slideshowFile;
-        if (SlideShowInit) {
-          if (SPIbuffer[34] == 0xff && SPIbuffer[35] == 0xd8 && SPIbuffer[36] == 0xff && (SPIbuffer[37] == 0xe0 || SPIbuffer[37] == 0xe1)) {
-            isJPG = true;
-            isPNG = false;
-          }
-          if (SPIbuffer[34] == 0x89 && SPIbuffer[35] == 0x50 && SPIbuffer[36] == 0x4e && SPIbuffer[37] == 0x47 && SPIbuffer[38] == 0x0d && SPIbuffer[39] == 0x0a && SPIbuffer[40] == 0x1a && SPIbuffer[41] == 0x0a) {
-            isPNG = true;
-            isJPG = false;
+          if (SlideShowLength > 0 && SlideShowLength != SlideShowLengthOld) {
+            SlideShowNew = true;
+            SlideShowInit = true;
+            SlideShowByteCounter = 0;
+            if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+          } else {
+            SlideShowNew = false;
           }
 
-          if (!LittleFS.exists("/temp.img")) {
-            slideshowFile = LittleFS.open("/temp.img", "wb");
+          // Read Slideshow packets
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12 && SlideShowNew) {
+          File slideshowFile;
+          if (SlideShowInit) {
+            if (SPIbuffer[34] == 0xff && SPIbuffer[35] == 0xd8 && SPIbuffer[36] == 0xff && (SPIbuffer[37] == 0xe0 || SPIbuffer[37] == 0xe1)) {
+              isJPG = true;
+              isPNG = false;
+            }
+            if (SPIbuffer[34] == 0x89 && SPIbuffer[35] == 0x50 && SPIbuffer[36] == 0x4e && SPIbuffer[37] == 0x47 && SPIbuffer[38] == 0x0d && SPIbuffer[39] == 0x0a && SPIbuffer[40] == 0x1a && SPIbuffer[41] == 0x0a) {
+              isPNG = true;
+              isJPG = false;
+            }
+
+            if (!LittleFS.exists("/temp.img")) {
+              slideshowFile = LittleFS.open("/temp.img", "wb");
+              if (!slideshowFile) return;
+              slideshowFile.close();
+            }
+
+            slideshowFile = LittleFS.open("/temp.img", "ab");
             if (!slideshowFile) return;
+
+            for (byte_number = 0; byte_number < byte_count - 11; byte_number++) {
+              slideshowFile.write(SPIbuffer[34 + byte_number]);
+              SlideShowByteCounter++;
+            }
             slideshowFile.close();
           }
-
-          slideshowFile = LittleFS.open("/temp.img", "ab");
-          if (!slideshowFile) return;
-
-          for (byte_number = 0; byte_number < byte_count - 11; byte_number++) {
-            slideshowFile.write(SPIbuffer[34 + byte_number]);
-            SlideShowByteCounter++;
-          }
-          slideshowFile.close();
         }
       }
     }
@@ -484,6 +499,14 @@ void DAB::ServiceInfo(void) {
   cts();
   SPIread(8);
   pty = (SPIbuffer[5] >> 1) & 0x1F;
+}
+
+void DAB::clearData(void) {
+  for (byte x = 0; x < 32; x++) {
+    service[x].ServiceID = 0;
+    service[x].CompID = 0;
+    for (byte y = 0; y < 16; y++) service[x].Label[y] = '\0';
+  }
 }
 
 void DAB::setFreq(uint8_t freq) {
@@ -564,6 +587,7 @@ void DAB::setService(uint8_t _index) {
       SID[i] += 'A' - 10;
     }
   }
+  CurrentServiceID = service[ServiceIndex].ServiceID;
   ServiceInfo();
 }
 
