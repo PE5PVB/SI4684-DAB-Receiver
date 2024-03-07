@@ -130,6 +130,7 @@ void DAB::begin(uint8_t SSpin) {
   pinMode(slaveSelectPin, OUTPUT);                                        // Configure SPI
   digitalWrite(slaveSelectPin, HIGH);
   SPI.begin(14, 16, 13, 15);
+  delay(3);
   SPIbuffer[0] = 0x09;
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
@@ -155,6 +156,8 @@ void DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 16);
     cts();
 
+	delayMicroseconds(20);
+
     SPIbuffer[0] = 0x06;                                                    // LOAD_INIT
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
@@ -171,7 +174,7 @@ void DAB::begin(uint8_t SSpin) {
       cts();
     }
 
-    delay(10);
+    delay(4);
     SPIbuffer[0] = 0x06;                                                    // LOAD_INIT
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
