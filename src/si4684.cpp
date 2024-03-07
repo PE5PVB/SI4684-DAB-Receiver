@@ -11,7 +11,6 @@
 
 unsigned char SPIbuffer[4096];
 unsigned long DataUpdate = 0;
-unsigned long ServiceDataUpdate = 0;
 unsigned long RSSIUpdateTimer = 0;
 bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
@@ -546,7 +545,6 @@ void DAB::setFreq(uint8_t freq) {
 
 void DAB::setService(uint8_t _index) {
   pty = 36;
-  protectionlevel = 0;
   bitrate = 0;
   protectionlevel = 0;
   ServiceData[0] = '\0';
@@ -592,10 +590,7 @@ void DAB::setService(uint8_t _index) {
 }
 
 void DAB::Update(void) {
-  if (millis() - ServiceDataUpdate > 200 && signallock) {
-    getServiceData();
-    ServiceDataUpdate = millis();
-  }
+  if (signallock) getServiceData();
   if (millis() - DataUpdate > 1000 || !signallock) {
     EnsembleInfo();
     if (ServiceStart && signallock) ServiceInfo();

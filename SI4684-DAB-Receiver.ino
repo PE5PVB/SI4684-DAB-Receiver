@@ -421,7 +421,7 @@ void ProcessDAB(void) {
   if (!tuning) radio.Update();
 
   if (trysetservice && radio.signallock) {
-    for (byte x; x < radio.numberofservices; x++) {
+    for (byte x = 0; x < radio.numberofservices; x++) {
       if (_serviceID == radio.service[x].ServiceID) {
         radio.setService(x);
         radio.ServiceStart = true;
@@ -666,24 +666,21 @@ void ShowSlideShow(void) {
 
     if (pngfile) {
       int16_t rc = png.open(filename.c_str(),
-      [pngfile](const char *filename, int32_t *size) -> void * {
-        pngfile = LittleFS.open(filename, "rb");
+      [&pngfile](const char *filename, int32_t *size) -> void * {
         *size = pngfile.size();
         return &pngfile;
       },
-      [pngfile](void *handle) {
-        File *file = static_cast<File *>(handle);
-        if (file) file->close();
+      [&pngfile](void *handle) {
       },
-      [pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
+      [&pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
         if (!pngfile || !pngfile.available()) return 0;
         return pngfile.read(buffer, length);
       },
-      [pngfile](PNGFILE * page, int32_t position) -> int32_t {
+      [&pngfile](PNGFILE * page, int32_t position) -> int32_t {
         if (!pngfile || !pngfile.available()) return 0;
         return pngfile.seek(position);
       },
-      [pngfile](PNGDRAW * pDraw) {
+      [&pngfile, &tft](PNGDRAW * pDraw) {
         uint16_t lineBuffer[320];
         png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
         tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
@@ -850,7 +847,7 @@ void KeyUp() {
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
         radio.clearData();
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
@@ -858,7 +855,7 @@ void KeyUp() {
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
         radio.clearData();
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
         direction = true;
         seek = true;
         break;
@@ -903,7 +900,7 @@ void KeyDown() {
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
         radio.clearData();
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
         ShowFreq();
         break;
 
@@ -911,7 +908,7 @@ void KeyDown() {
         radio.ServiceIndex = 0;
         radio.ServiceStart = false;
         radio.clearData();
-        for (byte x; x < 17; x++) _serviceName[x] = '\0';
+        for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
         direction = false;
         seek = true;
         break;
@@ -1031,7 +1028,7 @@ void ShowSignalLevel() {
 
 
   } else {
-    if (CNRold != CNR || SignalLevelprint != SignalLevelold && !setvolume) {
+    if ((CNRold != CNR || SignalLevelprint != SignalLevelold) && !setvolume) {
       String SignalLevelString = String(String(SignalLevelprint / 10)) + "." + String(abs(SignalLevelprint % 10)) + String(unitString[unit]) + " | MER: " + String(CNR) + "dB";
       if (SignalLevelString != SignalLeveloldString) {
         tftReplace(-1, SignalLeveloldString, SignalLevelString, 155, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
@@ -1073,13 +1070,14 @@ void ShowClock() {
 }
 
 void ShowSlideShowIcon() {
-  if (SlideShowAvailableOld != radio.SlideShowAvailable || displayreset)
+  if (SlideShowAvailableOld != radio.SlideShowAvailable || displayreset) {
     if (radio.SlideShowAvailable) {
       tft.pushImage (10, 187, 30, 22, slideshowon);
     } else {
       tft.pushImage (10, 187, 30, 22, slideshowoff);
     }
-  SlideShowAvailableOld = radio.SlideShowAvailable;
+    SlideShowAvailableOld = radio.SlideShowAvailable;
+  }
 }
 
 void ShowTuneMode() {
