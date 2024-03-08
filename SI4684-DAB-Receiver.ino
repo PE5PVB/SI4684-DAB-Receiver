@@ -53,6 +53,7 @@ bool wificonnected;
 byte audiomodeold;
 byte charwidth = 8;
 byte ContrastSet;
+byte CurrentTheme;
 byte dabfreq;
 byte dabfreqold;
 byte displayflip;
@@ -112,6 +113,7 @@ int8_t CNR;
 int8_t CNRold;
 IPAddress remoteip;
 String clockstringOld;
+String datestringOld;
 String EIDold;
 String EnsembleNameOld;
 String dabfreqStringOld;
@@ -161,6 +163,7 @@ void setup() {
   autoslideshow = EEPROM.readByte(EE_BYTE_AUTOSLIDESHOW);
   tot = EEPROM.readByte(EE_BYTE_TOT);
   wifi = EEPROM.readByte(EE_BYTE_WIFI);
+  CurrentTheme = EEPROM.readByte(EE_BYTE_THEME);
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
     memorydabchannel[i] = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
@@ -589,34 +592,169 @@ void ShowAudioMode() {
 
 void ShowECC() {
   if (eccold != radio.ecc || displayreset) {
-    String ITU;
+    String ITU = "";
     switch (radio.EID[0]) {
+      case '1':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, de); ITU = "D"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, gr); ITU = "GRC"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, ma); ITU = "MRC"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, me); ITU = "MNE"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, md); ITU = "MDA"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
       case '2':
-        //        if (radio.ecc == 0xe0) tft.pushImage(81, 110, 35, 23, dz); ITU = "ALG";
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, dz); ITU = "ALG"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, cy); ITU = "CYP"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, cz); ITU = "CZE"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, ie); ITU = "IRL"; break;
+          //          case 0xe4: tft.pushImage(80, 110, 36, 23, cz); ITU = "EST"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
 
       case '3':
-        //        if (radio.ecc == 0xe0) tft.pushImage(81, 110, 35, 23, md); ITU = "AND";
+        switch (radio.ecc) {
+          //          case 0xe0: tft.pushImage(80, 110, 36, 23, md); ITU = "AND"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, sm); ITU = "SM"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, pl); ITU = "POL"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, tr); ITU = "TUR"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, mk); ITU = "MKD"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case '4':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, il); ITU = "ISR"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, ch); ITU = "SUI"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, va); ITU = "CVA"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case '5':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, it); ITU = "I"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, jo); ITU = "JOR"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, sk); ITU = "SVK"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, tj); ITU = "TJK"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case '6':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, be); ITU = "BEL"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, fi); ITU = "FNL"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, sy); ITU = "SYR"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, ua); ITU = "UKR"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case '7':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, ru); ITU = "RUS"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, lu); ITU = "LUX"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, tn); ITU = "TUN"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, kz); ITU = "XXK"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
 
       case '8':
-        if (radio.ecc == 0xe3) tft.pushImage(81, 110, 35, 23, nl); ITU = "HOL";
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, ra); ITU = "AZR"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, bg); ITU = "BUL"; break;
+          //          case 0xe2: tft.pushImage(80, 110, 36, 23, bg); ITU = "MDR"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, nl); ITU = "HOL"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, pt); ITU = "POR"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
 
       case '9':
-        //        if (radio.ecc == 0xe0) tft.pushImage(81, 110, 35, 23, al); ITU = "ALB";
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, al); ITU = "ALB"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, dk); ITU = "DNK"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, li); ITU = "LIE"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, lv); ITU = "LVA"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, si); ITU = "SVN"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
 
       case 'A':
-        //        if (radio.ecc == 0xe0) tft.pushImage(81, 110, 35, 23, at); ITU = "AUT";
-        //        if (radio.ecc == 0xe4) tft.pushImage(81, 110, 35, 23, am); ITU = "ARM";
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, at); ITU = "AUT"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, gi); ITU = "GIB"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, is); ITU = "ISL"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, lb); ITU = "LBN"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, am); ITU = "ARM"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
 
       case 'B':
-        //        if (radio.ecc == 0xe3) tft.pushImage(81, 110, 35, 23, az); ITU = "AZE";
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, hu); ITU = "HNG"; break;
+          //          case 0xe1: tft.pushImage(80, 110, 36, 23, hu); ITU = "IRQ"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, mc); ITU = "MCO"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, az); ITU = "AZE"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, uz); ITU = "UZB"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
         break;
+
+      case 'C':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, mt); ITU = "MLT"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, gb); ITU = "G"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, lt); ITU = "LTU"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, hr); ITU = "HRV"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, ge); ITU = "GEO"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case 'D':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, de); ITU = "D"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, ly); ITU = "LBY"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, rs); ITU = "SRB"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, kz); ITU = "KAZ"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case 'E':
+        switch (radio.ecc) {
+          //        case 0xe0: tft.pushImage(80, 110, 36, 23, az); ITU = "CNR"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, ro); ITU = "ROU"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, es); ITU = "E"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, se); ITU = "S"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, tm); ITU = "TKM"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+
+      case 'F':
+        switch (radio.ecc) {
+          case 0xe0: tft.pushImage(80, 110, 36, 23, eg); ITU = "EGY"; break;
+          case 0xe1: tft.pushImage(80, 110, 36, 23, fr); ITU = "F"; break;
+          case 0xe2: tft.pushImage(80, 110, 36, 23, no); ITU = "NOR"; break;
+          case 0xe3: tft.pushImage(80, 110, 36, 23, by); ITU = "BLR"; break;
+          case 0xe4: tft.pushImage(80, 110, 36, 23, ba); ITU = "BIH"; break;
+          default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
+        }
+        break;
+      default: tft.pushImage(80, 110, 36, 23, unknown); ITU = ""; break;
     }
-    tftReplace(0, ITUold, ITU, 98, 140, SecondaryColor, SecondaryColorSmooth, BackgroundColor3, 16);
+    tftReplace(0, ITUold, ITU, 97, 140, SecondaryColor, SecondaryColorSmooth, BackgroundColor3, 16);
     eccold = radio.ecc;
     ITUold = ITU;
   }
@@ -780,6 +918,7 @@ void ModeButtonPress() {
     EEPROM.writeByte(EE_BYTE_UNIT, unit);
     EEPROM.writeByte(EE_BYTE_TOT, tot);
     EEPROM.writeByte(EE_BYTE_WIFI, wifi);
+    EEPROM.writeByte(EE_BYTE_THEME, CurrentTheme);
     EEPROM.commit();
     menu = false;
     BuildDisplay();
@@ -1001,7 +1140,7 @@ void ShowSignalLevel() {
       SignalSprite.pushSprite(149, 109);
 
       byte segments = 0;
-      if (SignalLevel > 120) segments = map(SignalLevel, 120, 600, 0, 85);
+      if (SignalLevel > 120) segments = map(SignalLevel, 100, 700, 0, 85);
       tft.fillRect(134, 129, 2 * constrain(segments, 0, 56), 6, BarInsignificantColor);
       tft.fillRect(134 + 2 * 56, 129, 2 * (constrain(segments, 56, 85) - 56), 6, BarSignificantColor);
       tft.fillRect(134 + 2 * constrain(segments, 0, 85), 129, 2 * (85 - constrain(segments, 0, 85)), 6, GreyoutColor);
@@ -1063,9 +1202,12 @@ void ShowBitrate() {
 void ShowClock() {
   if (radio.signallock) setTime(radio.Hours, radio.Minutes, radio.Seconds, radio.Days, radio.Months, radio.Year);
   String clockstring = (hour() < 10 ? "0" : "") + String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute());
+  String datestring = (day() < 10 ? "0" : "") + String(day()) + "-" + (month() < 10 ? "0" : "") + String(month()) + "-" + String(year());
   if (clockstringOld != clockstring || displayreset) {
-    tftReplace(-1, clockstringOld, clockstring, 155, 8, ActiveColor, ActiveColorSmooth, BackgroundColor, 16);
+    tftReplace(-1, clockstringOld, clockstring, 105, 8, ActiveColor, ActiveColorSmooth, BackgroundColor, 16);
+    tftReplace(-1, datestringOld, datestring, 180, 8, ActiveColor, ActiveColorSmooth, BackgroundColor, 16);
     clockstringOld = clockstring;
+    datestringOld = datestring;
   }
 }
 
@@ -1196,6 +1338,7 @@ void DefaultSettings() {
   EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
   EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, 0);
   EEPROM.writeByte(EE_BYTE_TOT, 0);
+  EEPROM.writeByte(EE_BYTE_THEME, 0);
   EEPROM.put(EE_UINT32_SERVICEID, 0);
   EEPROM.put(EE_BYTE_DABFREQ, 0);
   for (int y = 0; y < 17; y++) {

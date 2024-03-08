@@ -80,7 +80,7 @@ const char* DAB::getChannel(uint8_t freq) {
 }
 
 static void SPIwrite(unsigned char *data, uint32_t length) {
-  SPI.beginTransaction(SPISettings(2000000, MSBFIRST, SPI_MODE0));
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite (slaveSelectPin, LOW);
   SPI.transfer(data, length);
   digitalWrite (slaveSelectPin, HIGH);

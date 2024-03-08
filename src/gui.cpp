@@ -11,26 +11,168 @@
 byte menuitem;
 
 void doTheme() {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
-  PrimaryColor = 0x2e65;
-  PrimaryColorSmooth = 0x09a1;
-  SecondaryColor = 0x051f;
-  SecondaryColorSmooth = 0x08e5;
-  FrameColor = 0x001F;
-  GreyoutColor = 0x5b0d;
-  BackgroundColor = 0x016b;
-  BackgroundColor2 = 0x016a;
-  BackgroundColor3 = 0x0108;
-  BackgroundColor4 = 0x00c6;
-  BackgroundColor5 = 0x00a5;
-  BackgroundColor6 = 0x00a4;
-  ActiveColor = 0xFFFF;
-  ActiveColorSmooth = 0x18E3;
-  SignificantColor = 0xF800;
-  SignificantColorSmooth = 0x2000;
-  InsignificantColor = 0x07E0;
-  InsignificantColorSmooth = 0x00C0;
-  BarSignificantColor = 0xF800;
-  BarInsignificantColor = 0x051f;
+  switch (CurrentTheme) {
+    case 0:  // Elegant
+      PrimaryColor = 0x2e65;
+      PrimaryColorSmooth = 0x09a1;
+      SecondaryColor = 0x051f;
+      SecondaryColorSmooth = 0x08e5;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0xFFFF;
+      ActiveColorSmooth = 0x18E3;
+      SignificantColor = 0xF800;
+      SignificantColorSmooth = 0x2000;
+      InsignificantColor = 0x07E0;
+      InsignificantColorSmooth = 0x00C0;
+      BarSignificantColor = 0xF800;
+      BarInsignificantColor = 0x051f;
+      break;
+
+    case 1: // GoldenDusk
+      PrimaryColor = 0x8ff1;
+      PrimaryColorSmooth = 0x10c2;
+      SecondaryColor = 0xFFE0;
+      SecondaryColorSmooth = 0x2120;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0xFFFF;
+      ActiveColorSmooth = 0x18E3;
+      SignificantColor = 0xF800;
+      SignificantColorSmooth = 0x2000;
+      InsignificantColor = 0x07E0;
+      InsignificantColorSmooth = 0x00C0;
+      BarSignificantColor = 0xF800;
+      BarInsignificantColor = 0x07E0;
+      break;
+
+    case 2: // Vibrant
+      PrimaryColor = 0xF00A;
+      PrimaryColorSmooth = 0x3800;
+      SecondaryColor = 0xFFE0;
+      SecondaryColorSmooth = 0x2120;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0x051F;
+      ActiveColorSmooth = 0x0106;
+      SignificantColor = 0xF3D5;
+      SignificantColorSmooth = 0x3008;
+      InsignificantColor = 0x07E0;
+      InsignificantColorSmooth = 0x00C0;
+      BarSignificantColor = 0xF3D5;
+      BarInsignificantColor = 0x07E0;
+      break;
+
+    case 3: // Serenity
+      PrimaryColor = 0xF3D5;
+      PrimaryColorSmooth = 0x3008;
+      SecondaryColor = 0x9C96;
+      SecondaryColorSmooth = 0x41C8;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0x9B8D;
+      ActiveColorSmooth = 0x5207;
+      SignificantColor = 0x748E;
+      SignificantColorSmooth = 0x3206;
+      InsignificantColor = 0x9B90;
+      InsignificantColorSmooth = 0x3946;
+      BarSignificantColor = 0x748E;
+      BarInsignificantColor = 0xF3D5;
+      break;
+
+    case 4: // Luminous
+      PrimaryColor = 0x051F;
+      PrimaryColorSmooth = 0x0106;
+      SecondaryColor = 0xFA8D;
+      SecondaryColorSmooth = 0x3083;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0xFC00;
+      ActiveColorSmooth = 0x3165;
+      SignificantColor = 0xFFE0;
+      SignificantColorSmooth = 0x2120;
+      InsignificantColor = 0xF8C3;
+      InsignificantColorSmooth = 0x3800;
+      BarSignificantColor = 0xFFE0;
+      BarInsignificantColor = 0x867D;
+      break;
+
+    case 5: // Radiant
+      PrimaryColor = 0x051F;
+      PrimaryColorSmooth = 0x0106;
+      SecondaryColor = 0xFFE0;
+      SecondaryColorSmooth = 0x2120;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0xFC00;
+      ActiveColorSmooth = 0x3165;
+      SignificantColor = 0xFFE0;
+      SignificantColorSmooth = 0x2120;
+      InsignificantColor = 0xF8C3;
+      InsignificantColorSmooth = 0x3800;
+      BarSignificantColor = 0xFFE0;
+      BarInsignificantColor = 0x867D;
+      break;
+
+    case 6: // Sunset
+      PrimaryColor = 0x051F;
+      PrimaryColorSmooth = 0x0106;
+      SecondaryColor = 0xFFE0;
+      SecondaryColorSmooth = 0x2120;
+      FrameColor = 0x001F;
+      GreyoutColor = 0x5b0d;
+      BackgroundColor = 0x016b;
+      BackgroundColor2 = 0x016a;
+      BackgroundColor3 = 0x0108;
+      BackgroundColor4 = 0x00c6;
+      BackgroundColor5 = 0x00a5;
+      BackgroundColor6 = 0x00a4;
+      ActiveColor = 0xED20;
+      ActiveColorSmooth = 0x3940;
+      SignificantColor = 0xF800;
+      SignificantColorSmooth = 0x2000;
+      InsignificantColor = 0x07E0;
+      InsignificantColorSmooth = 0x00C0;
+      BarSignificantColor = 0xF800;
+      BarInsignificantColor = 0x07E0;
+      break;
+  }
 }
 
 void ShowServiceInfo() {
@@ -38,7 +180,6 @@ void ShowServiceInfo() {
   tft.drawRect(0, 0, 320, 240, FrameColor);
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
-  //tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
   tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -70,7 +211,6 @@ void BuildChannelList() {
   tft.drawLine(0, 30, 320, 30, FrameColor);
   tft.drawLine(0, 217, 320, 217, FrameColor);
   tftPrint(0, myLanguage[language][11], 155, 4, ActiveColor, ActiveColorSmooth, 28);
-  //  tftPrint(-1, "RT:", 3, 221, ActiveColor, ActiveColorSmooth, 16);
 
   byte y = 0;
   if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -126,7 +266,7 @@ void BuildMenu() {
 
   tftPrint(-1, myLanguage[language][12], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][13], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
-
+  tftPrint(-1, myLanguage[language][14], 8, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][15], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][16], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][25], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -136,7 +276,7 @@ void BuildMenu() {
   tftPrint(1, myLanguage[language][0], 310, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(1, "%", 310, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(1, String(ContrastSet, DEC), 270, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-
+  tftPrint(1, Theme[CurrentTheme], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   if (autoslideshow) tftPrint(1, myLanguage[language][23], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(1, unitString[unit], 310, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   if (tot != 0) tftPrint(1, String(tot), 270, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
@@ -158,7 +298,8 @@ void BuildDisplay() {
   tftPrint(-1, "Q", 122, 90, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, "S", 122, 127, SecondaryColor, SecondaryColorSmooth, 16);
   tftPrint(1, "ECC", 110, 90, ActiveColor, ActiveColorSmooth, 16);
-  tft.pushImage (130, 5, 19, 19, ClockSymbol);
+  tft.pushImage (80, 5, 19, 19, ClockSymbol);
+  tft.pushImage (150, 5, 19, 19, DateSymbol);
 
   for (byte segments = 0; segments < 13; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 8 ? BarInsignificantColor : BarSignificantColor));
   tft.drawLine(134, 138, 302, 138, ActiveColor);
@@ -201,7 +342,13 @@ void MenuUp() {
         break;
 
       case ITEM3:
-
+        CurrentTheme ++;
+        if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = 0;
+        doTheme();
+        tft.drawRoundRect(10, 30, 300, 170, 5, ActiveColor);
+        tft.fillRoundRect(12, 32, 296, 166, 5, BackgroundColor);
+        tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
+        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
         break;
 
       case ITEM4:
@@ -268,7 +415,13 @@ void MenuDown() {
         break;
 
       case ITEM3:
-
+        CurrentTheme --;
+        if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = sizeof(Theme) / sizeof(Theme[0]) - 1;
+        doTheme();
+        tft.drawRoundRect(10, 30, 300, 170, 5, ActiveColor);
+        tft.fillRoundRect(12, 32, 296, 166, 5, BackgroundColor);
+        tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
+        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
         break;
 
       case ITEM4:
@@ -325,7 +478,8 @@ void DoMenu() {
         break;
 
       case ITEM3:
-
+        Infoboxprint(myLanguage[language][14]);
+        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
         break;
 
       case ITEM4:

@@ -28,6 +28,7 @@ extern bool ShowServiceInformation;
 extern bool SlideShowView;
 extern bool wifi;
 extern byte ContrastSet;
+extern byte CurrentTheme;
 extern byte dabfreq;
 extern byte language;
 extern byte menuitem;

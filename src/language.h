@@ -20,7 +20,7 @@ static const char* const myLanguage[2][77] = {
     "Channel list", // 11
     "Language", // 12
     "Brightness", // 13
-    "", // 14
+    "Thema", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
     "WiFi", // 17
@@ -99,7 +99,7 @@ static const char* const myLanguage[2][77] = {
     "Kanalen lijst", // 11
     "Language", // 12
     "Brightness", // 13
-    "", // 14
+    "Thema", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
     "WiFi", // 17
