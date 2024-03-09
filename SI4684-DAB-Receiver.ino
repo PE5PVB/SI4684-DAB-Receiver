@@ -425,7 +425,7 @@ void StoreFrequency(void) {
   EEPROM.put(EE_UINT32_SERVICEID, radio.service[radio.ServiceIndex].ServiceID);
   EEPROM.put(EE_BYTE_DABFREQ, dabfreq);
   for (int i = 0; i < 16; i++) {
-    EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, radio.service[radio.ServiceIndex].Label[i]);
+    EEPROM.writeByte(i + EE_CHAR17_SERVICENAME, radio.PStext[i]);
   }
   EEPROM.commit();
   _serviceID = radio.service[radio.ServiceIndex].ServiceID;

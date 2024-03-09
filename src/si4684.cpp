@@ -316,6 +316,7 @@ void DAB::EnsembleInfo(void) {
       SPIwrite(SPIbuffer, 2);
       cts();
       SPIread(26);
+
       if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
         EnsembleInfoSet = true;
         EID[0] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 12) & 0xF;
@@ -351,7 +352,7 @@ void DAB::EnsembleInfo(void) {
     cts();
     SPIread(11);
 
-    if (SPIbuffer[5] + ((uint16_t)SPIbuffer[6] << 8) != 0) {
+    if (SPIbuffer[0] == 0xe8) {
       Year = SPIbuffer[5] + ((uint16_t)SPIbuffer[6] << 8);
       Months = SPIbuffer[7];
       Days = SPIbuffer[8];
@@ -372,7 +373,8 @@ void DAB::getServiceData(void) {
     SPIwrite(SPIbuffer, 2);
     cts();
     SPIread(20);
-    if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
+
+    if (SPIbuffer[1] == 0x80 && (SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
       if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) > 0) {
         SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
         byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
@@ -466,7 +468,8 @@ void DAB::ServiceInfo(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(16);
-  if (SPIbuffer[5] + (SPIbuffer[6] << 8) < 320) {
+
+  if (SPIbuffer[1] == 0x80) {
     bitrate = SPIbuffer[5] + (SPIbuffer[6] << 8);
     samplerate = SPIbuffer[7] + (SPIbuffer[8] << 8);
     audiomode = SPIbuffer[9] & 0x03;
@@ -487,8 +490,11 @@ void DAB::ServiceInfo(void) {
   SPIwrite(SPIbuffer, 12);
   cts();
   SPIread(12);
-  servicetype = SPIbuffer[5];
-  protectionlevel = SPIbuffer[6];
+
+  if (SPIbuffer[1] == 0x80) {
+    servicetype = SPIbuffer[5];
+    protectionlevel = SPIbuffer[6];
+  }
 
   SPIbuffer[0] = 0xC0;
   SPIbuffer[1] = 0x00;
@@ -501,7 +507,20 @@ void DAB::ServiceInfo(void) {
   SPIwrite(SPIbuffer, 8);
   cts();
   SPIread(26);
-  pty = (SPIbuffer[5] >> 1) & 0x1F;
+
+  if (SPIbuffer[1] == 0x80) {
+    for (byte x = 9; x < 25; x++) PStext[x - 9] = SPIbuffer[x];
+
+    for (int8_t i = 15; i >= 0; i--) {
+      if (PStext[i] == ' ' && PStext[i + 1] == '\0') {
+        PStext[i] = '\0';
+      } else {
+        break;
+      }
+    }
+
+    pty = (SPIbuffer[5] >> 1) & 0x1F;
+  }
 }
 
 void DAB::clearData(void) {
@@ -516,8 +535,11 @@ void DAB::setFreq(uint8_t freq) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   DataUpdate -= 1000;
   numberofservices = 0;
-  ServiceData[0] = '\0';
-  EnsembleLabel[0] = '\0';
+  for (byte x = 0; x < 16; x++) {
+    ServiceData[x] = '\0';
+    EnsembleLabel[x] = '\0';
+    PStext[x] = '\0';
+  }
   EID[0] = '\0';
   SID[0] = '\0';
   pty = 36;

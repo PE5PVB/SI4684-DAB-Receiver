@@ -91,6 +91,7 @@ class DAB {
     char EnsembleLabel[17];
     bool signallock;
     char ServiceData[128];
+    char PStext[17];
     uint16_t bitrate;
     uint16_t samplerate;
     uint8_t audiomode;

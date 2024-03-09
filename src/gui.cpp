@@ -628,13 +628,13 @@ void ShowPS(void) {
   }
 
   if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
-    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))).length() != 0)) {
+    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))).length() != 0)) {
       PSSprite.fillSprite(BackgroundColor5);
       PSSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName))), 130, 0);
+      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 0);
       PSSprite.pushSprite(44, 187);
     }
-    PSold = (radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName));
+    PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
   }
 }
 
