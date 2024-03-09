@@ -11,7 +11,6 @@
 
 unsigned char SPIbuffer[4096];
 unsigned long DataUpdate = 0;
-unsigned long RSSIUpdateTimer = 0;
 bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
 
@@ -29,7 +28,7 @@ char* DAB::getChipID(void) {
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
   cts();
-  SPIread(10);
+  SPIread(23);
   itoa((SPIbuffer[10] << 8) + SPIbuffer[9], ChipType + 2, 10);
   ChipType[0] = 'S';
   ChipType[1] = 'I';
@@ -42,7 +41,7 @@ char* DAB::getFirmwareVersion(void) {
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
   cts();
-  SPIread(8);
+  SPIread(12);
   char buffer[5];
   itoa(SPIbuffer[5], buffer, 10);
   FirmwVersion[0] = buffer[0];
@@ -56,19 +55,25 @@ char* DAB::getFirmwareVersion(void) {
   return FirmwVersion;
 }
 
+bool DAB::panic(void) {
+	SPIbuffer[0] = 0x09;
+	SPIbuffer[1] = 0x00;
+	SPIwrite(SPIbuffer, 2);
+	cts();
+	SPIread(6);
+	if (SPIbuffer[5] == 0x09) return true; else return false;
+}
+
 uint16_t DAB::getRSSI(void) {
-  if (millis() - RSSIUpdateTimer > 200) {
     SPIbuffer[0] = 0xE5;
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
     SPIread(6);
     int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
-    RSSIUpdateTimer = millis();
     if (rssi > 1200) rssi = 1200;
     if (rssi < -1000) rssi = -1000;
     return rssi;
-  }
 }
 
 uint32_t DAB::getFreq(uint8_t freq) {
@@ -135,7 +140,7 @@ void DAB::begin(uint8_t SSpin) {
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
   cts();
-  SPIread(5);
+  SPIread(6);
   if (SPIbuffer[5] != 2) {
     SPIbuffer[0] = 0x01;                                                    // POWER_UP
     SPIbuffer[1] = 0x00;
@@ -236,7 +241,7 @@ void DAB::EnsembleInfo(void) {
   SPIbuffer[1] = 0x09;
   SPIwrite(SPIbuffer, 2);
   cts();
-  SPIread(15);
+  SPIread(19);
   fic = SPIbuffer[9];
   cnr = SPIbuffer[10];
   if (fic > 0) signallock = true; else signallock = false;
@@ -245,7 +250,7 @@ void DAB::EnsembleInfo(void) {
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
-    SPIread(6);
+    SPIread(8);
 
     if (SPIbuffer[6] != 0 && SPIbuffer[5] + (SPIbuffer[6] << 8) + 6 < sizeof(SPIbuffer)) {
       SPIread(SPIbuffer[5] + (SPIbuffer[6] << 8) + 6);
@@ -313,7 +318,7 @@ void DAB::EnsembleInfo(void) {
         SPIbuffer[1] = 0x00;
         SPIwrite(SPIbuffer, 2);
         cts();
-        SPIread(23);
+        SPIread(26);
         if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
           EnsembleInfoSet = true;
           EID[0] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 12) & 0xF;
@@ -464,7 +469,7 @@ void DAB::ServiceInfo(void) {
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
   cts();
-  SPIread(9);
+  SPIread(16);
   if (SPIbuffer[5] + (SPIbuffer[6] << 8) < 320) {
     bitrate = SPIbuffer[5] + (SPIbuffer[6] << 8);
     samplerate = SPIbuffer[7] + (SPIbuffer[8] << 8);
@@ -485,7 +490,7 @@ void DAB::ServiceInfo(void) {
   SPIbuffer[11] = (service[ServiceIndex].CompID >> 24) & 0xFF;
   SPIwrite(SPIbuffer, 12);
   cts();
-  SPIread(6);
+  SPIread(12);
   servicetype = SPIbuffer[5];
   protectionlevel = SPIbuffer[6];
 
@@ -499,7 +504,7 @@ void DAB::ServiceInfo(void) {
   SPIbuffer[7] = (service[ServiceIndex].ServiceID >> 24) & 0xFF;
   SPIwrite(SPIbuffer, 8);
   cts();
-  SPIread(8);
+  SPIread(26);
   pty = (SPIbuffer[5] >> 1) & 0x1F;
 }
 

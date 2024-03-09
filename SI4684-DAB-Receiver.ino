@@ -421,7 +421,12 @@ void loop() {
 }
 
 void ProcessDAB(void) {
-  if (!tuning) radio.Update();
+  if (!tuning) {
+    radio.Update();
+    SignalLevel = radio.getRSSI();
+  }
+
+  if (radio.panic()) doRecovery();
 
   if (trysetservice && radio.signallock) {
     for (byte x = 0; x < radio.numberofservices; x++) {
@@ -459,6 +464,12 @@ void ProcessDAB(void) {
       radio.SlideShowUpdate = false;
     }
   }
+}
+
+void doRecovery() {
+  radio.begin(15);
+  radio.setFreq(dabfreq);
+  trysetservice = true;
 }
 
 void ShowPTY() {
@@ -1117,7 +1128,6 @@ void ShowFreq() {
 void ShowSignalLevel() {
   if (millis() >= rssitimer + 100) {
     rssitimer = millis();
-    SignalLevel = radio.getRSSI();
     CNR = radio.cnr;
   }
 

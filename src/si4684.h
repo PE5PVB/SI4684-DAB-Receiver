@@ -78,6 +78,7 @@ class DAB {
 	void clearData(void);
     void setFreq(uint8_t freq_index);
     void setService(uint8_t index);
+	bool panic(void);
     uint32_t getFreq(uint8_t freq);
     const char* getChannel(uint8_t freq);
     String ASCII(const char* input);
