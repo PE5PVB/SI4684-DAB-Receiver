@@ -260,8 +260,12 @@ void setup(void) {
     delay(30);
   }
 
-  radio.begin(15);
-  tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+  if (radio.begin(15)) {
+    tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+  } else {
+    tftPrint(0, myLanguage[language][77], 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+    for (;;);
+  }
 
   delay(1500);
 

@@ -126,7 +126,7 @@ static void cts(void) {
   }
 }
 
-void DAB::begin(uint8_t SSpin) {
+bool DAB::begin(uint8_t SSpin) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
   slaveSelectPin = SSpin;
@@ -139,7 +139,15 @@ void DAB::begin(uint8_t SSpin) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(6);
-  if (SPIbuffer[5] != 2) {
+
+  bool result;
+  if (SPIbuffer[1] != 0x80) {
+    result = false;
+  } else {
+    result = true;
+  }
+
+  if (SPIbuffer[1] != 2) {
     SPIbuffer[0] = 0x01;                                                    // POWER_UP
     SPIbuffer[1] = 0x00;
     SPIbuffer[2] = 0x17;
@@ -166,7 +174,7 @@ void DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 2);
     cts();
 
-    uint32_t index = 0;                         // Write bootloader
+    uint32_t index = 0;                                                     // Write bootloader
     for (uint16_t i = 0; index < sizeof(rom_patch_016); i++) {
       SPIbuffer[0] = 0x04;
       SPIbuffer[1] = 0x00;
@@ -232,10 +240,12 @@ void DAB::begin(uint8_t SSpin) {
     Set_Property(0xB401, 0x0002);
     Set_Property(0xB500, 0x0000);
   }
+
+  return result;
 }
 
 void DAB::EnsembleInfo(void) {
-  SPIbuffer[0] = 0xB2;                                                    // Get signalstatus
+  SPIbuffer[0] = 0xB2;                                                      // Get signalstatus
   SPIbuffer[1] = 0x09;
   SPIwrite(SPIbuffer, 2);
   cts();
@@ -244,7 +254,7 @@ void DAB::EnsembleInfo(void) {
   cnr = SPIbuffer[10];
   if (fic > 0) signallock = true; else signallock = false;
   if (signallock) {
-    SPIbuffer[0] = 0x80;                                                  // Get servicelist
+    SPIbuffer[0] = 0x80;                                                    // Get servicelist
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();

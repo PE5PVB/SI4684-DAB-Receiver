@@ -70,7 +70,7 @@ typedef struct _Services {
 
 class DAB {
   public:
-    void begin(uint8_t SSpin);
+    bool begin(uint8_t SSpin);
     void EnsembleInfo(void);
     void ServiceInfo(void);
     void getServiceData(void);
