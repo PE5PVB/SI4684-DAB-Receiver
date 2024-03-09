@@ -19,7 +19,7 @@ extern bool wifi;
 extern IPAddress remoteip;
 extern int ActiveColor;
 extern int ActiveColorSmooth;
-extern int BackgroundColor;
+extern int BackgroundColor3;
 
 
 extern TFT_eSPI tft;

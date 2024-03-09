@@ -5,8 +5,6 @@
 #include "Si468xROM.h"
 #include "firmware.h"
 #include <SPI.h>
-#include <LittleFS.h>
-#include "FS.h"
 #include <cstring>
 
 unsigned char SPIbuffer[4096];
@@ -56,24 +54,24 @@ char* DAB::getFirmwareVersion(void) {
 }
 
 bool DAB::panic(void) {
-	SPIbuffer[0] = 0x09;
-	SPIbuffer[1] = 0x00;
-	SPIwrite(SPIbuffer, 2);
-	cts();
-	SPIread(6);
-	if (SPIbuffer[5] == 0x09) return true; else return false;
+  SPIbuffer[0] = 0x09;
+  SPIbuffer[1] = 0x00;
+  SPIwrite(SPIbuffer, 2);
+  cts();
+  SPIread(6);
+  if (SPIbuffer[5] == 0x09) return true; else return false;
 }
 
 uint16_t DAB::getRSSI(void) {
-    SPIbuffer[0] = 0xE5;
-    SPIbuffer[1] = 0x00;
-    SPIwrite(SPIbuffer, 2);
-    cts();
-    SPIread(6);
-    int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
-    if (rssi > 1200) rssi = 1200;
-    if (rssi < -1000) rssi = -1000;
-    return rssi;
+  SPIbuffer[0] = 0xE5;
+  SPIbuffer[1] = 0x00;
+  SPIwrite(SPIbuffer, 2);
+  cts();
+  SPIread(6);
+  int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
+  if (rssi > 1200) rssi = 1200;
+  if (rssi < -1000) rssi = -1000;
+  return rssi;
 }
 
 uint32_t DAB::getFreq(uint8_t freq) {
@@ -161,7 +159,7 @@ void DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 16);
     cts();
 
-	delayMicroseconds(20);
+    delayMicroseconds(20);
 
     SPIbuffer[0] = 0x06;                                                    // LOAD_INIT
     SPIbuffer[1] = 0x00;
@@ -310,43 +308,41 @@ void DAB::EnsembleInfo(void) {
         }
       }
 
-      if (EID[0] == '\0' || EnsembleLabel[0] == '\0') {
-        for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
-        SPIwrite(SPIbuffer, 5);
+      for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
+      SPIwrite(SPIbuffer, 5);
 
-        SPIbuffer[0] = 0xB4;
-        SPIbuffer[1] = 0x00;
-        SPIwrite(SPIbuffer, 2);
-        cts();
-        SPIread(26);
-        if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
-          EnsembleInfoSet = true;
-          EID[0] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 12) & 0xF;
-          EID[1] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 8) & 0xF;
-          EID[2] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 4) & 0xF;
-          EID[3] = SPIbuffer[5] + (SPIbuffer[6] << 8) & 0xF;
-          EID[4] = '\0';
-          for (int i = 0; i < 4; i++) {
-            if (EID[i] < 10) {
-              EID[i] += '0';
-            } else {
-              EID[i] += 'A' - 10;
-            }
+      SPIbuffer[0] = 0xB4;
+      SPIbuffer[1] = 0x00;
+      SPIwrite(SPIbuffer, 2);
+      cts();
+      SPIread(26);
+      if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
+        EnsembleInfoSet = true;
+        EID[0] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 12) & 0xF;
+        EID[1] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 8) & 0xF;
+        EID[2] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 4) & 0xF;
+        EID[3] = SPIbuffer[5] + (SPIbuffer[6] << 8) & 0xF;
+        EID[4] = '\0';
+        for (int i = 0; i < 4; i++) {
+          if (EID[i] < 10) {
+            EID[i] += '0';
+          } else {
+            EID[i] += 'A' - 10;
           }
-
-          for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
-
-          for (int8_t i = 15; i >= 0; i--) {
-            if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
-              EnsembleLabel[i] = '\0';
-            } else {
-              break;
-            }
-          }
-          ecc = SPIbuffer[23];
-        } else {
-          EnsembleInfoSet = false;
         }
+
+        for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
+
+        for (int8_t i = 15; i >= 0; i--) {
+          if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
+            EnsembleLabel[i] = '\0';
+          } else {
+            break;
+          }
+        }
+        ecc = SPIbuffer[23];
+      } else {
+        EnsembleInfoSet = false;
       }
     }
     SPIbuffer[0] = 0xBC;

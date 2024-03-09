@@ -1,7 +1,7 @@
 #ifndef si4684_h
 #define si4684_h
-#include "SPIFFS.h"
 #include "Arduino.h"
+#include <LittleFS.h>
 #include <TFT_eSPI.h>
 
 extern TFT_eSPI tft;
@@ -75,10 +75,10 @@ class DAB {
     void ServiceInfo(void);
     void getServiceData(void);
     void Update(void);
-	void clearData(void);
+    void clearData(void);
     void setFreq(uint8_t freq_index);
     void setService(uint8_t index);
-	bool panic(void);
+    bool panic(void);
     uint32_t getFreq(uint8_t freq);
     const char* getChannel(uint8_t freq);
     String ASCII(const char* input);
@@ -121,7 +121,7 @@ class DAB {
     void ParseServiceList(void);
     bool ParseServiceList(bool first, uint8_t* data, uint16_t len);
     uint32_t CurrentServiceID;
-	uint32_t serviceID;
+    uint32_t serviceID;
     uint32_t componentID;
     char ChipType[7];
     char FirmwVersion[6];

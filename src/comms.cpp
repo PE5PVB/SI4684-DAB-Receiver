@@ -11,7 +11,7 @@ void Communication() {
 void tryWiFi() {
   if (!setupmode && wifi) {
     tft.drawRoundRect(1, 60, 319, 140, 5, ActiveColor);
-    tft.fillRoundRect(3, 62, 315, 136, 5, BackgroundColor);
+    tft.fillRoundRect(3, 62, 315, 136, 5, BackgroundColor3);
     tftPrint(0, myLanguage[language][69], 155, 88, ActiveColor, ActiveColorSmooth, 28);
   }
   if (wifi) {
@@ -22,11 +22,13 @@ void tryWiFi() {
     } else {
       if (!setupmode) tftPrint(0, myLanguage[language][70], 155, 128, SignificantColor, SignificantColorSmooth, 28);
       Server.end();
+      WiFi.disconnect();
       WiFi.mode(WIFI_OFF);
       wifi = false;
     }
   } else {
     Server.end();
+    WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
   }
 }

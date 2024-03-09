@@ -3,38 +3,57 @@
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>
+#include <TimeLib.h>
 #include "WiFiConnect.h"
 #include "WiFiConnectParam.h"
 #include "si4684.h"
+#include "tpa6130a2.h"
 
-#define ITEM_GAP		20
-#define ITEM1			30
-#define ITEM2			50
-#define ITEM3			70
-#define ITEM4			90
-#define ITEM5			110
-#define ITEM6			130
-#define ITEM7			150
-#define ITEM8			170
-#define ITEM9			190
-#define ITEM10			210
+#define ITEM_GAP    20
+#define ITEM1     30
+#define ITEM2     50
+#define ITEM3     70
+#define ITEM4     90
+#define ITEM5     110
+#define ITEM6     130
+#define ITEM7     150
+#define ITEM8     170
+#define ITEM9     190
+#define ITEM10      210
 
 extern bool autoslideshow;
 extern bool change;
+extern bool ChannelListView;
 extern bool displayreset;
 extern bool highz;
+extern bool memorystore;
 extern bool menuopen;
+extern bool seek;
+extern bool setvolume;
 extern bool ShowServiceInformation;
+extern bool SlideShowAvailableOld;
 extern bool SlideShowView;
+extern bool tuning;
 extern bool wifi;
+extern byte audiomodeold;
 extern byte ContrastSet;
 extern byte CurrentTheme;
 extern byte dabfreq;
+extern byte dabfreqold;
+extern byte eccold;
+extern byte ficold;
 extern byte language;
+extern byte memorypos;
+extern byte memoryposold;
+extern byte memoryposstatus;
 extern byte menuitem;
 extern byte ptyold;
+extern byte servicetypeold;
 extern byte tot;
+extern byte tunemode;
 extern byte unit;
+extern byte volume;
+extern char _serviceName[17];
 extern int ActiveColor;
 extern int ActiveColorSmooth;
 extern int BackgroundColor;
@@ -43,52 +62,94 @@ extern int BackgroundColor3;
 extern int BackgroundColor4;
 extern int BackgroundColor5;
 extern int BackgroundColor6;
+extern int BackgroundColor7;
 extern int BarInsignificantColor;
 extern int BarSignificantColor;
 extern int BitrateAutoColor;
 extern int BitrateAutoColorSmooth;
-extern int FrameColor;
 extern int GreyoutColor;
 extern int InsignificantColor;
 extern int InsignificantColorSmooth;
 extern int menuoption;
 extern int PrimaryColor;
 extern int PrimaryColorSmooth;
+extern int rotary;
+extern int rotary2;
+extern int rssi;
 extern int rssiold;
+extern int RTWidth;
 extern int SecondaryColor;
 extern int SecondaryColorSmooth;
 extern int SignalLevelold;
 extern int SignificantColor;
 extern int SignificantColorSmooth;
+extern int xPos;
 extern int16_t SignalLevel;
+extern int16_t SAvg;
+extern int16_t SAvg2;
+extern int8_t CNR;
 extern int8_t CNRold;
+extern String clockstringOld;
+extern String dabfreqStringOld;
+extern String datestringOld;
+extern String EnsembleNameOld;
 extern String EIDold;
+extern String ITUold;
 extern String PLold;
 extern String PSold;
+extern String RTold;
 extern String SIDold;
 extern String SignalLeveloldString;
 extern uint16_t BitrateOld;
+extern unsigned long rssiTimer;
+extern unsigned long rtticker;
+extern unsigned long rttickerhold;
+extern unsigned long VolumeTimer;
 
 extern TFT_eSPI tft;
 extern WiFiConnect wc;
 extern TFT_eSprite MenuInfobox;
 extern TFT_eSprite ChannellistSprite;
+extern TFT_eSprite RadiotextSprite;
+extern TFT_eSprite PSSprite;
+extern TFT_eSprite VolumeSprite;
+extern TFT_eSprite SignalSprite;
 extern DAB radio;
+extern TPA6130A2 Headphones;
 
-void BuildChannelList();
-void BuildMenu();
-void BuildDisplay();
-void MenuUp();
-void MenuDown();
-void DoMenu();
-void doTheme();
+void BuildChannelList(void);
+void BuildMenu(void);
+void BuildDisplay(void);
+void MenuUp(void);
+void MenuDown(void);
+void DoMenu(void);
+void doTheme(void);
 void Infoboxprint(const char* input);
-void ShowServiceInfo();
+void ShowServiceInfo(void);
+void ShowFreq(void);
+void ShowPTY(void);
+void ShowRT(void);
+void ShowSID(void);
+void ShowEID(void);
+void ShowPS(void);
+void ShowEN(void);
+void ShowProtectionlevel(void);
+void ShowAudioMode(void);
+void ShowECC(void);
+void ShowMemoryPos(void);
+void ShowVolume(void);
+void ShowSignalLevel(void);
+void ShowBitrate(void);
+void ShowClock(void);
+void ShowSlideShowIcon(void);
+void ShowTuneMode(void);
+void ShowRSSI(void);
 
-extern void ShowFreq();
-extern void ShowTuneMode();
-extern void tryWiFi();
+extern void ShowTuneMode(void);
+extern void tryWiFi(void);
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
-extern void ShowMemoryPos();
+extern void tftReplace(int8_t offset, const String & textold, const String & text, int16_t x, int16_t y, int color, int smoothcolor, int backcolor, uint8_t fontsize);
+extern void ShowMemoryPos(void);
+extern bool IsStationEmpty(void);
 
 #endif
