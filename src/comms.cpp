@@ -9,22 +9,25 @@ void Communication() {
 }
 
 void tryWiFi() {
-  if (!setupmode && wifi) {
+  if (!setupmode && wifi && WiFi.status() != WL_CONNECTED) {
     tft.drawRoundRect(1, 60, 319, 140, 5, ActiveColor);
     tft.fillRoundRect(3, 62, 315, 136, 5, BackgroundColor3);
     tftPrint(0, myLanguage[language][69], 155, 88, ActiveColor, ActiveColorSmooth, 28);
   }
   if (wifi) {
-    if (wc.autoConnect()) {
-      Server.begin();
-      remoteip = IPAddress (WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], subnetclient);
-      if (!setupmode) tftPrint(0, myLanguage[language][71], 155, 128, InsignificantColor, InsignificantColorSmooth, 28);
-    } else {
-      if (!setupmode) tftPrint(0, myLanguage[language][70], 155, 128, SignificantColor, SignificantColorSmooth, 28);
-      Server.end();
-      WiFi.disconnect();
-      WiFi.mode(WIFI_OFF);
-      wifi = false;
+    if (WiFi.status() != WL_CONNECTED) {
+      if (wc.autoConnect()) {
+        Server.begin();
+        remoteip = IPAddress (WiFi.localIP()[0], WiFi.localIP()[1], WiFi.localIP()[2], subnetclient);
+        if (!setupmode) tftPrint(0, myLanguage[language][71], 155, 128, InsignificantColor, InsignificantColorSmooth, 28);
+      } else {
+        if (!setupmode) tftPrint(0, myLanguage[language][70], 155, 128, SignificantColor, SignificantColorSmooth, 28);
+        Server.end();
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+        wifi = false;
+      }
+      if (!setupmode) delay(2000);
     }
   } else {
     Server.end();

@@ -198,6 +198,7 @@ void setup(void) {
   RadiotextSprite.createSprite(308, 19);
   RadiotextSprite.setTextDatum(TL_DATUM);
   RadiotextSprite.loadFont(FONT16);
+  RadiotextSprite.setSwapBytes(true);
 
   VolumeSprite.createSprite(230, 50);
   VolumeSprite.setTextDatum(TL_DATUM);
@@ -637,7 +638,7 @@ void KeyUp(void) {
         y = 25;
       }
 
-      tft.drawRoundRect(3, 35 + (20 * (radio.ServiceIndex - y)), 315, 21, 5, BackgroundColor3);
+      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, BackgroundColor);
       if (radio.numberofservices > 0) DABSelectService(1);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -651,7 +652,7 @@ void KeyUp(void) {
       if (radio.ServiceIndex == 0 || radio.ServiceIndex == 9 || radio.ServiceIndex == 17) {
         BuildChannelList();
       } else {
-        tft.drawRoundRect(3, 35 + (20 * (radio.ServiceIndex - y)), 315, 21, 5, ActiveColor);
+        tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
       }
       store = true;
     }
@@ -719,7 +720,7 @@ void KeyDown(void) {
         y = 25;
       }
 
-      tft.drawRoundRect(3, 35 + (20 * (radio.ServiceIndex - y)), 315, 21, 5, BackgroundColor3);
+      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, BackgroundColor);
       if (radio.numberofservices > 0) DABSelectService(0);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -733,7 +734,7 @@ void KeyDown(void) {
       if (radio.ServiceIndex == radio.numberofservices - 1 || radio.ServiceIndex == 8 || radio.ServiceIndex == 16) {
         BuildChannelList();
       } else {
-        tft.drawRoundRect(3, 35 + (20 * (radio.ServiceIndex - y)), 315, 21, 5, ActiveColor);
+        tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
       }
       store = true;
     }
