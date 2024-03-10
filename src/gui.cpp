@@ -227,7 +227,7 @@ void BuildChannelList(void) {
     while (serviceIDString.length() < 4) serviceIDString = "0" + serviceIDString;
     serviceIDString.toUpperCase();
     tftPrint(0, serviceIDString, 62, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
-    tftPrint(-1, String(radio.ASCII(radio.service[i].Label)), 86, 38 + (20 * (i - y)), PrimaryColor, PrimaryColorSmooth, 16);
+    tftPrint(-1, String(radio.ASCII(radio.service[i].Label)), 90, 38 + (20 * (i - y)), PrimaryColor, PrimaryColorSmooth, 16);
     if (i - y == 8) i = 254;
   }
 }
