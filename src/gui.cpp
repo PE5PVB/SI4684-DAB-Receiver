@@ -21,11 +21,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x0063;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
-      BackgroundColor7 = 0x0042;
       ActiveColor = 0xFFFF;
       ActiveColorSmooth = 0x18E3;
       SignificantColor = 0xF800;
@@ -44,10 +41,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0xFFFF;
       ActiveColorSmooth = 0x18E3;
       SignificantColor = 0xF800;
@@ -66,10 +61,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0x051F;
       ActiveColorSmooth = 0x0106;
       SignificantColor = 0xF3D5;
@@ -88,10 +81,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0x9B8D;
       ActiveColorSmooth = 0x5207;
       SignificantColor = 0x748E;
@@ -110,10 +101,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0xFC00;
       ActiveColorSmooth = 0x3165;
       SignificantColor = 0xFFE0;
@@ -132,10 +121,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0xFC00;
       ActiveColorSmooth = 0x3165;
       SignificantColor = 0xFFE0;
@@ -154,10 +141,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x016b;
       BackgroundColor2 = 0x016a;
-      BackgroundColor3 = 0x0108;
+      BackgroundColor3 = 0x0107;
       BackgroundColor4 = 0x00c6;
-      BackgroundColor5 = 0x00a5;
-      BackgroundColor6 = 0x00a4;
       ActiveColor = 0xED20;
       ActiveColorSmooth = 0x3940;
       SignificantColor = 0xF800;
@@ -237,10 +222,11 @@ void BuildChannelList(void) {
   tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
 
   for (byte i = y; i < radio.numberofservices; i++) {
-    tftPrint(-1, String(radio.service[i].CompID & 0xFF, DEC), 14, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
+    tftPrint(-1, String(radio.service[i].CompID & 0xFF, DEC), 13, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
     String serviceIDString = String(radio.service[i].ServiceID & 0xFFFF, HEX);
+    while (serviceIDString.length() < 4) serviceIDString = "0" + serviceIDString;
     serviceIDString.toUpperCase();
-    tftPrint(-1, serviceIDString, 50, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
+    tftPrint(0, serviceIDString, 62, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
     tftPrint(-1, String(radio.ASCII(radio.service[i].Label)), 86, 38 + (20 * (i - y)), PrimaryColor, PrimaryColorSmooth, 16);
     if (i - y == 8) i = 254;
   }
@@ -557,21 +543,25 @@ void ShowFreq(void) {
 void ShowPTY(void) {
   if (!radio.ServiceStart) radio.pty = 36;
   if (radio.pty != ptyold || displayreset) {
-    tftReplace(0, myLanguage[language][37 + ptyold], myLanguage[language][37 + radio.pty], 78, 162, SecondaryColor, SecondaryColorSmooth, BackgroundColor4, 16);
+    PTYSprite.pushImage (0, 0, 150, 17, ptybackground);
+    PTYSprite.drawString(myLanguage[language][37 + radio.pty], 75, 0);
+    PTYSprite.pushSprite(8, 162);
     ptyold = radio.pty;
   }
 }
 
 void ShowRT(void) {
+  if (!ChannelListView && !ShowServiceInformation) {
+    RadiotextSprite.pushImage (0, 0, 308, 18, rtbackground_main);
+  } else {
+    RadiotextSprite.pushImage (0, 0, 308, 18, rtbackground);
+  }
   if (radio.ASCII(radio.ServiceData).length() > 0) {
     RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData));
-
     if (RTWidth < 300) {
       xPos = 0;
-      RadiotextSprite.pushImage (0, 0, 308, 19, rtbackground);
-      RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
       RadiotextSprite.setTextDatum(TC_DATUM);
-      RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 2);
+      RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
       RadiotextSprite.pushSprite(6, 219);
     } else {
       if (millis() - rtticker >= 20) {
@@ -579,17 +569,14 @@ void ShowRT(void) {
         rttickerhold = millis();
 
         if (xPos < -RTWidth - 50) xPos = 0;
-        RadiotextSprite.pushImage (0, 0, 308, 19, rtbackground);
-        RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         RadiotextSprite.setTextDatum(TL_DATUM);
-        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 2);
-        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 2);
+        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
+        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
         RadiotextSprite.pushSprite(6, 219);
         rtticker = millis();
       }
     }
   } else {
-    if (ShowServiceInformation || ChannelListView) RadiotextSprite.fillSprite(BackgroundColor7); else RadiotextSprite.fillSprite(BackgroundColor6);
     RadiotextSprite.pushSprite(6, 219);
   }
   if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
@@ -599,7 +586,9 @@ void ShowRT(void) {
 void ShowSID(void) {
   if (!radio.ServiceStart) radio.SID[0] = '\0';
   if (String(radio.SID) != SIDold || displayreset) {
-    tftReplace(0, SIDold, String(radio.SID), 55, 120 , SecondaryColor, SecondaryColorSmooth, BackgroundColor3, 16);
+    EIDSIDSprite.pushImage (0, 0, 35, 16, sidbackground);
+    EIDSIDSprite.drawString(String(radio.SID), 2, 0);
+    EIDSIDSprite.pushSprite(36, 120);
     SIDold = String(radio.SID);
   }
 }
@@ -607,16 +596,20 @@ void ShowSID(void) {
 void ShowEID(void) {
   if (tuning) radio.EID[0] = '\0';
   if (String(radio.EID) != EIDold || displayreset) {
-    tftReplace(0, EIDold, String(radio.EID), 55, 105 , SecondaryColor, SecondaryColorSmooth, BackgroundColor3, 16);
+    EIDSIDSprite.pushImage (0, 0, 35, 16, eidbackground);
+    EIDSIDSprite.drawString(String(radio.EID), 2, 0);
+    EIDSIDSprite.pushSprite(36, 106);
     EIDold = String(radio.EID);
   }
 }
 
 void ShowPS(void) {
   if (tunemode != TUNE_MEM && !radio.ServiceStart && !tuning && !seek) {
-    if (radio.signallock) {
+    if (radio.signallock && !radio.ServiceStart) {
       strncpy(_serviceName, myLanguage[language][74], sizeof(_serviceName));
       _serviceName[sizeof(_serviceName) - 1] = '\0';
+    } else if (radio.signallock && radio.ServiceStart) {
+      for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
     } else {
       for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
     }
@@ -626,9 +619,8 @@ void ShowPS(void) {
 
   if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
     if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))).length() != 0)) {
-      PSSprite.fillSprite(BackgroundColor5);
-      PSSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 0);
+      PSSprite.pushImage(0, 0, 270, 30, psbackground);
+      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 1);
       PSSprite.pushSprite(44, 187);
     }
     PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
@@ -654,7 +646,9 @@ void ShowEN(void) {
 void ShowProtectionlevel(void) {
   if (!radio.ServiceStart) radio.protectionlevel = 0;
   if (String(ProtectionText[radio.protectionlevel]) != PLold || displayreset) {
-    tftReplace(0, PLold, String(ProtectionText[radio.protectionlevel]), 38, 90, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
+    ProtectionBitrateSprite.pushImage (0, 0, 60, 16, protectionbackground);
+    ProtectionBitrateSprite.drawString(String(ProtectionText[radio.protectionlevel]), 30, 0);
+    ProtectionBitrateSprite.pushSprite(9, 90);
     PLold = String(ProtectionText[radio.protectionlevel]);
   }
 }
@@ -878,12 +872,10 @@ void ShowMemoryPos(void) {
 }
 
 void ShowVolume(void) {
-  uint8_t segments = map(volume, 0, 63, 0, 94);
-  VolumeSprite.drawRoundRect(0, 0, 230, 50, 5, ActiveColor);
-  VolumeSprite.pushImage (4, 13, 24, 24, headphones);
-  VolumeSprite.fillRect(36, 20, 2 * constrain(segments, 0, 74), 10, BarInsignificantColor);
-  VolumeSprite.fillRect(36 + 2 * 74, 20, 2 * (constrain(segments, 74, 94) - 74), 10, BarSignificantColor);
-  VolumeSprite.fillRect(36 + 2 * constrain(segments, 0, 94), 20, 2 * (94 - constrain(segments, 0, 94)), 10, GreyoutColor);
+  uint8_t segments = map(volume, 0, 63, 0, 93);
+  VolumeSprite.pushImage (0, 0, 240, 50, volumebackground);
+  VolumeSprite.fillRect(52, 9, 2 * constrain(segments, 0, 93), 9, BarInsignificantColor);
+  VolumeSprite.drawString(String(map(volume, 0, 62, 0, 100)), 136, 22);
   VolumeSprite.pushSprite(46, 46);
   Headphones.SetVolume(volume);
   EEPROM.writeByte(EE_BYTE_VOLUME, volume);
@@ -959,7 +951,9 @@ void ShowSignalLevel(void) {
 void ShowBitrate(void) {
   if (tuning) radio.bitrate = 0;
   if (radio.bitrate != BitrateOld || displayreset) {
-    tftReplace(0, String (BitrateOld, DEC) + " kbit/s", (radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 39, 140, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
+    ProtectionBitrateSprite.pushImage (0, 0, 60, 16, bitratebackground);
+    ProtectionBitrateSprite.drawString((radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 30, 0);
+    ProtectionBitrateSprite.pushSprite(9, 140);
     BitrateOld = radio.bitrate;
   }
 }
@@ -969,9 +963,16 @@ void ShowClock(void) {
   String clockstring = (hour() < 10 ? "0" : "") + String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute());
   String datestring = (day() < 10 ? "0" : "") + String(day()) + "-" + (month() < 10 ? "0" : "") + String(month()) + "-" + String(year());
   if (clockstringOld != clockstring || displayreset) {
-    tftReplace(-1, clockstringOld, clockstring, 105, 8, ActiveColor, ActiveColorSmooth, BackgroundColor, 16);
-    tftReplace(-1, datestringOld, datestring, 177, 8, ActiveColor, ActiveColorSmooth, BackgroundColor, 16);
+    ClockSprite.pushImage (0, 0, 44, 16, clockbackground);
+    ClockSprite.drawString(clockstring, 0, 0);
+    ClockSprite.pushSprite(105, 7);
     clockstringOld = clockstring;
+  }
+
+  if (datestringOld != datestring || displayreset) {
+    DateSprite.pushImage (0, 0, 103, 16, datebackground);
+    DateSprite.drawString(datestring, 0, 0);
+    DateSprite.pushSprite(177, 7);
     datestringOld = datestring;
   }
 }
@@ -988,30 +989,39 @@ void ShowSlideShowIcon(void) {
 }
 
 void ShowTuneMode(void) {
+  ModeSprite.pushImage (0, 0, 46, 47, modebackground);
+
   switch (tunemode) {
     case TUNE_MAN:
-      tftPrint(0, "MAN", 27, 33, ActiveColor, ActiveColorSmooth, 16);
-      tftPrint(0, "AUTO", 27, 49, SecondaryColor, SecondaryColorSmooth, 16);
-      tftPrint(0, "MEM", 27, 65, SecondaryColor, SecondaryColorSmooth, 16);
+      ModeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+      ModeSprite.drawString("MAN", 23, 0);
+      ModeSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+      ModeSprite.drawString("AUTO", 23, 16);
+      ModeSprite.drawString("MEM", 23, 32);
       break;
 
     case TUNE_AUTO:
-      tftPrint(0, "MAN", 27, 33, SecondaryColor, SecondaryColorSmooth, 16);
-      tftPrint(0, "AUTO", 27, 49, ActiveColor, ActiveColorSmooth, 16);
-      tftPrint(0, "MEM", 27, 65, SecondaryColor, SecondaryColorSmooth, 16);
+      ModeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+      ModeSprite.drawString("AUTO", 23, 16);
+      ModeSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+      ModeSprite.drawString("MAN", 23, 0);
+      ModeSprite.drawString("MEM", 23, 32);
       break;
 
     case TUNE_MEM:
-      tftPrint(0, "MAN", 27, 33, SecondaryColor, SecondaryColorSmooth, 16);
-      tftPrint(0, "AUTO", 27, 49, SecondaryColor, SecondaryColorSmooth, 16);
+      ModeSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+      ModeSprite.drawString("MAN", 23, 0);
+      ModeSprite.drawString("AUTO", 23, 16);
 
       if (memorystore) {
-        tftPrint(0, "MEM", 27, 65, SignificantColor, SignificantColorSmooth, 16);
+        ModeSprite.setTextColor(SignificantColor, SignificantColorSmooth, false);
       } else {
-        tftPrint(0, "MEM", 27, 65, ActiveColor, ActiveColorSmooth, 16);
+        ModeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
       }
+      ModeSprite.drawString("MEM", 23, 32);
       break;
   }
+  ModeSprite.pushSprite(7, 33);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, tunemode);
   EEPROM.commit();
 }

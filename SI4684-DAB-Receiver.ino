@@ -74,9 +74,6 @@ int BackgroundColor;
 int BackgroundColor2;
 int BackgroundColor3;
 int BackgroundColor4;
-int BackgroundColor5;
-int BackgroundColor6;
-int BackgroundColor7;
 int BarInsignificantColor;
 int BarSignificantColor;
 int Bitrateupdatetimer;
@@ -132,6 +129,13 @@ TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
 TFT_eSprite SignalSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
 TFT_eSprite PSSprite = TFT_eSprite(&tft);
+TFT_eSprite PTYSprite = TFT_eSprite(&tft);
+TFT_eSprite ProtectionBitrateSprite = TFT_eSprite(&tft);
+TFT_eSprite EIDSIDSprite = TFT_eSprite(&tft);
+TFT_eSprite ModeSprite = TFT_eSprite(&tft);
+TFT_eSprite ClockSprite = TFT_eSprite(&tft);
+TFT_eSprite DateSprite = TFT_eSprite(&tft);
+
 WiFiConnect wc;
 WiFiServer Server(7373);
 WiFiClient RemoteClient;
@@ -195,22 +199,61 @@ void setup(void) {
   tft.setSwapBytes(true);
   tft.fillScreen(BackgroundColor);
 
-  RadiotextSprite.createSprite(308, 19);
-  RadiotextSprite.setTextDatum(TL_DATUM);
+  RadiotextSprite.createSprite(308, 18);
   RadiotextSprite.loadFont(FONT16);
+  RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
   RadiotextSprite.setSwapBytes(true);
 
-  VolumeSprite.createSprite(230, 50);
-  VolumeSprite.setTextDatum(TL_DATUM);
+  VolumeSprite.createSprite(240, 50);
+  VolumeSprite.setTextDatum(TC_DATUM);
+  VolumeSprite.loadFont(FONT28);
+  VolumeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
   VolumeSprite.setSwapBytes(true);
 
   SignalSprite.createSprite(30, 19);
   SignalSprite.setTextDatum(TR_DATUM);
   SignalSprite.loadFont(FONT16);
 
-  PSSprite.createSprite(270, 28);
+  PSSprite.createSprite(270, 30);
   PSSprite.setTextDatum(TC_DATUM);
   PSSprite.loadFont(FONT28);
+  PSSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+  PSSprite.setSwapBytes(true);
+
+  PTYSprite.createSprite(150, 17);
+  PTYSprite.setTextDatum(TC_DATUM);
+  PTYSprite.loadFont(FONT16);
+  PTYSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+  PTYSprite.setSwapBytes(true);
+
+  ProtectionBitrateSprite.createSprite(60, 16);
+  ProtectionBitrateSprite.setTextDatum(TC_DATUM);
+  ProtectionBitrateSprite.loadFont(FONT16);
+  ProtectionBitrateSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+  ProtectionBitrateSprite.setSwapBytes(true);
+
+  EIDSIDSprite.createSprite(35, 16);
+  EIDSIDSprite.setTextDatum(TL_DATUM);
+  EIDSIDSprite.loadFont(FONT16);
+  EIDSIDSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+  EIDSIDSprite.setSwapBytes(true);
+
+  ClockSprite.createSprite(44, 16);
+  ClockSprite.setTextDatum(TL_DATUM);
+  ClockSprite.loadFont(FONT16);
+  ClockSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+  ClockSprite.setSwapBytes(true);
+
+  DateSprite.createSprite(103, 16);
+  DateSprite.setTextDatum(TL_DATUM);
+  DateSprite.loadFont(FONT16);
+  DateSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+  DateSprite.setSwapBytes(true);
+
+  ModeSprite.createSprite(46, 47);
+  ModeSprite.setTextDatum(TC_DATUM);
+  ModeSprite.loadFont(FONT16);
+  ModeSprite.setSwapBytes(true);
 
   if (digitalRead(SLBUTTON) == LOW && digitalRead(ROTARY_BUTTON) == HIGH) {
     if (rotarymode == 0) rotarymode = 1; else rotarymode = 0;
@@ -250,7 +293,6 @@ void setup(void) {
     ESP.restart();
   }
 
-  tft.fillScreen(BackgroundColor);
   tft.pushImage (0, 0, 320, 240, SplashScreen);
   tftPrint(0, myLanguage[language][72], 155, 25, ActiveColor, ActiveColorSmooth, 28);
 
@@ -355,6 +397,7 @@ void ProcessDAB(void) {
         radio.setService(x);
         radio.ServiceStart = true;
         trysetservice = false;
+        store = true;
       }
     }
   }
@@ -423,7 +466,9 @@ void DABSelectService(bool dir) {
     }
     radio.setService(radio.ServiceIndex);
   }
+  while (!radio.service[radio.ServiceIndex].Audioservice) DABSelectService(dir);
   radio.ServiceStart = true;
+  store = true;
 }
 
 void StoreFrequency(void) {
@@ -482,6 +527,8 @@ void ButtonPress(void) {
 }
 
 void Button2Press(void) {
+  memorystore = false;
+  memoryposstatus = MEM_NORMAL;
   tottimer = millis();
   if (setvolume) {
     closeVolume();
@@ -494,6 +541,8 @@ void Button2Press(void) {
 
 void SlideShowButtonPress(void) {
   setvolume = false;
+  memorystore = false;
+  memoryposstatus = MEM_NORMAL;
   if (!SlideShowView && radio.SlideShowAvailable) {
     tft.fillScreen(TFT_BLACK);
     radio.SlideShowUpdate = true;
@@ -527,6 +576,9 @@ void ModeButtonPress(void) {
   } else if (SlideShowView || ChannelListView || ShowServiceInformation) {
     BuildDisplay();
   } else {
+    memorystore = false;
+    memoryposstatus = MEM_NORMAL;
+
     if (counter - counterold <= 1000) {
       tunemode++;
       if (tunemode > 2) tunemode = 0;
@@ -580,6 +632,7 @@ void StandbyButtonPress(void) {
 }
 
 void KeyUp(void) {
+  if (setvolume) closeVolume();
   tottimer = millis();
   rotary = 0;
   rotary2 = 0;
@@ -630,15 +683,16 @@ void KeyUp(void) {
       }
     } else {
       byte y = 0;
+      byte y_old = 0;
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
-        y = 9;
+        y_old = 9;
       } else if (radio.ServiceIndex > 16 && radio.ServiceIndex < 25) {
-        y = 17;
+        y_old = 17;
       } else if (radio.ServiceIndex > 24) {
-        y = 25;
+        y_old = 25;
       }
 
-      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, BackgroundColor);
+      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y_old)), 309, 21, 5, BackgroundColor);
       if (radio.numberofservices > 0) DABSelectService(1);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -649,12 +703,11 @@ void KeyUp(void) {
         y = 25;
       }
 
-      if (radio.ServiceIndex == 0 || radio.ServiceIndex == 9 || radio.ServiceIndex == 17) {
+      if (y_old != y) {
         BuildChannelList();
       } else {
         tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
       }
-      store = true;
     }
   } else {
     MenuUp();
@@ -662,6 +715,7 @@ void KeyUp(void) {
 }
 
 void KeyDown(void) {
+  if (setvolume) closeVolume();
   tottimer = millis();
   rotary = 0;
   rotary2 = 0;
@@ -712,15 +766,16 @@ void KeyDown(void) {
       }
     } else {
       byte y = 0;
+      byte y_old = 0;
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
-        y = 9;
+        y_old = 9;
       } else if (radio.ServiceIndex > 16 && radio.ServiceIndex < 25) {
-        y = 17;
+        y_old = 17;
       } else if (radio.ServiceIndex > 24) {
-        y = 25;
+        y_old = 25;
       }
 
-      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, BackgroundColor);
+      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y_old)), 309, 21, 5, BackgroundColor);
       if (radio.numberofservices > 0) DABSelectService(0);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -731,12 +786,11 @@ void KeyDown(void) {
         y = 25;
       }
 
-      if (radio.ServiceIndex == radio.numberofservices - 1 || radio.ServiceIndex == 8 || radio.ServiceIndex == 16) {
+      if (y_old != y) {
         BuildChannelList();
       } else {
         tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
       }
-      store = true;
     }
   } else {
     MenuDown();
@@ -751,7 +805,6 @@ void KeyUp2(void) {
     ShowVolume();
   } else {
     if (radio.numberofservices > 0) DABSelectService(1);
-    store = true;
     TuningTimer = millis();
   }
   rotary2 = 0;
@@ -767,7 +820,6 @@ void KeyDown2(void) {
     ShowVolume();
   } else {
     if (radio.numberofservices > 0) DABSelectService(0);
-    store = true;
     TuningTimer = millis();
   }
 }
@@ -795,7 +847,11 @@ bool IsStationEmpty(void) {
 }
 
 void doStandby(void) {
-  analogWrite(CONTRASTPIN, 0);
+  tft.pushImage (0, 0, 320, 240, standbymode);
+  for (int x = ContrastSet; x > 0; x--) {
+    analogWrite(CONTRASTPIN, x * 2 + 27);
+    delay(30);
+  }
   tft.writecommand(0x10);
   Headphones.Shutdown();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, LOW);

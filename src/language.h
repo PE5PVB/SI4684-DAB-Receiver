@@ -98,13 +98,13 @@ static const char* const myLanguage[2][78] = {
     "Software", // 9
     "Opnieuw geconfigureerd", // 10
     "Kanalen lijst", // 11
-    "Language", // 12
-    "Brightness", // 13
+    "Taal", // 12
+    "Helderheid", // 13
     "Thema", // 14
     "Auto slideshow", // 15
-    "Signal units", // 16
+    "Signaal eenheid", // 16
     "WiFi", // 17
-    "Configure WiFi", // 18
+    "Configureer WiFi", // 18
     "DRUK MODE OM AF TE SLUITEN", // 19
     "CONFIGURATIE", // 20
     "Hoog", // 21

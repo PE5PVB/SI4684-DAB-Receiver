@@ -66,6 +66,7 @@ typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
   char      Label[17];
+  bool		Audioservice;
 } DABService;
 
 class DAB {

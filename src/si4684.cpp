@@ -506,6 +506,30 @@ void DAB::ServiceInfo(void) {
     protectionlevel = SPIbuffer[6];
   }
 
+  for (byte x; x < numberofservices; x++) {
+    SPIbuffer[0] = 0xBE;
+    SPIbuffer[1] = 0x00;
+    SPIbuffer[2] = 0x00;
+    SPIbuffer[3] = 0x00;
+    SPIbuffer[4] = service[x].ServiceID & 0xFF;
+    SPIbuffer[5] = (service[x].ServiceID >> 8) & 0xFF;
+    SPIbuffer[6] = (service[x].ServiceID >> 16) & 0xFF;
+    SPIbuffer[7] = (service[x].ServiceID >> 24) & 0xFF;
+    SPIbuffer[8] = service[x].CompID & 0xFF;
+    SPIbuffer[9] = (service[x].CompID >> 8) & 0xFF;
+    SPIbuffer[10] = (service[x].CompID >> 16) & 0xFF;
+    SPIbuffer[11] = (service[x].CompID >> 24) & 0xFF;
+    SPIwrite(SPIbuffer, 12);
+    cts();
+    SPIread(12);
+
+    if (SPIbuffer[5] != 0x00 && SPIbuffer[5] != 0x04 && SPIbuffer[5] != 0x05) {
+      service[x].Audioservice = false;
+    } else {
+      service[x].Audioservice = true;
+    }
+  }
+
   SPIbuffer[0] = 0xC0;
   SPIbuffer[1] = 0x00;
   SPIbuffer[2] = 0x00;
@@ -537,19 +561,23 @@ void DAB::clearData(void) {
   for (byte x = 0; x < 32; x++) {
     service[x].ServiceID = 0;
     service[x].CompID = 0;
+    service[x].Audioservice = true;
     for (byte y = 0; y < 16; y++) service[x].Label[y] = '\0';
   }
+  for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
 }
 
 void DAB::setFreq(uint8_t freq) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   DataUpdate -= 1000;
   numberofservices = 0;
+  clearData();
+
   for (byte x = 0; x < 16; x++) {
-    ServiceData[x] = '\0';
     EnsembleLabel[x] = '\0';
     PStext[x] = '\0';
   }
+
   EID[0] = '\0';
   SID[0] = '\0';
   pty = 36;
@@ -583,7 +611,7 @@ void DAB::setService(uint8_t _index) {
   pty = 36;
   bitrate = 0;
   protectionlevel = 0;
-  ServiceData[0] = '\0';
+  for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
   SlideShowByteCounter = 0;
   SlideShowLength = 0;
   SlideShowLengthOld = 0;
