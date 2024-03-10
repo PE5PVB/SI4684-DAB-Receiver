@@ -384,7 +384,7 @@ void DAB::getServiceData(void) {
     cts();
     SPIread(20);
 
-    if (SPIbuffer[1] == 0x80 && (SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
+    if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
       if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) > 0) {
         SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
         byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
