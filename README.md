@@ -10,9 +10,9 @@ More information: https://www.pe5pvb.nl/
 
 # Libraries
 These are the libraries used for this project:
-https://github.com/Bodmer/TFT_eSPI
-https://github.com/Bodmer/JPEGDecoder
-https://github.com/bitbank2/PNGdec
+- https://github.com/Bodmer/TFT_eSPI
+- https://github.com/Bodmer/JPEGDecoder
+- https://github.com/bitbank2/PNGdec
 
 Use these settings in the TFT_eSPI library:
 ```
