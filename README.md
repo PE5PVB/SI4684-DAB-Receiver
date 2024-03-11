@@ -6,8 +6,23 @@ The version in the repository is an ongoing development. It could and will conta
 
 # SI4684 DAB receiver
 Advanced DAB Tuner software for Skyworks SI4684 tuner with ESP32 board and a color LCD\
-
 More information: https://www.pe5pvb.nl/
+
+# Libraries
+These are the libraries used for this project:
+https://github.com/Bodmer/TFT_eSPI
+https://github.com/Bodmer/JPEGDecoder
+https://github.com/bitbank2/PNGdec
+
+Use these settings in the TFT_eSPI library:
+```
+#define ILI9341_DRIVER
+#define TFT_CS          5
+#define TFT_DC          4
+#define TFT_RST         17
+#define SPI_FREQUENCY   50000000
+#define SMOOTH_FONT
+```
 
 ## Contributing
 I'm open for a new ideas in our project. Feel free to share your thoughts in [Discussions](https://github.com/PE5PVB/SI4684-DAB-Receiver/discussions).\
