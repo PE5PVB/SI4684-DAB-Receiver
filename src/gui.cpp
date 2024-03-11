@@ -250,6 +250,7 @@ void BuildMenu(void) {
   tftPrint(-1, myLanguage[language][25], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
   if (wifi) tftPrint(-1, String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()), 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16); else tftPrint(-1, myLanguage[language][17], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][18], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][81], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
 
   tftPrint(1, myLanguage[language][0], 310, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(1, "%", 310, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
@@ -301,7 +302,7 @@ void MenuUp(void) {
     tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
     menuoption += ITEM_GAP;
     menuitem++;
-    if (menuitem > 7) {
+    if (menuitem > 8) {
       menuitem = 0;
       menuoption = ITEM1;
     }
@@ -327,8 +328,8 @@ void MenuUp(void) {
         CurrentTheme ++;
         if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = 0;
         doTheme();
-        tft.drawRoundRect(10, 30, 300, 170, 5, ActiveColor);
-        tft.fillRoundRect(12, 32, 296, 166, 5, BackgroundColor3);
+        tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
+        tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
         tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
         tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
         break;
@@ -375,8 +376,8 @@ void MenuDown(void) {
     menuoption -= ITEM_GAP;
     menuitem--;
     if (menuitem > 7) {
-      menuoption = ITEM8;
-      menuitem = 7;
+      menuoption = ITEM9;
+      menuitem = 8;
     }
     tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
   } else {
@@ -400,8 +401,8 @@ void MenuDown(void) {
         CurrentTheme --;
         if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = sizeof(Theme) / sizeof(Theme[0]) - 1;
         doTheme();
-        tft.drawRoundRect(10, 30, 300, 170, 5, ActiveColor);
-        tft.fillRoundRect(12, 32, 296, 166, 5, BackgroundColor3);
+        tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
+        tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
         tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
         tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
         break;
@@ -444,8 +445,8 @@ void MenuDown(void) {
 
 void DoMenu(void) {
   if (!menuopen) {
-    tft.drawRoundRect(10, 30, 300, 170, 5, ActiveColor);
-    tft.fillRoundRect(12, 32, 296, 166, 5, BackgroundColor3);
+    tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
+    tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
     menuopen = true;
     switch (menuoption) {
       case ITEM1:
@@ -497,6 +498,14 @@ void DoMenu(void) {
           menuopen = false;
           BuildMenu();
         } break;
+
+      case ITEM9:
+        tftPrint(0, myLanguage[language][79], 155, 40, ActiveColor, ActiveColorSmooth, 28);
+        tftPrint(0, "PE5PVB", 155, 72, PrimaryColor, PrimaryColorSmooth, 28);
+        tftPrint(0, myLanguage[language][80], 155, 108, ActiveColor, ActiveColorSmooth, 28);
+        tftPrint(0, "mcelliotg", 155, 138, PrimaryColor, PrimaryColorSmooth, 28);
+        tftPrint(0, "github.com/PE5PVB/SI4684-DAB-Receiver", 155, 175, SecondaryColor, SecondaryColorSmooth, 16);
+        break;
     }
   } else {
     menuopen = false;

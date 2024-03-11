@@ -294,9 +294,9 @@ void setup(void) {
   }
 
   tft.pushImage (0, 0, 320, 240, SplashScreen);
-  tftPrint(0, myLanguage[language][72], 155, 25, ActiveColor, ActiveColorSmooth, 28);
+  tftPrint(0, myLanguage[language][72], 155, 15, ActiveColor, ActiveColorSmooth, 28);
 
-  tftPrint(0, String(myLanguage[language][9]) + " " + String(VERSION), 160, 180, TFT_WHITE, TFT_DARKGREY, 16);
+  tftPrint(0, String(myLanguage[language][9]) + " " + String(VERSION), 160, 190, TFT_WHITE, TFT_DARKGREY, 16);
 
   for (int x = 0; x <= ContrastSet; x++) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
@@ -304,9 +304,9 @@ void setup(void) {
   }
 
   if (radio.begin(15)) {
-    tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+    tftPrint(0, String(radio.getChipID()) + " v" + String(radio.getFirmwareVersion()), 160, 210, TFT_WHITE, TFT_DARKGREY, 16);
   } else {
-    tftPrint(0, myLanguage[language][77], 160, 200, TFT_WHITE, TFT_DARKGREY, 16);
+    tftPrint(0, myLanguage[language][77], 160, 210, TFT_WHITE, TFT_DARKGREY, 16);
     for (;;);
   }
 
@@ -848,10 +848,13 @@ bool IsStationEmpty(void) {
 
 void doStandby(void) {
   tft.pushImage (0, 0, 320, 240, standbymode);
+  tftPrint(0, myLanguage[language][78], 155, 210, ActiveColor, ActiveColorSmooth, 28);
+
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(30);
+    delay(50);
   }
+
   tft.writecommand(0x10);
   Headphones.Shutdown();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, LOW);
