@@ -8,6 +8,11 @@
 #include "WiFiConnectParam.h"
 #include "si4684.h"
 #include "tpa6130a2.h"
+#include "language.h"
+#include "constants.h"
+#include "graphics.h"
+#include <EEPROM.h>
+#include <cstring>
 
 #define ITEM_GAP    20
 #define ITEM1     30
@@ -117,6 +122,7 @@ extern TFT_eSprite ModeSprite;
 extern TFT_eSprite EIDSIDSprite;
 extern TFT_eSprite ClockSprite;
 extern TFT_eSprite DateSprite;
+extern TFT_eSprite SelectorSprite;
 extern DAB radio;
 extern TPA6130A2 Headphones;
 

@@ -4,9 +4,10 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <WiFiClient.h>
-#include <WiFi.h>
 #include "WiFiConnect.h"
 #include "WiFiConnectParam.h"
+#include "language.h"
+#include "constants.h"
 
 extern int SignificantColor;
 extern int SignificantColorSmooth;
@@ -27,8 +28,8 @@ extern WiFiClient RemoteClient;
 extern WiFiServer Server;
 extern WiFiConnect wc;
 
-void Communication();
-void tryWiFi();
+void Communication(void);
+void tryWiFi(void);
 
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
 

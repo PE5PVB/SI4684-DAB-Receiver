@@ -1,6 +1,3 @@
-#ifndef slideshow_cpp
-#define slideshow_cpp
-
 #include "slideshow.h"
 
 File pngfile;
@@ -8,6 +5,11 @@ File jpgfile;
 PNG png;
 
 void ShowSlideShow(void) {
+  for (int x = ContrastSet; x > 0; x--) {
+    analogWrite(CONTRASTPIN, x * 2 + 27);
+    delay(2);
+  }
+
   if (radio.isJPG) {
     tft.fillScreen(TFT_BLACK);
     jpgfile = LittleFS.open("/slideshow.img", "rb");
@@ -37,11 +39,9 @@ void ShowSlideShow(void) {
       tft.startWrite();
       tft.setAddrWindow(mcu_x + (320 - JpegDec.width) / 2, mcu_y + (240 - JpegDec.height) / 2, win_w, win_h);
 
-      for (int h = 0; h < win_h; h++) {
-        for (int w = 0; w < win_w; w++) {
-          tft.pushColor(*pImg++);
-        }
-      }
+      uint32_t pixels = win_w * win_h;
+      tft.pushColors(pImg, pixels);
+
       tft.endWrite();
     }
     jpgfile.close();
@@ -52,25 +52,25 @@ void ShowSlideShow(void) {
       return;
     }
     int16_t rc = png.open("/slideshow.img",
-      [&pngfile](const char *filename, int32_t *size) -> void * {
-        *size = pngfile.size();
-        return &pngfile;
-      },
-      [&pngfile](void *handle) {
-      },
-      [&pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
-        if (!pngfile || !pngfile.available()) return 0;
-        return pngfile.read(buffer, length);
-      },
-      [&pngfile](PNGFILE * page, int32_t position) -> int32_t {
-        if (!pngfile || !pngfile.available()) return 0;
-        return pngfile.seek(position);
-      },
-      [&pngfile, &tft](PNGDRAW * pDraw) {
-        uint16_t lineBuffer[320];
-        png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
-        tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
-      });
+    [&pngfile](const char *filename, int32_t *size) -> void * {
+      *size = pngfile.size();
+      return &pngfile;
+    },
+    [&pngfile](void *handle) {
+    },
+    [&pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
+      if (!pngfile || !pngfile.available()) return 0;
+      return pngfile.read(buffer, length);
+    },
+    [&pngfile](PNGFILE * page, int32_t position) -> int32_t {
+      if (!pngfile || !pngfile.available()) return 0;
+      return pngfile.seek(position);
+    },
+    [&pngfile, &tft](PNGDRAW * pDraw) {
+      uint16_t lineBuffer[320];
+      png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
+      tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
+    });
 
     if (rc != PNG_SUCCESS) {
       pngfile.close();
@@ -82,5 +82,8 @@ void ShowSlideShow(void) {
     png.close();
     tft.endWrite();
   }
+  for (int x = 0; x <= ContrastSet; x++) {
+    analogWrite(CONTRASTPIN, x * 2 + 27);
+    delay(2);
+  }
 }
-#endif

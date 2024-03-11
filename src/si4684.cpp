@@ -1,11 +1,4 @@
-#ifndef si4684_cpp
-#define si4684_cpp
-
 #include "si4684.h"
-#include "Si468xROM.h"
-#include "firmware.h"
-#include <SPI.h>
-#include <cstring>
 
 unsigned char SPIbuffer[4096];
 unsigned long DataUpdate = 0;
@@ -473,39 +466,6 @@ void DAB::getServiceData(void) {
 
 
 void DAB::ServiceInfo(void) {
-  SPIbuffer[0] = 0xBD;
-  SPIbuffer[1] = 0x00;
-  SPIwrite(SPIbuffer, 2);
-  cts();
-  SPIread(16);
-
-  if (SPIbuffer[1] == 0x80) {
-    bitrate = SPIbuffer[5] + (SPIbuffer[6] << 8);
-    samplerate = SPIbuffer[7] + (SPIbuffer[8] << 8);
-    audiomode = SPIbuffer[9] & 0x03;
-  }
-
-  SPIbuffer[0] = 0xBE;
-  SPIbuffer[1] = 0x00;
-  SPIbuffer[2] = 0x00;
-  SPIbuffer[3] = 0x00;
-  SPIbuffer[4] = service[ServiceIndex].ServiceID & 0xFF;
-  SPIbuffer[5] = (service[ServiceIndex].ServiceID >> 8) & 0xFF;
-  SPIbuffer[6] = (service[ServiceIndex].ServiceID >> 16) & 0xFF;
-  SPIbuffer[7] = (service[ServiceIndex].ServiceID >> 24) & 0xFF;
-  SPIbuffer[8] = service[ServiceIndex].CompID & 0xFF;
-  SPIbuffer[9] = (service[ServiceIndex].CompID >> 8) & 0xFF;
-  SPIbuffer[10] = (service[ServiceIndex].CompID >> 16) & 0xFF;
-  SPIbuffer[11] = (service[ServiceIndex].CompID >> 24) & 0xFF;
-  SPIwrite(SPIbuffer, 12);
-  cts();
-  SPIread(12);
-
-  if (SPIbuffer[1] == 0x80) {
-    servicetype = SPIbuffer[5];
-    protectionlevel = SPIbuffer[6];
-  }
-
   for (byte x; x < numberofservices; x++) {
     SPIbuffer[0] = 0xBE;
     SPIbuffer[1] = 0x00;
@@ -522,38 +482,68 @@ void DAB::ServiceInfo(void) {
     SPIwrite(SPIbuffer, 12);
     cts();
     SPIread(12);
-
-    if (SPIbuffer[5] != 0x00 && SPIbuffer[5] != 0x04 && SPIbuffer[5] != 0x05) {
-      service[x].Audioservice = false;
-    } else {
-      service[x].Audioservice = true;
-    }
+    service[x].ServiceType = SPIbuffer[5];
   }
 
-  SPIbuffer[0] = 0xC0;
-  SPIbuffer[1] = 0x00;
-  SPIbuffer[2] = 0x00;
-  SPIbuffer[3] = 0x00;
-  SPIbuffer[4] = service[ServiceIndex].ServiceID & 0xFF;
-  SPIbuffer[5] = (service[ServiceIndex].ServiceID >> 8) & 0xFF;
-  SPIbuffer[6] = (service[ServiceIndex].ServiceID >> 16) & 0xFF;
-  SPIbuffer[7] = (service[ServiceIndex].ServiceID >> 24) & 0xFF;
-  SPIwrite(SPIbuffer, 8);
-  cts();
-  SPIread(26);
+  if (ServiceStart) {
+    SPIbuffer[0] = 0xBD;
+    SPIbuffer[1] = 0x00;
+    SPIwrite(SPIbuffer, 2);
+    cts();
+    SPIread(16);
 
-  if (SPIbuffer[1] == 0x80) {
-    for (byte x = 9; x < 25; x++) PStext[x - 9] = SPIbuffer[x];
-
-    for (int8_t i = 15; i >= 0; i--) {
-      if (PStext[i] == ' ' && PStext[i + 1] == '\0') {
-        PStext[i] = '\0';
-      } else {
-        break;
-      }
+    if (SPIbuffer[1] == 0x80) {
+      bitrate = SPIbuffer[5] + (SPIbuffer[6] << 8);
+      samplerate = SPIbuffer[7] + (SPIbuffer[8] << 8);
+      audiomode = SPIbuffer[9] & 0x03;
     }
 
-    pty = (SPIbuffer[5] >> 1) & 0x1F;
+    SPIbuffer[0] = 0xBE;
+    SPIbuffer[1] = 0x00;
+    SPIbuffer[2] = 0x00;
+    SPIbuffer[3] = 0x00;
+    SPIbuffer[4] = service[ServiceIndex].ServiceID & 0xFF;
+    SPIbuffer[5] = (service[ServiceIndex].ServiceID >> 8) & 0xFF;
+    SPIbuffer[6] = (service[ServiceIndex].ServiceID >> 16) & 0xFF;
+    SPIbuffer[7] = (service[ServiceIndex].ServiceID >> 24) & 0xFF;
+    SPIbuffer[8] = service[ServiceIndex].CompID & 0xFF;
+    SPIbuffer[9] = (service[ServiceIndex].CompID >> 8) & 0xFF;
+    SPIbuffer[10] = (service[ServiceIndex].CompID >> 16) & 0xFF;
+    SPIbuffer[11] = (service[ServiceIndex].CompID >> 24) & 0xFF;
+    SPIwrite(SPIbuffer, 12);
+    cts();
+    SPIread(12);
+
+    if (SPIbuffer[1] == 0x80) {
+      servicetype = SPIbuffer[5];
+      protectionlevel = SPIbuffer[6];
+    }
+
+    SPIbuffer[0] = 0xC0;
+    SPIbuffer[1] = 0x00;
+    SPIbuffer[2] = 0x00;
+    SPIbuffer[3] = 0x00;
+    SPIbuffer[4] = service[ServiceIndex].ServiceID & 0xFF;
+    SPIbuffer[5] = (service[ServiceIndex].ServiceID >> 8) & 0xFF;
+    SPIbuffer[6] = (service[ServiceIndex].ServiceID >> 16) & 0xFF;
+    SPIbuffer[7] = (service[ServiceIndex].ServiceID >> 24) & 0xFF;
+    SPIwrite(SPIbuffer, 8);
+    cts();
+    SPIread(26);
+
+    if (SPIbuffer[1] == 0x80) {
+      for (byte x = 9; x < 25; x++) PStext[x - 9] = SPIbuffer[x];
+
+      for (int8_t i = 15; i >= 0; i--) {
+        if (PStext[i] == ' ' && PStext[i + 1] == '\0') {
+          PStext[i] = '\0';
+        } else {
+          break;
+        }
+      }
+
+      pty = (SPIbuffer[5] >> 1) & 0x1F;
+    }
   }
 }
 
@@ -561,7 +551,7 @@ void DAB::clearData(void) {
   for (byte x = 0; x < 32; x++) {
     service[x].ServiceID = 0;
     service[x].CompID = 0;
-    service[x].Audioservice = true;
+    service[x].ServiceType = 0;
     for (byte y = 0; y < 16; y++) service[x].Label[y] = '\0';
   }
   for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
@@ -655,9 +645,9 @@ void DAB::setService(uint8_t _index) {
 
 void DAB::Update(void) {
   if (signallock) getServiceData();
-  if (millis() - DataUpdate > 1000 || !signallock) {
+  if (millis() - DataUpdate > 500 || !signallock) {
     EnsembleInfo();
-    if (ServiceStart && signallock) ServiceInfo();
+    if (signallock) ServiceInfo();
     DataUpdate = millis();
   }
 }
@@ -879,4 +869,3 @@ static String convertToUTF8(const wchar_t* input) {
   }
   return output;
 }
-#endif

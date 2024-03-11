@@ -1,10 +1,6 @@
-#ifndef TPA6130A2_CPP
-#define TPA6130A2_CPP
-
 #include "tpa6130a2.h"
-#include <Wire.h>
 
-byte TPA6130A2::Init() {
+byte TPA6130A2::Init(void) {
   Wire.begin();
   byte x = GetValue(0x02);
   bitWrite(x, 6, 0);
@@ -45,7 +41,7 @@ void TPA6130A2::SetHiZ(bool hiz) {
   Wire.endTransmission();
 }
 
-void TPA6130A2::Shutdown() {
+void TPA6130A2::Shutdown(void) {
   byte x = GetValue(0x01);
   bitWrite(x, 0, 1);
   Wire.beginTransmission(0x60);
@@ -54,14 +50,14 @@ void TPA6130A2::Shutdown() {
   Wire.endTransmission();
 }
 
-byte TPA6130A2::GetVolume() {
+byte TPA6130A2::GetVolume(void) {
   byte x = GetValue(0x02);
   bitWrite(x, 6, 0);
   bitWrite(x, 7, 0);
   return x;
 }
 
-byte TPA6130A2::GetMute() {
+byte TPA6130A2::GetMute(void) {
   byte x = GetValue(0x02);
   return bitRead(x, 6);
 }
@@ -74,4 +70,3 @@ byte TPA6130A2::GetValue(byte reg) {
   byte x = Wire.read();
   return x;
 }
-#endif

@@ -1,8 +1,13 @@
 #ifndef si4684_h
 #define si4684_h
+
 #include "Arduino.h"
 #include <LittleFS.h>
 #include <TFT_eSPI.h>
+#include "Si468xROM.h"
+#include "firmware.h"
+#include <SPI.h>
+#include <cstring>
 
 extern TFT_eSPI tft;
 
@@ -57,7 +62,7 @@ static const char* const ServiceTypeText[] {
   "DAB+",
   "DAB",
   "FIC",
-  "XPAD data",
+  "XPAD",
   "-",
   ""
 };
@@ -66,7 +71,7 @@ typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
   char      Label[17];
-  bool		Audioservice;
+  byte		ServiceType;
 } DABService;
 
 class DAB {
@@ -132,4 +137,5 @@ class DAB {
     bool SlideShowNew;
     bool SlideShowInit;
 };
+
 #endif

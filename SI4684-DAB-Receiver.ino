@@ -135,6 +135,7 @@ TFT_eSprite EIDSIDSprite = TFT_eSprite(&tft);
 TFT_eSprite ModeSprite = TFT_eSprite(&tft);
 TFT_eSprite ClockSprite = TFT_eSprite(&tft);
 TFT_eSprite DateSprite = TFT_eSprite(&tft);
+TFT_eSprite SelectorSprite = TFT_eSprite(&tft);
 
 WiFiConnect wc;
 WiFiServer Server(7373);
@@ -265,6 +266,9 @@ void setup(void) {
   ModeSprite.loadFont(FONT16);
   ModeSprite.setSwapBytes(true);
 
+  SelectorSprite.createSprite(303, 20);
+  SelectorSprite.setSwapBytes(true);
+
   if (digitalRead(SLBUTTON) == LOW && digitalRead(ROTARY_BUTTON) == HIGH) {
     if (rotarymode == 0) rotarymode = 1; else rotarymode = 0;
     EEPROM.writeByte(EE_BYTE_ROTARYMODE, rotarymode);
@@ -348,6 +352,7 @@ void setup(void) {
 
 void loop(void) {
   ProcessDAB();
+  Communication();
   displayreset = false;
 
   if (seek) Seek(direction);
@@ -476,7 +481,7 @@ void DABSelectService(bool dir) {
     }
     radio.setService(radio.ServiceIndex);
   }
-  while (!radio.service[radio.ServiceIndex].Audioservice) DABSelectService(dir);
+  while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && radio.service[radio.ServiceIndex].ServiceType != 0x04 && radio.service[radio.ServiceIndex].ServiceType != 0x05) DABSelectService(dir);
   radio.ServiceStart = true;
   store = true;
 }

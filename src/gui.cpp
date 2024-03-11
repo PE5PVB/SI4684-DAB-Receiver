@@ -1,13 +1,4 @@
-#ifndef GUI_CPP
-#define GUI_CPP
 #include "gui.h"
-#include "language.h"
-#include "constants.h"
-#include "graphics.h"
-#include <WiFi.h>
-#include <Wire.h>
-#include <EEPROM.h>
-#include <cstring>
 
 byte menuitem;
 
@@ -16,7 +7,7 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
     case 0:  // Elegant
       PrimaryColor = 0x2e65;
       PrimaryColorSmooth = 0x09a1;
-      SecondaryColor = 0x051f;
+      SecondaryColor = 0x3d7d;
       SecondaryColorSmooth = 0x08e5;
       GreyoutColor = 0x5b0d;
       BackgroundColor = 0x0063;
@@ -170,18 +161,18 @@ void ShowServiceInfo(void) {
   tftPrint(-1, myLanguage[language][34], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, myLanguage[language][35], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
 
-  tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 163, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(unitString[unit]) + "  MER:", 190, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, "dB", 278, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 163, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 163, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 163, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, ProtectionText[radio.protectionlevel], 163, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 166, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(unitString[unit]) + "  MER:", 193, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, "dB", 281, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 166, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 166, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 166, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, ProtectionText[radio.protectionlevel], 166, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
   String bitrateString = String(radio.samplerate);
   bitrateString = bitrateString.substring(0, 2) + "." + bitrateString.substring(2);
-  tftPrint(-1, bitrateString + " Hz", 163, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.bitrate, DEC) + " kb/s", 163, ITEM8 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 163, ITEM9 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, bitrateString + " Hz", 166, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.bitrate, DEC) + " kb/s", 166, ITEM8 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 166, ITEM9 + 6, PrimaryColor, PrimaryColorSmooth, 16);
 }
 
 void BuildChannelList(void) {
@@ -208,13 +199,13 @@ void BuildChannelList(void) {
       z = 4;
     }
     if (y == 0) {
-      tftPrint(1, "1/" + String(z), 310, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "1/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 9) {
-      tftPrint(1, "2/" + String(z), 310, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "2/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 17) {
-      tftPrint(1, "3/" + String(z), 310, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "3/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 25) {
-      tftPrint(1, "4/" + String(z), 310, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "4/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
     }
   }
 
@@ -228,6 +219,7 @@ void BuildChannelList(void) {
     serviceIDString.toUpperCase();
     tftPrint(0, serviceIDString, 62, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
     tftPrint(-1, String(radio.ASCII(radio.service[i].Label)), 90, 38 + (20 * (i - y)), PrimaryColor, PrimaryColorSmooth, 16);
+    tftPrint(0, ServiceTypeText[radio.service[i].ServiceType], 290, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
     if (i - y == 8) i = 254;
   }
 }
@@ -552,7 +544,7 @@ void ShowFreq(void) {
 void ShowPTY(void) {
   if (!radio.ServiceStart) radio.pty = 36;
   if (radio.pty != ptyold || displayreset) {
-    PTYSprite.pushImage (0, 0, 150, 17, ptybackground);
+    PTYSprite.pushImage(-8, -162, 320, 240, Background);
     PTYSprite.drawString(myLanguage[language][37 + radio.pty], 75, 0);
     PTYSprite.pushSprite(8, 162);
     ptyold = radio.pty;
@@ -560,10 +552,12 @@ void ShowPTY(void) {
 }
 
 void ShowRT(void) {
-  if (!ChannelListView && !ShowServiceInformation) {
-    RadiotextSprite.pushImage (0, 0, 308, 18, rtbackground_main);
+  if (ShowServiceInformation)  {
+    RadiotextSprite.pushImage(-6, -220, 320, 240, serviceinfobackground);
+  } else if (ChannelListView) {
+    RadiotextSprite.pushImage(-6, -220, 320, 240, servicelistbackground);
   } else {
-    RadiotextSprite.pushImage (0, 0, 308, 18, rtbackground);
+    RadiotextSprite.pushImage(-6, -220, 320, 240, Background);
   }
   if (radio.ASCII(radio.ServiceData).length() > 0) {
     RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData));
@@ -586,7 +580,7 @@ void ShowRT(void) {
       }
     }
   } else {
-    RadiotextSprite.pushSprite(6, 219);
+    RadiotextSprite.pushSprite(6, 220);
   }
   if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
   RTold = radio.ASCII(radio.ServiceData);
@@ -595,7 +589,7 @@ void ShowRT(void) {
 void ShowSID(void) {
   if (!radio.ServiceStart) radio.SID[0] = '\0';
   if (String(radio.SID) != SIDold || displayreset) {
-    EIDSIDSprite.pushImage (0, 0, 35, 16, sidbackground);
+    EIDSIDSprite.pushImage(-36, -120, 320, 240, Background);
     EIDSIDSprite.drawString(String(radio.SID), 2, 0);
     EIDSIDSprite.pushSprite(36, 120);
     SIDold = String(radio.SID);
@@ -605,7 +599,7 @@ void ShowSID(void) {
 void ShowEID(void) {
   if (tuning) radio.EID[0] = '\0';
   if (String(radio.EID) != EIDold || displayreset) {
-    EIDSIDSprite.pushImage (0, 0, 35, 16, eidbackground);
+    EIDSIDSprite.pushImage(-36, -106, 320, 240, Background);
     EIDSIDSprite.drawString(String(radio.EID), 2, 0);
     EIDSIDSprite.pushSprite(36, 106);
     EIDold = String(radio.EID);
@@ -628,7 +622,7 @@ void ShowPS(void) {
 
   if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
     if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))).length() != 0)) {
-      PSSprite.pushImage(0, 0, 270, 30, psbackground);
+      PSSprite.pushImage(-44, -185, 320, 240, Background);
       PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 2);
       PSSprite.pushSprite(44, 185);
     }
@@ -655,7 +649,7 @@ void ShowEN(void) {
 void ShowProtectionlevel(void) {
   if (!radio.ServiceStart) radio.protectionlevel = 0;
   if (String(ProtectionText[radio.protectionlevel]) != PLold || displayreset) {
-    ProtectionBitrateSprite.pushImage (0, 0, 60, 16, protectionbackground);
+    ProtectionBitrateSprite.pushImage(-9, -90, 320, 240, Background);
     ProtectionBitrateSprite.drawString(String(ProtectionText[radio.protectionlevel]), 30, 0);
     ProtectionBitrateSprite.pushSprite(9, 90);
     PLold = String(ProtectionText[radio.protectionlevel]);
@@ -946,12 +940,12 @@ void ShowSignalLevel(void) {
   } else {
     String SignalLevelString = String(String(SignalLevelprint / 10)) + "." + String(abs(SignalLevelprint % 10));
     if ((SignalLevelString != SignalLeveloldString && !setvolume) || displayreset) {
-      tftReplace(1, SignalLeveloldString, SignalLevelString, 188, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
+      tftReplace(1, SignalLeveloldString, SignalLevelString, 191, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
       SignalLeveloldString = SignalLevelString;
     }
 
     if (((CNRold != CNR) && !setvolume) || displayreset) {
-      tftReplace(1, String(CNRold), String(CNR), 276, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
+      tftReplace(1, String(CNRold), String(CNR), 279, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
       CNRold = CNR;
     }
   }
@@ -960,7 +954,7 @@ void ShowSignalLevel(void) {
 void ShowBitrate(void) {
   if (tuning) radio.bitrate = 0;
   if (radio.bitrate != BitrateOld || displayreset) {
-    ProtectionBitrateSprite.pushImage (0, 0, 60, 16, bitratebackground);
+    ProtectionBitrateSprite.pushImage(-9, -140, 320, 240, Background);
     ProtectionBitrateSprite.drawString((radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 30, 0);
     ProtectionBitrateSprite.pushSprite(9, 140);
     BitrateOld = radio.bitrate;
@@ -972,14 +966,14 @@ void ShowClock(void) {
   String clockstring = (hour() < 10 ? "0" : "") + String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute());
   String datestring = (day() < 10 ? "0" : "") + String(day()) + "-" + (month() < 10 ? "0" : "") + String(month()) + "-" + String(year());
   if (clockstringOld != clockstring || displayreset) {
-    ClockSprite.pushImage (0, 0, 44, 16, clockbackground);
+    ClockSprite.pushImage(-105, -7, 320, 240, Background);
     ClockSprite.drawString(clockstring, 0, 0);
     ClockSprite.pushSprite(105, 7);
     clockstringOld = clockstring;
   }
 
   if (datestringOld != datestring || displayreset) {
-    DateSprite.pushImage (0, 0, 103, 16, datebackground);
+    DateSprite.pushImage(-177, -7, 320, 240, Background);
     DateSprite.drawString(datestring, 0, 0);
     DateSprite.pushSprite(177, 7);
     datestringOld = datestring;
@@ -998,7 +992,7 @@ void ShowSlideShowIcon(void) {
 }
 
 void ShowTuneMode(void) {
-  ModeSprite.pushImage (0, 0, 46, 47, modebackground);
+  ModeSprite.pushImage(-6, -33, 320, 240, Background);
 
   switch (tunemode) {
     case TUNE_MAN:
@@ -1030,7 +1024,7 @@ void ShowTuneMode(void) {
       ModeSprite.drawString("MEM", 23, 32);
       break;
   }
-  ModeSprite.pushSprite(7, 33);
+  ModeSprite.pushSprite(6, 33);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, tunemode);
   EEPROM.commit();
 }
@@ -1052,4 +1046,3 @@ void ShowRSSI(void) {
     rssiold = rssi;
   }
 }
-#endif

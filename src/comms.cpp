@@ -1,14 +1,9 @@
-#ifndef COMMS_CPP
-#define COMMS_CPP
 #include "comms.h"
-#include "language.h"
-#include "constants.h"
-#include <EEPROM.h>
 
-void Communication() {
+void Communication(void) {
 }
 
-void tryWiFi() {
+void tryWiFi(void) {
   if (!setupmode && wifi && WiFi.status() != WL_CONNECTED) {
     tft.drawRoundRect(1, 60, 319, 140, 5, ActiveColor);
     tft.fillRoundRect(3, 62, 315, 136, 5, BackgroundColor3);
@@ -35,4 +30,3 @@ void tryWiFi() {
     WiFi.mode(WIFI_OFF);
   }
 }
-#endif
