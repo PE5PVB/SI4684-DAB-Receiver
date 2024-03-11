@@ -141,6 +141,16 @@ WiFiServer Server(7373);
 WiFiClient RemoteClient;
 
 void setup(void) {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  gpio_set_drive_capability((gpio_num_t) 4, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 5, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 13, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 14, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 15, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 16, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 17, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 21, GPIO_DRIVE_CAP_0);
+  gpio_set_drive_capability((gpio_num_t) 22, GPIO_DRIVE_CAP_0);
   setupmode = true;
   LittleFS.begin();
   LittleFS.format();

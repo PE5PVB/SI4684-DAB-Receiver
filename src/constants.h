@@ -7,7 +7,6 @@
 #define ROTARY_PIN_2B   32
 #define ROTARY_BUTTON   25
 #define ROTARY_BUTTON2  35
-#define PIN_POT         33
 #define STANDBYBUTTON   36
 #define SLBUTTON        26
 #define MODEBUTTON      39
