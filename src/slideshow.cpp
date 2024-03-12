@@ -7,7 +7,7 @@ PNG png;
 void ShowSlideShow(void) {
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2);
-    delay(10);
+    delay(5);
   }
 
   if (radio.isJPG) {

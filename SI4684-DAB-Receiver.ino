@@ -835,8 +835,8 @@ void doStandby(void) {
   tftPrint(0, myLanguage[language][78], 155, 210, ActiveColor, ActiveColorSmooth, 28);
 
   for (int x = ContrastSet; x > 0; x--) {
-    analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(50);
+    analogWrite(CONTRASTPIN, x * 2);
+    delay(25);
   }
 
   tft.writecommand(0x10);
