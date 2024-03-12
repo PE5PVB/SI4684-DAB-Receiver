@@ -199,13 +199,13 @@ void BuildChannelList(void) {
       z = 4;
     }
     if (y == 0) {
-      tftPrint(0, "1/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "1/" + String(z), 290, 10, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 9) {
-      tftPrint(0, "2/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "2/" + String(z), 290, 10, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 17) {
-      tftPrint(0, "3/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "3/" + String(z), 290, 10, SecondaryColor, SecondaryColorSmooth, 16);
     } else if (y == 25) {
-      tftPrint(0, "4/" + String(z), 290, 12, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, "4/" + String(z), 290, 10, SecondaryColor, SecondaryColorSmooth, 16);
     }
   }
 
@@ -217,97 +217,97 @@ void BuildChannelList(void) {
 
 void ShowOneLine(byte position, byte item, bool selected) {
   if (ChannelListView) {
-    OneLineSprite.pushImage (-8, -position - 35, 320, 240, servicelistbackground);
-    if (selected) OneLineSprite.pushImage(0, 0, 304, 20, selector);
+    FullLineSprite.pushImage (-8, -position - 35, 320, 240, servicelistbackground);
+    if (selected) FullLineSprite.pushImage(0, 0, 304, 20, selector);
 
-    OneLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    OneLineSprite.setTextDatum(TL_DATUM);
-    OneLineSprite.drawString(String(radio.service[item].CompID & 0xFF, DEC), 12, 3);
+    FullLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    FullLineSprite.setTextDatum(TL_DATUM);
+    FullLineSprite.drawString(String(radio.service[item].CompID & 0xFF, DEC), 12, 3);
 
     String serviceIDString = String(radio.service[item].ServiceID & 0xFFFF, HEX);
     while (serviceIDString.length() < 4) serviceIDString = "0" + serviceIDString;
     serviceIDString.toUpperCase();
-    OneLineSprite.setTextDatum(TC_DATUM);
-    OneLineSprite.drawString(serviceIDString, 56, 3);
+    FullLineSprite.setTextDatum(TC_DATUM);
+    FullLineSprite.drawString(serviceIDString, 56, 3);
 
-    OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-    OneLineSprite.setTextDatum(TL_DATUM);
-    OneLineSprite.drawString(String(radio.ASCII(radio.service[item].Label)), 84, 3);
+    FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    FullLineSprite.setTextDatum(TL_DATUM);
+    FullLineSprite.drawString(String(radio.ASCII(radio.service[item].Label)), 84, 3);
 
-    OneLineSprite.setTextDatum(TC_DATUM);
-    OneLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    OneLineSprite.drawString(ServiceTypeText[radio.service[item].ServiceType], 282, 3);
-    OneLineSprite.pushSprite(8, 35 + position);
+    FullLineSprite.setTextDatum(TC_DATUM);
+    FullLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    FullLineSprite.drawString(ServiceTypeText[radio.service[item].ServiceType], 282, 3);
+    FullLineSprite.pushSprite(8, 35 + position);
   } else if (menu) {
-    OneLineSprite.pushImage (-8, -position - 32, 320, 240, configurationbackground);
-    if (selected) OneLineSprite.pushImage(0, 0, 304, 20, selector);
+    FullLineSprite.pushImage (-8, -position - 32, 320, 240, configurationbackground);
+    if (selected) FullLineSprite.pushImage(0, 0, 304, 20, selector);
 
-    OneLineSprite.setTextDatum(TL_DATUM);
-    OneLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+    FullLineSprite.setTextDatum(TL_DATUM);
+    FullLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
     switch (item) {
       case 0:
-        OneLineSprite.drawString(myLanguage[language][12], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString(myLanguage[language][0], 300, 3);
+        FullLineSprite.drawString(myLanguage[language][12], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString(myLanguage[language][0], 300, 3);
         break;
 
       case 1:
-        OneLineSprite.drawString(myLanguage[language][13], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.drawString("%", 300, 3);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString(String(ContrastSet, DEC), 270, 3);
+        FullLineSprite.drawString(myLanguage[language][13], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.drawString("%", 300, 3);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString(String(ContrastSet, DEC), 270, 3);
         break;
 
       case 2:
-        OneLineSprite.drawString(myLanguage[language][14], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString(Theme[CurrentTheme], 300, 3);
+        FullLineSprite.drawString(myLanguage[language][14], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString(Theme[CurrentTheme], 300, 3);
         break;
 
       case 3:
-        OneLineSprite.drawString(myLanguage[language][15], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
+        FullLineSprite.drawString(myLanguage[language][15], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
         break;
 
       case 4:
-        OneLineSprite.drawString(myLanguage[language][16], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString(unitString[unit], 300, 3);
+        FullLineSprite.drawString(myLanguage[language][16], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString(unitString[unit], 300, 3);
         break;
 
       case 5:
-        OneLineSprite.drawString(myLanguage[language][25], 6, 3);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);		
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.drawString((tot != 0 ? String(tot) : ""), 270, 3);		
-        if (tot != 0) OneLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
-        OneLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
+        FullLineSprite.drawString(myLanguage[language][25], 6, 3);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);		
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.drawString((tot != 0 ? String(tot) : ""), 270, 3);		
+        if (tot != 0) FullLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+        FullLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
         break;
 
       case 6:
-        OneLineSprite.drawString((wifi ? String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()) : myLanguage[language][17]), 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
-        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        OneLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
+        FullLineSprite.drawString((wifi ? String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()) : myLanguage[language][17]), 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
         break;
 
       case 7:
-        OneLineSprite.drawString(myLanguage[language][18], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.drawString(myLanguage[language][18], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
         break;
 
       case 8:
-        OneLineSprite.drawString(myLanguage[language][81], 6, 3);
-        OneLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.drawString(myLanguage[language][81], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
         break;
     }
-    OneLineSprite.pushSprite(8, 32 + position);
+    FullLineSprite.pushSprite(8, 32 + position);
   }
 }
 
@@ -657,45 +657,47 @@ void ShowFreq(void) {
 void ShowPTY(void) {
   if (!radio.ServiceStart) radio.pty = 36;
   if (radio.pty != ptyold || displayreset) {
-    PTYSprite.pushImage(-8, -162, 320, 240, Background);
-    PTYSprite.drawString(myLanguage[language][37 + radio.pty], 75, 0);
-    PTYSprite.pushSprite(8, 162);
+    LongSprite.pushImage(-8, -162, 320, 240, Background);
+	LongSprite.setTextDatum(TC_DATUM);
+    LongSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    LongSprite.drawString(myLanguage[language][37 + radio.pty], 75, 0);
+    LongSprite.pushSprite(8, 162);
     ptyold = radio.pty;
   }
 }
 
 void ShowRT(void) {
   if (ShowServiceInformation)  {
-    OneLineSprite.pushImage(-6, -220, 320, 240, serviceinfobackground);
+    FullLineSprite.pushImage(-6, -220, 320, 240, serviceinfobackground);
   } else if (ChannelListView) {
-    OneLineSprite.pushImage(-6, -220, 320, 240, servicelistbackground);
+    FullLineSprite.pushImage(-6, -220, 320, 240, servicelistbackground);
   } else {
-    OneLineSprite.pushImage(-6, -220, 320, 240, Background);
+    FullLineSprite.pushImage(-6, -220, 320, 240, Background);
   }
 
-  OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+  FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
   if (radio.ASCII(radio.ServiceData).length() > 0) {
     RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData));
     if (RTWidth < 300) {
       xPos = 0;
-      OneLineSprite.setTextDatum(TC_DATUM);
-      OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
-      OneLineSprite.pushSprite(6, 219);
+      FullLineSprite.setTextDatum(TC_DATUM);
+      FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
+      FullLineSprite.pushSprite(6, 219);
     } else {
       if (millis() - rtticker >= 20) {
         xPos --;
         rttickerhold = millis();
 
         if (xPos < -RTWidth - 50) xPos = 0;
-        OneLineSprite.setTextDatum(TL_DATUM);
-        OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
-        OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
-        OneLineSprite.pushSprite(6, 219);
+        FullLineSprite.setTextDatum(TL_DATUM);
+        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
+        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
+        FullLineSprite.pushSprite(6, 219);
         rtticker = millis();
       }
     }
   } else {
-    OneLineSprite.pushSprite(6, 220);
+    FullLineSprite.pushSprite(6, 220);
   }
   if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
   RTold = radio.ASCII(radio.ServiceData);
@@ -704,9 +706,11 @@ void ShowRT(void) {
 void ShowSID(void) {
   if (!radio.ServiceStart) radio.SID[0] = '\0';
   if (String(radio.SID) != SIDold || displayreset) {
-    EIDSIDSprite.pushImage(-36, -120, 320, 240, Background);
-    EIDSIDSprite.drawString(String(radio.SID), 2, 0);
-    EIDSIDSprite.pushSprite(36, 120);
+    ShortSprite.pushImage(-36, -120, 320, 240, Background);
+	ShortSprite.setTextDatum(TL_DATUM);
+	ShortSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    ShortSprite.drawString(String(radio.SID), 2, 0);
+    ShortSprite.pushSprite(36, 120);
     SIDold = String(radio.SID);
   }
 }
@@ -714,9 +718,11 @@ void ShowSID(void) {
 void ShowEID(void) {
   if (tuning) radio.EID[0] = '\0';
   if (String(radio.EID) != EIDold || displayreset) {
-    EIDSIDSprite.pushImage(-36, -106, 320, 240, Background);
-    EIDSIDSprite.drawString(String(radio.EID), 2, 0);
-    EIDSIDSprite.pushSprite(36, 106);
+    ShortSprite.pushImage(-36, -106, 320, 240, Background);
+	ShortSprite.setTextDatum(TL_DATUM);
+	ShortSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);	
+    ShortSprite.drawString(String(radio.EID), 2, 0);
+    ShortSprite.pushSprite(36, 106);
     EIDold = String(radio.EID);
   }
 }
@@ -728,7 +734,7 @@ void ShowPS(void) {
       _serviceName[sizeof(_serviceName) - 1] = '\0';
     } else if (radio.signallock && radio.ServiceStart) {
       for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
-    } else {
+    } else if (!trysetservice) {
       for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
     }
   } else if (tunemode != TUNE_MEM && !tuning) {
@@ -740,6 +746,7 @@ void ShowPS(void) {
       OneBigLineSprite.pushImage(-44, -185, 320, 240, Background);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.setTextDatum(TC_DATUM);
+	  OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 2);
       OneBigLineSprite.pushSprite(44, 185);
     }
@@ -766,9 +773,11 @@ void ShowEN(void) {
 void ShowProtectionlevel(void) {
   if (!radio.ServiceStart) radio.protectionlevel = 0;
   if (String(ProtectionText[radio.protectionlevel]) != PLold || displayreset) {
-    ProtectionBitrateSprite.pushImage(-9, -90, 320, 240, Background);
-    ProtectionBitrateSprite.drawString(String(ProtectionText[radio.protectionlevel]), 30, 0);
-    ProtectionBitrateSprite.pushSprite(9, 90);
+    MediumSprite.pushImage(-9, -90, 320, 240, Background);
+	MediumSprite.setTextDatum(TC_DATUM);
+	MediumSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    MediumSprite.drawString(String(ProtectionText[radio.protectionlevel]), 30, 0);
+    MediumSprite.pushSprite(9, 90);
     PLold = String(ProtectionText[radio.protectionlevel]);
   }
 }
@@ -995,6 +1004,7 @@ void ShowVolume(void) {
   uint8_t segments = map(volume, 0, 63, 0, 93);
   VolumeSprite.pushImage (0, 0, 240, 50, volumebackground);
   VolumeSprite.fillRect(52, 9, 2 * constrain(segments, 0, 93), 9, BarInsignificantColor);
+  VolumeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
   VolumeSprite.drawString(String(map(volume, 0, 62, 0, 100)), 136, 22);
   VolumeSprite.pushSprite(46, 46);
   Headphones.SetVolume(volume);
@@ -1022,10 +1032,11 @@ void ShowSignalLevel(void) {
 
   if (!ShowServiceInformation) {
     if (SignalLevelprint > (SignalLevelold + 3) || SignalLevelprint < (SignalLevelold - 3) || displayreset) {
-      SignalSprite.fillSprite(BackgroundColor3);
-      SignalSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-      SignalSprite.drawString(String(SignalLevelprint / 10) + "." + String(abs(SignalLevelprint % 10)), 30, 0);
-      SignalSprite.pushSprite(149, 109);
+      ShortSprite.fillSprite(BackgroundColor3);
+	  ShortSprite.setTextDatum(TR_DATUM);
+      ShortSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);	  
+      ShortSprite.drawString(String(SignalLevelprint / 10) + "." + String(abs(SignalLevelprint % 10)), 35, 0);
+      ShortSprite.pushSprite(146, 109);
 
       byte segments = 0;
       if (SignalLevel > 120) segments = map(SignalLevel, 100, 700, 0, 85);
@@ -1071,9 +1082,11 @@ void ShowSignalLevel(void) {
 void ShowBitrate(void) {
   if (tuning) radio.bitrate = 0;
   if (radio.bitrate != BitrateOld || displayreset) {
-    ProtectionBitrateSprite.pushImage(-9, -140, 320, 240, Background);
-    ProtectionBitrateSprite.drawString((radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 30, 0);
-    ProtectionBitrateSprite.pushSprite(9, 140);
+    MediumSprite.pushImage(-9, -140, 320, 240, Background);
+	MediumSprite.setTextDatum(TC_DATUM);
+	MediumSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    MediumSprite.drawString((radio.bitrate != 0 && radio.ServiceStart && !tuning ? String (radio.bitrate, DEC) + " kbit/s" : ""), 30, 0);
+    MediumSprite.pushSprite(9, 140);
     BitrateOld = radio.bitrate;
   }
 }
@@ -1083,16 +1096,20 @@ void ShowClock(void) {
   String clockstring = (hour() < 10 ? "0" : "") + String(hour()) + ":" + (minute() < 10 ? "0" : "") + String(minute());
   String datestring = (day() < 10 ? "0" : "") + String(day()) + "-" + (month() < 10 ? "0" : "") + String(month()) + "-" + String(year());
   if (clockstringOld != clockstring || displayreset) {
-    ClockSprite.pushImage(-105, -7, 320, 240, Background);
-    ClockSprite.drawString(clockstring, 0, 0);
-    ClockSprite.pushSprite(105, 7);
+    ShortSprite.pushImage(-105, -7, 320, 240, Background);
+	ShortSprite.setTextDatum(TL_DATUM);
+	ShortSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);	
+    ShortSprite.drawString(clockstring, 0, 0);
+    ShortSprite.pushSprite(105, 7);
     clockstringOld = clockstring;
   }
 
   if (datestringOld != datestring || displayreset) {
-    DateSprite.pushImage(-177, -7, 320, 240, Background);
-    DateSprite.drawString(datestring, 0, 0);
-    DateSprite.pushSprite(177, 7);
+    MediumSprite.pushImage(-177, -7, 320, 240, Background);
+	MediumSprite.setTextDatum(TL_DATUM);
+    MediumSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+    MediumSprite.drawString(datestring, 0, 0);
+    MediumSprite.pushSprite(177, 7);
     datestringOld = datestring;
   }
 }

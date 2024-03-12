@@ -125,16 +125,13 @@ unsigned long rttickerhold;
 unsigned long TuningTimer;
 unsigned long VolumeTimer;
 
-TFT_eSprite OneLineSprite = TFT_eSprite(&tft);
-TFT_eSprite SignalSprite = TFT_eSprite(&tft);
+TFT_eSprite FullLineSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
 TFT_eSprite OneBigLineSprite = TFT_eSprite(&tft);
-TFT_eSprite PTYSprite = TFT_eSprite(&tft);
-TFT_eSprite ProtectionBitrateSprite = TFT_eSprite(&tft);
-TFT_eSprite EIDSIDSprite = TFT_eSprite(&tft);
+TFT_eSprite LongSprite = TFT_eSprite(&tft);
+TFT_eSprite MediumSprite = TFT_eSprite(&tft);
 TFT_eSprite ModeSprite = TFT_eSprite(&tft);
-TFT_eSprite ClockSprite = TFT_eSprite(&tft);
-TFT_eSprite DateSprite = TFT_eSprite(&tft);
+TFT_eSprite ShortSprite = TFT_eSprite(&tft);
 
 WiFiConnect wc;
 WiFiServer Server(7373);
@@ -209,55 +206,30 @@ void setup(void) {
   tft.setSwapBytes(true);
   tft.fillScreen(BackgroundColor);
 
-  OneLineSprite.createSprite(308, 20);
-  OneLineSprite.loadFont(FONT16);
-  OneLineSprite.setSwapBytes(true);
+  OneBigLineSprite.createSprite(270, 30);
+  OneBigLineSprite.loadFont(FONT28);
+  OneBigLineSprite.setSwapBytes(true);
+
+  ShortSprite.createSprite(36, 16);
+  ShortSprite.loadFont(FONT16);
+  ShortSprite.setSwapBytes(true);
+
+  MediumSprite.createSprite(70, 16);
+  MediumSprite.loadFont(FONT16);
+  MediumSprite.setSwapBytes(true);
+
+  LongSprite.createSprite(150, 17);
+  LongSprite.loadFont(FONT16);
+  LongSprite.setSwapBytes(true);
+
+  FullLineSprite.createSprite(308, 20);
+  FullLineSprite.loadFont(FONT16);
+  FullLineSprite.setSwapBytes(true);
 
   VolumeSprite.createSprite(240, 50);
   VolumeSprite.setTextDatum(TC_DATUM);
   VolumeSprite.loadFont(FONT28);
-  VolumeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
   VolumeSprite.setSwapBytes(true);
-
-  SignalSprite.createSprite(30, 19);
-  SignalSprite.setTextDatum(TR_DATUM);
-  SignalSprite.loadFont(FONT16);
-
-  OneBigLineSprite.createSprite(270, 30);
-  OneBigLineSprite.setTextDatum(TC_DATUM);
-  OneBigLineSprite.loadFont(FONT28);
-  OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-  OneBigLineSprite.setSwapBytes(true);
-
-  PTYSprite.createSprite(150, 17);
-  PTYSprite.setTextDatum(TC_DATUM);
-  PTYSprite.loadFont(FONT16);
-  PTYSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-  PTYSprite.setSwapBytes(true);
-
-  ProtectionBitrateSprite.createSprite(60, 16);
-  ProtectionBitrateSprite.setTextDatum(TC_DATUM);
-  ProtectionBitrateSprite.loadFont(FONT16);
-  ProtectionBitrateSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-  ProtectionBitrateSprite.setSwapBytes(true);
-
-  EIDSIDSprite.createSprite(35, 16);
-  EIDSIDSprite.setTextDatum(TL_DATUM);
-  EIDSIDSprite.loadFont(FONT16);
-  EIDSIDSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-  EIDSIDSprite.setSwapBytes(true);
-
-  ClockSprite.createSprite(44, 16);
-  ClockSprite.setTextDatum(TL_DATUM);
-  ClockSprite.loadFont(FONT16);
-  ClockSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
-  ClockSprite.setSwapBytes(true);
-
-  DateSprite.createSprite(103, 16);
-  DateSprite.setTextDatum(TL_DATUM);
-  DateSprite.loadFont(FONT16);
-  DateSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
-  DateSprite.setSwapBytes(true);
 
   ModeSprite.createSprite(46, 47);
   ModeSprite.setTextDatum(TC_DATUM);
@@ -413,22 +385,20 @@ void ProcessDAB(void) {
   }
 
   if (!SlideShowView && !menu) {
-    if (!ChannelListView) {
-      if (!ShowServiceInformation) {
-        if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) SlideShowButtonPress();
-        ShowRSSI();
-        ShowBitrate();
-        ShowEID();
-        ShowSID();
-        ShowPTY();
-        ShowProtectionlevel();
-        ShowPS();
-        ShowEN();
-        ShowAudioMode();
-        ShowClock();
-        ShowSlideShowIcon();
-        ShowECC();
-      }
+    if (!ShowServiceInformation && !ChannelListView) {
+      if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) SlideShowButtonPress();
+      ShowRSSI();
+      ShowBitrate();
+      ShowEID();
+      ShowSID();
+      ShowPTY();
+      ShowProtectionlevel();
+      ShowPS();
+      ShowEN();
+      ShowAudioMode();
+      ShowClock();
+      ShowSlideShowIcon();
+      ShowECC();
     }
     if (!ChannelListView) ShowSignalLevel();
     ShowRT();

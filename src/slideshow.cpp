@@ -7,7 +7,7 @@ PNG png;
 void ShowSlideShow(void) {
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(2);
+    delay(1);
   }
 
   if (radio.isJPG) {
@@ -83,8 +83,9 @@ void ShowSlideShow(void) {
     tft.endWrite();
   }
 
+  delay(50);
   for (int x = 0; x <= ContrastSet; x++) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(15);
+    delay(10);
   }
 }
