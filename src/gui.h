@@ -14,24 +14,13 @@
 #include <EEPROM.h>
 #include <cstring>
 
-#define ITEM_GAP    20
-#define ITEM1     30
-#define ITEM2     50
-#define ITEM3     70
-#define ITEM4     90
-#define ITEM5     110
-#define ITEM6     130
-#define ITEM7     150
-#define ITEM8     170
-#define ITEM9     190
-#define ITEM10      210
-
 extern bool autoslideshow;
 extern bool change;
 extern bool ChannelListView;
 extern bool displayreset;
 extern bool highz;
 extern bool memorystore;
+extern bool menu;
 extern bool menuopen;
 extern bool seek;
 extern bool setvolume;
@@ -112,8 +101,8 @@ extern TFT_eSPI tft;
 extern WiFiConnect wc;
 extern TFT_eSprite MenuInfobox;
 extern TFT_eSprite ChannellistSprite;
-extern TFT_eSprite RadiotextSprite;
-extern TFT_eSprite PSSprite;
+extern TFT_eSprite OneLineSprite;
+extern TFT_eSprite OneBigLineSprite;
 extern TFT_eSprite VolumeSprite;
 extern TFT_eSprite SignalSprite;
 extern TFT_eSprite PTYSprite;
@@ -153,6 +142,7 @@ void ShowClock(void);
 void ShowSlideShowIcon(void);
 void ShowTuneMode(void);
 void ShowRSSI(void);
+void ShowOneLine(byte position, byte item, bool selected);
 
 extern void ShowTuneMode(void);
 extern void tryWiFi(void);

@@ -115,7 +115,7 @@ static const char* const myLanguage[3][82] PROGMEM = {
     "Laag", // 22
     "Aan", // 23
     "Uit", // 24
-    "Automatisch\nuitschakelen", // 25
+    "Auto uitschakelen", // 25
     "Min.", // 26
     "Service informatie", // 27
     "Frequentie", // 28

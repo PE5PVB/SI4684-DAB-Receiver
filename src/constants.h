@@ -12,6 +12,18 @@
 #define MODEBUTTON      39
 #define CONTRASTPIN     2
 
+#define ITEM_GAP        20
+#define ITEM1           3
+#define ITEM2           23
+#define ITEM3           43
+#define ITEM4           63
+#define ITEM5           83
+#define ITEM6           103
+#define ITEM7           123
+#define ITEM8           143
+#define ITEM9           163
+#define ITEM10          183
+
 // EEPROM index defines
 #define EE_PRESETS_CNT              99
 #define EE_PRESETS_FREQUENCY        255
@@ -49,4 +61,5 @@ enum RADIO_TUNE_MODE {
 enum RADIO_MEM_POS_STATUS {
   MEM_DARK, MEM_NORMAL, MEM_EXIST
 };
+
 #endif

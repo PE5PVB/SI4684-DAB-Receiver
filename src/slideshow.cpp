@@ -82,8 +82,9 @@ void ShowSlideShow(void) {
     png.close();
     tft.endWrite();
   }
+
   for (int x = 0; x <= ContrastSet; x++) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(2);
+    delay(15);
   }
 }

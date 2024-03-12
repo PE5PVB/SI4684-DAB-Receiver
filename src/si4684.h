@@ -55,7 +55,7 @@ static const char* const AudioModeText[] {
 };
 
 static const char* const ServiceTypeText[] {
-  "Audio",
+  "TPEG",
   "Data",
   "FIDC",
   "MSC",

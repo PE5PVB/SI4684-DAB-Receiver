@@ -125,17 +125,16 @@ unsigned long rttickerhold;
 unsigned long TuningTimer;
 unsigned long VolumeTimer;
 
-TFT_eSprite RadiotextSprite = TFT_eSprite(&tft);
+TFT_eSprite OneLineSprite = TFT_eSprite(&tft);
 TFT_eSprite SignalSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
-TFT_eSprite PSSprite = TFT_eSprite(&tft);
+TFT_eSprite OneBigLineSprite = TFT_eSprite(&tft);
 TFT_eSprite PTYSprite = TFT_eSprite(&tft);
 TFT_eSprite ProtectionBitrateSprite = TFT_eSprite(&tft);
 TFT_eSprite EIDSIDSprite = TFT_eSprite(&tft);
 TFT_eSprite ModeSprite = TFT_eSprite(&tft);
 TFT_eSprite ClockSprite = TFT_eSprite(&tft);
 TFT_eSprite DateSprite = TFT_eSprite(&tft);
-TFT_eSprite SelectorSprite = TFT_eSprite(&tft);
 
 WiFiConnect wc;
 WiFiServer Server(7373);
@@ -210,10 +209,9 @@ void setup(void) {
   tft.setSwapBytes(true);
   tft.fillScreen(BackgroundColor);
 
-  RadiotextSprite.createSprite(308, 18);
-  RadiotextSprite.loadFont(FONT16);
-  RadiotextSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-  RadiotextSprite.setSwapBytes(true);
+  OneLineSprite.createSprite(308, 20);
+  OneLineSprite.loadFont(FONT16);
+  OneLineSprite.setSwapBytes(true);
 
   VolumeSprite.createSprite(240, 50);
   VolumeSprite.setTextDatum(TC_DATUM);
@@ -225,11 +223,11 @@ void setup(void) {
   SignalSprite.setTextDatum(TR_DATUM);
   SignalSprite.loadFont(FONT16);
 
-  PSSprite.createSprite(270, 30);
-  PSSprite.setTextDatum(TC_DATUM);
-  PSSprite.loadFont(FONT28);
-  PSSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-  PSSprite.setSwapBytes(true);
+  OneBigLineSprite.createSprite(270, 30);
+  OneBigLineSprite.setTextDatum(TC_DATUM);
+  OneBigLineSprite.loadFont(FONT28);
+  OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+  OneBigLineSprite.setSwapBytes(true);
 
   PTYSprite.createSprite(150, 17);
   PTYSprite.setTextDatum(TC_DATUM);
@@ -265,9 +263,6 @@ void setup(void) {
   ModeSprite.setTextDatum(TC_DATUM);
   ModeSprite.loadFont(FONT16);
   ModeSprite.setSwapBytes(true);
-
-  SelectorSprite.createSprite(303, 20);
-  SelectorSprite.setSwapBytes(true);
 
   if (digitalRead(SLBUTTON) == LOW && digitalRead(ROTARY_BUTTON) == HIGH) {
     if (rotarymode == 0) rotarymode = 1; else rotarymode = 0;
@@ -468,7 +463,7 @@ void DABSelectService(bool dir) {
   if (radio.numberofservices > 0) {
     if (dir) {
       if (radio.ServiceIndex < (radio.numberofservices - 1)) {
-        if (radio.ServiceStart) radio.ServiceIndex++;
+        radio.ServiceIndex++;
       } else {
         radio.ServiceIndex = 0;
       }
@@ -479,9 +474,9 @@ void DABSelectService(bool dir) {
         radio.ServiceIndex = radio.numberofservices - 1;
       }
     }
-    radio.setService(radio.ServiceIndex);
   }
   while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && radio.service[radio.ServiceIndex].ServiceType != 0x04 && radio.service[radio.ServiceIndex].ServiceType != 0x05) DABSelectService(dir);
+  radio.setService(radio.ServiceIndex);
   radio.ServiceStart = true;
   store = true;
 }
@@ -654,6 +649,7 @@ void KeyUp(void) {
   if (SlideShowView) SlideShowButtonPress();
   if (!menu) {
     if (!ChannelListView) {
+      if (ShowServiceInformation) BuildDisplay();
       switch (tunemode) {
         case TUNE_MAN:
           dabfreq++;
@@ -707,7 +703,8 @@ void KeyUp(void) {
         y_old = 25;
       }
 
-      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y_old)), 309, 21, 5, BackgroundColor);
+      ShowOneLine(20 * (radio.ServiceIndex - y_old), radio.ServiceIndex, false);
+
       if (radio.numberofservices > 0) DABSelectService(1);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -721,7 +718,7 @@ void KeyUp(void) {
       if (y_old != y) {
         BuildChannelList();
       } else {
-        tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
+        ShowOneLine(20 * (radio.ServiceIndex - y), radio.ServiceIndex, true);
       }
     }
   } else {
@@ -737,6 +734,7 @@ void KeyDown(void) {
   if (SlideShowView) SlideShowButtonPress();
   if (!menu) {
     if (!ChannelListView) {
+      if (ShowServiceInformation) BuildDisplay();
       switch (tunemode) {
         case TUNE_MAN:
           dabfreq--;
@@ -790,7 +788,8 @@ void KeyDown(void) {
         y_old = 25;
       }
 
-      tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y_old)), 309, 21, 5, BackgroundColor);
+      ShowOneLine(20 * (radio.ServiceIndex - y_old), radio.ServiceIndex, false);
+
       if (radio.numberofservices > 0) DABSelectService(0);
 
       if (radio.ServiceIndex > 8 && radio.ServiceIndex < 17) {
@@ -804,7 +803,7 @@ void KeyDown(void) {
       if (y_old != y) {
         BuildChannelList();
       } else {
-        tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
+        ShowOneLine(20 * (radio.ServiceIndex - y), radio.ServiceIndex, true);
       }
     }
   } else {

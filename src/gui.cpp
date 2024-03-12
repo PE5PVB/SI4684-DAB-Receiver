@@ -151,28 +151,28 @@ void ShowServiceInfo(void) {
   displayreset = true;
   tft.pushImage (0, 0, 320, 240, serviceinfobackground);
   tftPrint(0, myLanguage[language][27], 155, 4, ActiveColor, ActiveColorSmooth, 28);
-  tftPrint(-1, myLanguage[language][28], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][36], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][29], 8, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][30], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][31], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][32], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][33], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][34], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][35], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][28], 8, 36, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][36], 8, 56, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][29], 8, 76, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][30], 8, 96, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][31], 8, 116, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][32], 8, 136, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][33], 8, 156, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][34], 8, 176, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, myLanguage[language][35], 8, 196, ActiveColor, ActiveColorSmooth, 16);
 
-  tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 166, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(unitString[unit]) + "  MER:", 193, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, "dB", 281, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 166, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 166, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 166, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, ProtectionText[radio.protectionlevel], 166, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 166, 36, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(unitString[unit]) + "  MER:", 193, 56, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, "dB", 281, 56, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 166, 76, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 166, 96, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 166, 116, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, ProtectionText[radio.protectionlevel], 166, 136, PrimaryColor, PrimaryColorSmooth, 16);
   String bitrateString = String(radio.samplerate);
   bitrateString = bitrateString.substring(0, 2) + "." + bitrateString.substring(2);
-  tftPrint(-1, bitrateString + " Hz", 166, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(radio.bitrate, DEC) + " kb/s", 166, ITEM8 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 166, ITEM9 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, bitrateString + " Hz", 166, 156, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(radio.bitrate, DEC) + " kb/s", 166, 176, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 166, 196, PrimaryColor, PrimaryColorSmooth, 16);
 }
 
 void BuildChannelList(void) {
@@ -209,18 +209,105 @@ void BuildChannelList(void) {
     }
   }
 
-
-  tft.drawRoundRect(6, 35 + (20 * (radio.ServiceIndex - y)), 309, 21, 5, ActiveColor);
-
   for (byte i = y; i < radio.numberofservices; i++) {
-    tftPrint(-1, String(radio.service[i].CompID & 0xFF, DEC), 13, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
-    String serviceIDString = String(radio.service[i].ServiceID & 0xFFFF, HEX);
+    ShowOneLine(20 * (i - y), i, (radio.ServiceIndex - y == i - y ? true : false));
+    if (i - y == 8) i = 254;
+  }
+}
+
+void ShowOneLine(byte position, byte item, bool selected) {
+  if (ChannelListView) {
+    OneLineSprite.pushImage (-8, -position - 35, 320, 240, servicelistbackground);
+    if (selected) OneLineSprite.pushImage(0, 0, 304, 20, selector);
+
+    OneLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    OneLineSprite.setTextDatum(TL_DATUM);
+    OneLineSprite.drawString(String(radio.service[item].CompID & 0xFF, DEC), 12, 3);
+
+    String serviceIDString = String(radio.service[item].ServiceID & 0xFFFF, HEX);
     while (serviceIDString.length() < 4) serviceIDString = "0" + serviceIDString;
     serviceIDString.toUpperCase();
-    tftPrint(0, serviceIDString, 62, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
-    tftPrint(-1, String(radio.ASCII(radio.service[i].Label)), 90, 38 + (20 * (i - y)), PrimaryColor, PrimaryColorSmooth, 16);
-    tftPrint(0, ServiceTypeText[radio.service[i].ServiceType], 290, 38 + (20 * (i - y)), SecondaryColor, SecondaryColorSmooth, 16);
-    if (i - y == 8) i = 254;
+    OneLineSprite.setTextDatum(TC_DATUM);
+    OneLineSprite.drawString(serviceIDString, 56, 3);
+
+    OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    OneLineSprite.setTextDatum(TL_DATUM);
+    OneLineSprite.drawString(String(radio.ASCII(radio.service[item].Label)), 84, 3);
+
+    OneLineSprite.setTextDatum(TC_DATUM);
+    OneLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+    OneLineSprite.drawString(ServiceTypeText[radio.service[item].ServiceType], 282, 3);
+    OneLineSprite.pushSprite(8, 35 + position);
+  } else if (menu) {
+    OneLineSprite.pushImage (-8, -position - 32, 320, 240, configurationbackground);
+    if (selected) OneLineSprite.pushImage(0, 0, 304, 20, selector);
+
+    OneLineSprite.setTextDatum(TL_DATUM);
+    OneLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+    switch (item) {
+      case 0:
+        OneLineSprite.drawString(myLanguage[language][12], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString(myLanguage[language][0], 300, 3);
+        break;
+
+      case 1:
+        OneLineSprite.drawString(myLanguage[language][13], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.drawString("%", 300, 3);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString(String(ContrastSet, DEC), 270, 3);
+        break;
+
+      case 2:
+        OneLineSprite.drawString(myLanguage[language][14], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString(Theme[CurrentTheme], 300, 3);
+        break;
+
+      case 3:
+        OneLineSprite.drawString(myLanguage[language][15], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
+        break;
+
+      case 4:
+        OneLineSprite.drawString(myLanguage[language][16], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString(unitString[unit], 300, 3);
+        break;
+
+      case 5:
+        OneLineSprite.drawString(myLanguage[language][25], 6, 3);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);		
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.drawString((tot != 0 ? String(tot) : ""), 270, 3);		
+        if (tot != 0) OneLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+        OneLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
+        break;
+
+      case 6:
+        OneLineSprite.drawString((wifi ? String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()) : myLanguage[language][17]), 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
+        break;
+
+      case 7:
+        OneLineSprite.drawString(myLanguage[language][18], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        break;
+
+      case 8:
+        OneLineSprite.drawString(myLanguage[language][81], 6, 3);
+        OneLineSprite.setTextDatum(TR_DATUM);
+        break;
+    }
+    OneLineSprite.pushSprite(8, 32 + position);
   }
 }
 
@@ -232,27 +319,16 @@ void BuildMenu(void) {
   tft.pushImage (0, 0, 320, 240, configurationbackground);
   tftPrint(0, myLanguage[language][20], 155, 4, PrimaryColor, PrimaryColorSmooth, 28);
   tftPrint(0, myLanguage[language][19], 155, 222, SecondaryColor, SecondaryColorSmooth, 16);
-  tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
 
-  tftPrint(-1, myLanguage[language][12], 8, ITEM1 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][13], 8, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][14], 8, ITEM3 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][15], 8, ITEM4 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][16], 8, ITEM5 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][25], 8, ITEM6 + 6, ActiveColor, ActiveColorSmooth, 16);
-  if (wifi) tftPrint(-1, String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()), 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16); else tftPrint(-1, myLanguage[language][17], 8, ITEM7 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][18], 8, ITEM8 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(-1, myLanguage[language][81], 8, ITEM9 + 6, ActiveColor, ActiveColorSmooth, 16);
-
-  tftPrint(1, myLanguage[language][0], 310, ITEM1 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(1, "%", 310, ITEM2 + 6, ActiveColor, ActiveColorSmooth, 16);
-  tftPrint(1, String(ContrastSet, DEC), 270, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(1, Theme[CurrentTheme], 310, ITEM3 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (autoslideshow) tftPrint(1, myLanguage[language][23], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM4 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(1, unitString[unit], 310, ITEM5 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (tot != 0) tftPrint(1, String(tot), 270, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (tot != 0) tftPrint(1, myLanguage[language][26], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM6 + 6, PrimaryColor, PrimaryColorSmooth, 16);
-  if (wifi) tftPrint(1, myLanguage[language][23], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16); else tftPrint(1, myLanguage[language][24], 310, ITEM7 + 6, PrimaryColor, PrimaryColorSmooth, 16);
+  ShowOneLine(ITEM1, 0, (menuoption == ITEM1 ? true : false));
+  ShowOneLine(ITEM2, 1, (menuoption == ITEM2 ? true : false));
+  ShowOneLine(ITEM3, 2, (menuoption == ITEM3 ? true : false));
+  ShowOneLine(ITEM4, 3, (menuoption == ITEM4 ? true : false));
+  ShowOneLine(ITEM5, 4, (menuoption == ITEM5 ? true : false));
+  ShowOneLine(ITEM6, 5, (menuoption == ITEM6 ? true : false));
+  ShowOneLine(ITEM7, 6, (menuoption == ITEM7 ? true : false));
+  ShowOneLine(ITEM8, 7, (menuoption == ITEM8 ? true : false));
+  ShowOneLine(ITEM9, 8, (menuoption == ITEM9 ? true : false));
 }
 
 void BuildDisplay(void) {
@@ -291,28 +367,35 @@ void BuildDisplay(void) {
 
 void MenuUp(void) {
   if (!menuopen) {
-    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+    ShowOneLine(menuoption, menuitem, false);
     menuoption += ITEM_GAP;
     menuitem++;
     if (menuitem > 8) {
       menuitem = 0;
       menuoption = ITEM1;
     }
-    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
+    ShowOneLine(menuoption, menuitem, true);
   } else {
+    OneBigLineSprite.pushImage(-11, -88, 292, 170, popupbackground);
+    OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    OneBigLineSprite.setTextDatum(TC_DATUM);
+
     switch (menuoption) {
       case ITEM1:
-        tftPrint(0, myLanguage[language][0], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         language ++;
         if (language == (sizeof (myLanguage) / sizeof (myLanguage[0]))) language = 0;
-        tftPrint(0, myLanguage[language][0], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
         break;
 
       case ITEM2:
-        tftPrint(1, String(ContrastSet, DEC), 155, 118, BackgroundColor3, BackgroundColor3, 28);
         ContrastSet ++;
         if (ContrastSet > 100) ContrastSet = 1;
-        tftPrint(1, String(ContrastSet, DEC), 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.setTextDatum(TL_DATUM);
+        OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+        OneBigLineSprite.drawString("%", 155, 2);
+        OneBigLineSprite.setTextDatum(TR_DATUM);
+        OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
         analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
         break;
 
@@ -320,28 +403,24 @@ void MenuUp(void) {
         CurrentTheme ++;
         if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = 0;
         doTheme();
-        tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
-        tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
-        tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
-        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        tft.pushImage (13, 30, 292, 170, popupbackground);
+        Infoboxprint(myLanguage[language][14]);
+        OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
         break;
 
       case ITEM4:
-        if (autoslideshow) tftPrint(0, myLanguage[language][23], 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         if (autoslideshow) autoslideshow = false; else autoslideshow = true;
-        if (autoslideshow) tftPrint(0, myLanguage[language][23], 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
 
       case ITEM5:
-        tftPrint(0, unitString[unit], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         unit ++;
         if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1) unit = 0;
-        tftPrint(0, unitString[unit], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(unitString[unit], 135, 2);
         break;
 
       case ITEM6:
-        if (tot != 0) tftPrint(-1, myLanguage[language][26], 170, 118, BackgroundColor3, BackgroundColor3, 28);
-        if (tot != 0) tftPrint(1, String(tot), 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         switch (tot) {
           case 0: tot = 15; break;
           case 15: tot = 30; break;
@@ -349,43 +428,58 @@ void MenuUp(void) {
           case 60: tot = 90; break;
           default: tot = 0; break;
         }
-        if (tot != 0) tftPrint(-1, myLanguage[language][26], 170, 118, ActiveColor, ActiveColorSmooth, 28);
-        if (tot != 0) tftPrint(1, String(tot), 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        if (tot != 0) {
+          OneBigLineSprite.setTextDatum(TR_DATUM);
+          OneBigLineSprite.drawString(String(tot), 135, 2);
+          OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+          OneBigLineSprite.setTextDatum(TL_DATUM);
+          OneBigLineSprite.drawString(myLanguage[language][26], 155, 2);
+        } else {
+          OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
+        }
         break;
 
       case ITEM7:
-        if (wifi) tftPrint(0, myLanguage[language][23], 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         if (wifi) wifi = false; else wifi = true;
-        if (wifi) tftPrint(0, myLanguage[language][23], 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
     }
+    OneBigLineSprite.pushSprite(24, 118);
   }
 }
 
 void MenuDown(void) {
   if (!menuopen) {
-    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, BackgroundColor);
+    ShowOneLine(menuoption, menuitem, false);
     menuoption -= ITEM_GAP;
     menuitem--;
     if (menuitem > 7) {
       menuoption = ITEM9;
       menuitem = 8;
     }
-    tft.drawRoundRect(3, menuoption + 3, 315, 21, 5, ActiveColor);
+    ShowOneLine(menuoption, menuitem, true);
   } else {
+    OneBigLineSprite.pushImage(-11, -88, 292, 170, popupbackground);
+    OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    OneBigLineSprite.setTextDatum(TC_DATUM);
+
     switch (menuoption) {
       case ITEM1:
-        tftPrint(0, myLanguage[language][0], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         language --;
         if (language > (sizeof (myLanguage) / sizeof (myLanguage[0]))) language = (sizeof (myLanguage) / sizeof (myLanguage[0])) - 1;
-        tftPrint(0, myLanguage[language][0], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
         break;
 
       case ITEM2:
-        tftPrint(1, String(ContrastSet, DEC), 155, 118, BackgroundColor3, BackgroundColor3, 28);
         ContrastSet --;
         if (ContrastSet < 1) ContrastSet = 100;
-        tftPrint(1, String(ContrastSet, DEC), 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.setTextDatum(TL_DATUM);
+        OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+        OneBigLineSprite.drawString("%", 155, 2);
+
+        OneBigLineSprite.setTextDatum(TR_DATUM);
+        OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
         analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
         break;
 
@@ -393,28 +487,24 @@ void MenuDown(void) {
         CurrentTheme --;
         if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = sizeof(Theme) / sizeof(Theme[0]) - 1;
         doTheme();
-        tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
-        tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
-        tftPrint(0, myLanguage[language][14], 155, 78, ActiveColor, ActiveColorSmooth, 28);
-        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        tft.pushImage (13, 30, 292, 170, popupbackground);
+        Infoboxprint(myLanguage[language][14]);
+        OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
         break;
 
       case ITEM4:
-        if (autoslideshow) tftPrint(0, myLanguage[language][23], 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         if (autoslideshow) autoslideshow = false; else autoslideshow = true;
-        if (autoslideshow) tftPrint(0, myLanguage[language][23], 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
 
       case ITEM5:
-        tftPrint(0, unitString[unit], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         unit --;
         if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1) unit = sizeof(unitString) / sizeof(unitString[0]) - 1;
-        tftPrint(0, unitString[unit], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(unitString[unit], 135, 2);
         break;
 
       case ITEM6:
-        if (tot != 0) tftPrint(-1, myLanguage[language][26], 170, 118, BackgroundColor3, BackgroundColor3, 28);
-        if (tot != 0) tftPrint(1, String(tot), 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         switch (tot) {
           case 15: tot = 0; break;
           case 30: tot = 15; break;
@@ -422,60 +512,82 @@ void MenuDown(void) {
           case 90: tot = 60; break;
           default: tot = 90; break;
         }
-        if (tot != 0) tftPrint(-1, myLanguage[language][26], 170, 118, ActiveColor, ActiveColorSmooth, 28);
-        if (tot != 0) tftPrint(1, String(tot), 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        if (tot != 0) {
+          OneBigLineSprite.setTextDatum(TR_DATUM);
+          OneBigLineSprite.drawString(String(tot), 135, 2);
+          OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+          OneBigLineSprite.setTextDatum(TL_DATUM);
+          OneBigLineSprite.drawString(myLanguage[language][26], 155, 2);
+        } else {
+          OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
+        }
         break;
 
       case ITEM7:
-        if (wifi) tftPrint(0, myLanguage[language][23], 155, 118, BackgroundColor3, BackgroundColor3, 28); else tftPrint(0, myLanguage[language][24], 155, 118, BackgroundColor3, BackgroundColor3, 28);
         if (wifi) wifi = false; else wifi = true;
-        if (wifi) tftPrint(0, myLanguage[language][23], 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
     }
+    OneBigLineSprite.pushSprite(24, 118);
   }
 }
 
 void DoMenu(void) {
   if (!menuopen) {
-    tft.drawRoundRect(13, 30, 292, 170, 5, ActiveColor);
-    tft.fillRoundRect(15, 32, 288, 166, 5, BackgroundColor3);
+    tft.pushImage (13, 30, 292, 170, popupbackground);
+    OneBigLineSprite.pushImage(-11, -88, 292, 170, popupbackground);
+    OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+    OneBigLineSprite.setTextDatum(TC_DATUM);
     menuopen = true;
+
     switch (menuoption) {
       case ITEM1:
         Infoboxprint(myLanguage[language][12]);
-        tftPrint(0, myLanguage[language][0], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
         break;
 
       case ITEM2:
         Infoboxprint(myLanguage[language][13]);
-        tftPrint(-1, "%", 170, 118, ActiveColor, ActiveColorSmooth, 28);
-        tftPrint(1, String(ContrastSet, DEC), 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.setTextDatum(TL_DATUM);
+        OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+        OneBigLineSprite.drawString("%", 155, 2);
+
+        OneBigLineSprite.setTextDatum(TR_DATUM);
+        OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
         break;
 
       case ITEM3:
         Infoboxprint(myLanguage[language][14]);
-        tftPrint(0, Theme[CurrentTheme], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
         break;
 
       case ITEM4:
         Infoboxprint(myLanguage[language][15]);
-        tftPrint(0, (autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
 
       case ITEM5:
         Infoboxprint(myLanguage[language][16]);
-        tftPrint(0, unitString[unit], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString(unitString[unit], 135, 2);
         break;
 
       case ITEM6:
         Infoboxprint(myLanguage[language][25]);
-        if (tot != 0) tftPrint(-1, myLanguage[language][26], 170, 118, ActiveColor, ActiveColorSmooth, 28);
-        if (tot != 0) tftPrint(1, String(tot), 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        if (tot != 0) {
+          OneBigLineSprite.setTextDatum(TR_DATUM);
+          OneBigLineSprite.drawString(String(tot), 135, 2);
+          OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
+          OneBigLineSprite.setTextDatum(TL_DATUM);
+          OneBigLineSprite.drawString(myLanguage[language][26], 155, 2);
+        } else {
+          OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
+        }
         break;
 
       case ITEM7:
         Infoboxprint(myLanguage[language][17]);
-        if (wifi) tftPrint(0, myLanguage[language][23], 155, 118, PrimaryColor, PrimaryColorSmooth, 28); else tftPrint(0, myLanguage[language][24], 155, 118, PrimaryColor, PrimaryColorSmooth, 28);
+        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         break;
 
       case ITEM8: {
@@ -499,6 +611,7 @@ void DoMenu(void) {
         tftPrint(0, "github.com/PE5PVB/SI4684-DAB-Receiver", 155, 175, SecondaryColor, SecondaryColorSmooth, 16);
         break;
     }
+    OneBigLineSprite.pushSprite(24, 118);
   } else {
     menuopen = false;
     if (menuoption == ITEM7) tryWiFi();
@@ -553,34 +666,36 @@ void ShowPTY(void) {
 
 void ShowRT(void) {
   if (ShowServiceInformation)  {
-    RadiotextSprite.pushImage(-6, -220, 320, 240, serviceinfobackground);
+    OneLineSprite.pushImage(-6, -220, 320, 240, serviceinfobackground);
   } else if (ChannelListView) {
-    RadiotextSprite.pushImage(-6, -220, 320, 240, servicelistbackground);
+    OneLineSprite.pushImage(-6, -220, 320, 240, servicelistbackground);
   } else {
-    RadiotextSprite.pushImage(-6, -220, 320, 240, Background);
+    OneLineSprite.pushImage(-6, -220, 320, 240, Background);
   }
+
+  OneLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
   if (radio.ASCII(radio.ServiceData).length() > 0) {
     RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData));
     if (RTWidth < 300) {
       xPos = 0;
-      RadiotextSprite.setTextDatum(TC_DATUM);
-      RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
-      RadiotextSprite.pushSprite(6, 219);
+      OneLineSprite.setTextDatum(TC_DATUM);
+      OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
+      OneLineSprite.pushSprite(6, 219);
     } else {
       if (millis() - rtticker >= 20) {
         xPos --;
         rttickerhold = millis();
 
         if (xPos < -RTWidth - 50) xPos = 0;
-        RadiotextSprite.setTextDatum(TL_DATUM);
-        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
-        RadiotextSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
-        RadiotextSprite.pushSprite(6, 219);
+        OneLineSprite.setTextDatum(TL_DATUM);
+        OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
+        OneLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
+        OneLineSprite.pushSprite(6, 219);
         rtticker = millis();
       }
     }
   } else {
-    RadiotextSprite.pushSprite(6, 220);
+    OneLineSprite.pushSprite(6, 220);
   }
   if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
   RTold = radio.ASCII(radio.ServiceData);
@@ -622,9 +737,11 @@ void ShowPS(void) {
 
   if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
     if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))).length() != 0)) {
-      PSSprite.pushImage(-44, -185, 320, 240, Background);
-      PSSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 2);
-      PSSprite.pushSprite(44, 185);
+      OneBigLineSprite.pushImage(-44, -185, 320, 240, Background);
+      OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
+      OneBigLineSprite.setTextDatum(TC_DATUM);
+      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 2);
+      OneBigLineSprite.pushSprite(44, 185);
     }
     PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
   }
@@ -940,12 +1057,12 @@ void ShowSignalLevel(void) {
   } else {
     String SignalLevelString = String(String(SignalLevelprint / 10)) + "." + String(abs(SignalLevelprint % 10));
     if ((SignalLevelString != SignalLeveloldString && !setvolume) || displayreset) {
-      tftReplace(1, SignalLeveloldString, SignalLevelString, 191, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
+      tftReplace(1, SignalLeveloldString, SignalLevelString, 191, 56, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
       SignalLeveloldString = SignalLevelString;
     }
 
     if (((CNRold != CNR) && !setvolume) || displayreset) {
-      tftReplace(1, String(CNRold), String(CNR), 279, ITEM2 + 6, PrimaryColor, PrimaryColorSmooth, BackgroundColor, 16);
+      tftReplace(1, String(CNRold), String(CNR), 279, 56, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
       CNRold = CNR;
     }
   }
