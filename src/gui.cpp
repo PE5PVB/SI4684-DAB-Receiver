@@ -385,6 +385,7 @@ void MenuUp(void) {
         language ++;
         if (language == (sizeof (myLanguage) / sizeof (myLanguage[0]))) language = 0;
         OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM2:
@@ -397,6 +398,7 @@ void MenuUp(void) {
         OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
         analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM3:
@@ -407,17 +409,20 @@ void MenuUp(void) {
         Infoboxprint(myLanguage[language][14]);
         OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM4:
         if (autoslideshow) autoslideshow = false; else autoslideshow = true;
         OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM5:
         unit ++;
         if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1) unit = 0;
         OneBigLineSprite.drawString(unitString[unit], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM6:
@@ -437,14 +442,15 @@ void MenuUp(void) {
         } else {
           OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
         }
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM7:
         if (wifi) wifi = false; else wifi = true;
         OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
     }
-    OneBigLineSprite.pushSprite(24, 118);
   }
 }
 
@@ -468,6 +474,7 @@ void MenuDown(void) {
         language --;
         if (language > (sizeof (myLanguage) / sizeof (myLanguage[0]))) language = (sizeof (myLanguage) / sizeof (myLanguage[0])) - 1;
         OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM2:
@@ -481,6 +488,7 @@ void MenuDown(void) {
         OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
         analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM3:
@@ -491,17 +499,20 @@ void MenuDown(void) {
         Infoboxprint(myLanguage[language][14]);
         OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM4:
         if (autoslideshow) autoslideshow = false; else autoslideshow = true;
         OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM5:
         unit --;
         if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1) unit = sizeof(unitString) / sizeof(unitString[0]) - 1;
         OneBigLineSprite.drawString(unitString[unit], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM6:
@@ -521,14 +532,15 @@ void MenuDown(void) {
         } else {
           OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
         }
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM7:
         if (wifi) wifi = false; else wifi = true;
         OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
     }
-    OneBigLineSprite.pushSprite(24, 118);
   }
 }
 
@@ -544,6 +556,7 @@ void DoMenu(void) {
       case ITEM1:
         Infoboxprint(myLanguage[language][12]);
         OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM2:
@@ -555,21 +568,25 @@ void DoMenu(void) {
         OneBigLineSprite.setTextDatum(TR_DATUM);
         OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         OneBigLineSprite.drawString(String(ContrastSet, DEC), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM3:
         Infoboxprint(myLanguage[language][14]);
         OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM4:
         Infoboxprint(myLanguage[language][15]);
         OneBigLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM5:
         Infoboxprint(myLanguage[language][16]);
         OneBigLineSprite.drawString(unitString[unit], 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM6:
@@ -583,11 +600,13 @@ void DoMenu(void) {
         } else {
           OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
         }
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM7:
         Infoboxprint(myLanguage[language][17]);
         OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
         break;
 
       case ITEM8: {
@@ -611,7 +630,6 @@ void DoMenu(void) {
         tftPrint(0, "github.com/PE5PVB/SI4684-DAB-Receiver", 155, 175, SecondaryColor, SecondaryColorSmooth, 16);
         break;
     }
-    OneBigLineSprite.pushSprite(24, 118);
   } else {
     menuopen = false;
     if (menuoption == ITEM7) tryWiFi();
