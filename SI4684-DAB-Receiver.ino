@@ -188,6 +188,7 @@ void setup(void) {
   Headphones.SetVolume(volume);
 
   tft.init();
+  tft.initDMA();
   doTheme();
   if (displayflip == 0) tft.setRotation(3); else tft.setRotation(1);
 
