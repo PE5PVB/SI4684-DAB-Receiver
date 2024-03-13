@@ -220,7 +220,7 @@ bool DAB::begin(uint8_t SSpin) {
     Set_Property(0x0200, 0x8000);                                            // Set properties
     Set_Property(0x0202, 0x1600);
     Set_Property(0x0800, 0x0003);
-    Set_Property(0x1710, 0xF8A0);
+    Set_Property(0x1710, 0xF7A0);
     Set_Property(0x1711, 0x01E0);
     Set_Property(0x8100, 0x0001);
     Set_Property(0x8101, 0x0064);
