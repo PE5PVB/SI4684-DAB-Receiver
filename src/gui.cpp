@@ -352,8 +352,6 @@ void BuildDisplay(void) {
   tftPrint(-1, "Q", 122, 90, ActiveColor, ActiveColorSmooth, 16);
   tftPrint(-1, "S", 122, 127, SecondaryColor, SecondaryColorSmooth, 16);
   tftPrint(1, "ECC", 110, 90, ActiveColor, ActiveColorSmooth, 16);
-  tft.pushImage (80, 5, 19, 19, ClockSymbol);
-  tft.pushImage (150, 5, 19, 19, DateSymbol);
 
   for (byte segments = 0; segments < 13; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 8 ? BarInsignificantColor : BarSignificantColor));
   tft.drawLine(134, 138, 302, 138, ActiveColor);
