@@ -125,6 +125,8 @@ unsigned long rttickerhold;
 unsigned long TuningTimer;
 unsigned long VolumeTimer;
 
+static const int8_t enc_states[]  = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+
 TFT_eSprite FullLineSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
 TFT_eSprite OneBigLineSprite = TFT_eSprite(&tft);
@@ -432,23 +434,23 @@ void doRecovery(void) {
 void DABSelectService(bool dir) {
   if (radio.numberofservices > 0) {
     if (dir) {
-      if (radio.ServiceIndex < (radio.numberofservices - 1)) {
-        radio.ServiceIndex++;
-      } else {
-        radio.ServiceIndex = 0;
-      }
+      radio.ServiceIndex = (radio.ServiceIndex + 1) % radio.numberofservices;
     } else {
-      if (radio.ServiceIndex > 0) {
-        radio.ServiceIndex--;
+      radio.ServiceIndex = (radio.ServiceIndex == 0) ? (radio.numberofservices - 1) : (radio.ServiceIndex - 1);
+    }
+
+    while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && radio.service[radio.ServiceIndex].ServiceType != 0x04 && radio.service[radio.ServiceIndex].ServiceType != 0x05) {
+      if (dir) {
+        radio.ServiceIndex = (radio.ServiceIndex + 1) % radio.numberofservices;
       } else {
-        radio.ServiceIndex = radio.numberofservices - 1;
+        radio.ServiceIndex = (radio.ServiceIndex == 0) ? (radio.numberofservices - 1) : (radio.ServiceIndex - 1);
       }
     }
+
+    radio.setService(radio.ServiceIndex);
+    radio.ServiceStart = true;
+    store = true;
   }
-  while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && radio.service[radio.ServiceIndex].ServiceType != 0x04 && radio.service[radio.ServiceIndex].ServiceType != 0x05) DABSelectService(dir);
-  radio.setService(radio.ServiceIndex);
-  radio.ServiceStart = true;
-  store = true;
 }
 
 void StoreFrequency(void) {
@@ -864,10 +866,8 @@ void Seek(bool mode) {
 void read_encoder(void) {
   static uint8_t old_AB = 3;
   static int8_t encval = 0;
-  static const int8_t enc_states[]  = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
 
   old_AB <<= 2;
-
   if (digitalRead(ROTARY_PIN_A)) old_AB |= 0x02;
   if (digitalRead(ROTARY_PIN_B)) old_AB |= 0x01;
   encval += enc_states[( old_AB & 0x0f )];
@@ -884,10 +884,8 @@ void read_encoder(void) {
 void read_encoder2(void) {
   static uint8_t old_AB = 3;
   static int8_t encval = 0;
-  static const int8_t enc_states[]  = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
 
   old_AB <<= 2;
-
   if (digitalRead(ROTARY_PIN_2A)) old_AB |= 0x02;
   if (digitalRead(ROTARY_PIN_2B)) old_AB |= 0x01;
   encval += enc_states[( old_AB & 0x0f )];
