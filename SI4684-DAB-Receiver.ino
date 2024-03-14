@@ -873,10 +873,10 @@ void read_encoder(void) {
   if (digitalRead(ROTARY_PIN_B)) old_AB |= 0x01;
   encval += enc_states[( old_AB & 0x0f )];
 
-  if (encval > 2) {
+  if (encval > 3) {
     if (rotarymode) rotary = -1; else rotary = 1;
     encval = 0;
-  } else if (encval < -2) {
+  } else if (encval < -3) {
     if (rotarymode) rotary = 1; else rotary = -1;
     encval = 0;
   }
@@ -891,10 +891,10 @@ void read_encoder2(void) {
   if (digitalRead(ROTARY_PIN_2B)) old_AB |= 0x01;
   encval += enc_states[( old_AB & 0x0f )];
 
-  if (encval > 2) {
+  if (encval > 3) {
     if (rotarymode) rotary2 = -1; else rotary2 = 1;
     encval = 0;
-  } else if (encval < -2) {
+  } else if (encval < -3) {
     if (rotarymode) rotary2 = 1; else rotary2 = -1;
     encval = 0;
   }
