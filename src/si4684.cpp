@@ -258,9 +258,17 @@ void DAB::EnsembleInfo(void) {
       uint8_t numberofcomponents;
 
       numberofservices = SPIbuffer[9];
+      if (numberofservices > sizeof(service) / sizeof(DABService)) {
+        clearData();                                                        // Handle overflow when signal is crappy
+      }
+
       uint16_t offset = 13;
 
       for (uint8_t i = 0; i < numberofservices; i++) {
+        if (i >= sizeof(service) / sizeof(DABService)) {
+          clearData();                                                      // Handle overflow when signal is crappy
+        }
+
         serviceID = SPIbuffer[offset + 3];
         serviceID <<= 8;
         serviceID += SPIbuffer[offset + 2];
@@ -300,13 +308,15 @@ void DAB::EnsembleInfo(void) {
       }
 
 
-      qsort(service, numberofservices, sizeof(DABService), compareCompID);
+      if (numberofservices > 0) {
+        qsort(service, numberofservices, sizeof(DABService), compareCompID);
 
-      if (CurrentServiceID != service[ServiceIndex].ServiceID) {
-        for (byte x = 0; x < numberofservices; x++) {
-          if (CurrentServiceID == service[x].ServiceID) {
-            ServiceIndex = x;
-            break;
+        if (CurrentServiceID != service[ServiceIndex].ServiceID) {
+          for (byte x = 0; x < numberofservices; x++) {
+            if (CurrentServiceID == service[x].ServiceID) {
+              ServiceIndex = x;
+              break;
+            }
           }
         }
       }
@@ -335,7 +345,10 @@ void DAB::EnsembleInfo(void) {
           }
         }
 
-        for (uint8_t i = 0; i < 16; i++) EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
+        for (uint8_t i = 0; i < 16 && SPIbuffer[7 + i] != '\0'; i++) {
+          EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
+        }
+        EnsembleLabel[16] = '\0';
 
         for (int8_t i = 15; i >= 0; i--) {
           if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
