@@ -53,7 +53,6 @@ byte displayflip;
 byte eccold;
 byte ficold;
 byte language;
-byte memorydabchannel[EE_PRESETS_CNT];
 byte memorypos;
 byte memoryposold;
 byte memoryposstatus;
@@ -66,7 +65,6 @@ byte tunemode;
 byte unit;
 byte volume;
 char _serviceName[17];
-char memorydabname[EE_PRESETS_CNT][17];
 const uint8_t* currentFont = nullptr;
 int ActiveColor;
 int ActiveColorSmooth;
@@ -115,7 +113,6 @@ String SIDold;
 String SignalLeveloldString;
 uint16_t BitrateOld;
 uint32_t _serviceID;
-uint32_t memorydabservice[EE_PRESETS_CNT];
 uint8_t freq = 0;
 uint8_t service = 0;
 unsigned long tottimer;
@@ -126,6 +123,12 @@ unsigned long TuningTimer;
 unsigned long VolumeTimer;
 
 static const int8_t enc_states[]  = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
+
+typedef struct _Memory {
+  byte      Channel;
+  uint32_t  ServiceID;
+  char      Label[17];
+} DABMemory;
 
 TFT_eSprite FullLineSprite = TFT_eSprite(&tft);
 TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
@@ -138,6 +141,8 @@ TFT_eSprite ShortSprite = TFT_eSprite(&tft);
 WiFiConnect wc;
 WiFiServer Server(7373);
 WiFiClient RemoteClient;
+
+DABMemory memory[EE_PRESETS_CNT];
 
 void setup(void) {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
@@ -174,13 +179,14 @@ void setup(void) {
   CurrentTheme = EEPROM.readByte(EE_BYTE_THEME);
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
-    memorydabchannel[i] = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
-    EEPROM.get((i * 8) + EE_PRESETS_SERVICEID_START, memorydabservice[i]);
+    memory[i].Channel = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
+    EEPROM.get((i * 8) + EE_PRESETS_SERVICEID_START, memory[i].ServiceID);
     for (int y = 0; y < 16; y++) {
-      memorydabname[i][y] = EEPROM.readByte((i * 17) + y + EE_PRESETS_NAME_START);
+      memory[i].Label[y] = EEPROM.readByte((i * 17) + y + EE_PRESETS_NAME_START);
     }
-    memorydabname[i][16] = '\0';
+    memory[i].Label[16] = '\0';
   }
+
   Headphones.Init();
   delay(50);
   Headphones.SetHiZ(0);
@@ -481,12 +487,12 @@ void ButtonPress(void) {
         for (int x = 0; x < 16; x++) {
           char character = radio.service[radio.ServiceIndex].Label[x];
           EEPROM.writeByte((memorypos * 17) + x + EE_PRESETS_NAME_START, character);
-          memorydabname[memorypos][x] = character;
+          memory[memorypos].Label[x] = character;
         }
         EEPROM.writeByte((memorypos * 17) + 16 + EE_PRESETS_NAME_START, '\0');
-        memorydabname[memorypos][16] = '\0';
-        memorydabchannel[memorypos] = dabfreq;
-        memorydabservice[memorypos] = radio.service[radio.ServiceIndex].ServiceID;
+        memory[memorypos].Label[16] = '\0';
+        memory[memorypos].Channel = dabfreq;
+        memory[memorypos].ServiceID = radio.service[radio.ServiceIndex].ServiceID;
         EEPROM.commit();
 
         ShowTuneMode();
@@ -585,12 +591,12 @@ void StandbyButtonPress(void) {
     EEPROM.put((memorypos * 8) + EE_PRESETS_SERVICEID_START, 0);
     for (int x = 0; x < 16; x++) {
       EEPROM.writeByte((memorypos * 17) + x + EE_PRESETS_NAME_START, '\0');
-      memorydabname[memorypos][x] = '\0';
+      memory[memorypos].Label[x] = '\0';
     }
     EEPROM.writeByte((memorypos * 17) + 16 + EE_PRESETS_NAME_START, '\0');
-    memorydabname[memorypos][16] = '\0';
-    memorydabchannel[memorypos] = EE_PRESETS_FREQUENCY;
-    memorydabservice[memorypos] = 0;
+    memory[memorypos].Label[16] = '\0';
+    memory[memorypos].Channel = EE_PRESETS_FREQUENCY;
+    memory[memorypos].ServiceID = 0;
     EEPROM.commit();
     memorystore = false;
     ShowTuneMode();
@@ -816,10 +822,10 @@ void DoMemoryPosTune(void) {
     memoryposstatus = MEM_DARK;
   } else {
     memoryposstatus = MEM_NORMAL;
-    dabfreq = memorydabchannel[memorypos];
-    _serviceID = memorydabservice[memorypos];
+    dabfreq = memory[memorypos].Channel;
+    _serviceID = memory[memorypos].ServiceID;
     for (int i = 0; i < 16; i++) {
-      _serviceName[i] = memorydabname[memorypos][i];
+      _serviceName[i] = memory[memorypos].Label[i];
     }
 
     ShowFreq();
@@ -830,7 +836,7 @@ void DoMemoryPosTune(void) {
 }
 
 bool IsStationEmpty(void) {
-  if (memorydabchannel[memorypos] == EE_PRESETS_FREQUENCY) return true; else return false;
+  if (memory[memorypos].Channel == EE_PRESETS_FREQUENCY) return true; else return false;
 }
 
 void doStandby(void) {
