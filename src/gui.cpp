@@ -1019,7 +1019,8 @@ void ShowMemoryPos(void) {
 void ShowVolume(void) {
   uint8_t segments = map(volume, 0, 63, 0, 93);
   VolumeSprite.pushImage (0, 0, 240, 50, volumebackground);
-  VolumeSprite.fillRect(52, 9, 2 * constrain(segments, 0, 93), 9, BarInsignificantColor);
+  if (segments > 93) segments = 93;
+  VolumeSprite.fillRect(52, 9, 2 * segments, 9, BarInsignificantColor);
   VolumeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
   VolumeSprite.drawString(String(map(volume, 0, 62, 0, 100)), 136, 22);
   VolumeSprite.pushSprite(46, 46);
@@ -1028,6 +1029,7 @@ void ShowVolume(void) {
   EEPROM.commit();
   VolumeTimer = millis();
 }
+
 
 void ShowSignalLevel(void) {
   if (millis() >= rssiTimer + 100) {
@@ -1055,10 +1057,24 @@ void ShowSignalLevel(void) {
       ShortSprite.pushSprite(146, 109);
 
       byte segments = 0;
-      if (SignalLevel > 120) segments = map(SignalLevel, 100, 700, 0, 85);
-      tft.fillRect(134, 129, 2 * constrain(segments, 0, 56), 6, BarInsignificantColor);
-      tft.fillRect(134 + 2 * 56, 129, 2 * (constrain(segments, 56, 85) - 56), 6, BarSignificantColor);
-      tft.fillRect(134 + 2 * constrain(segments, 0, 85), 129, 2 * (85 - constrain(segments, 0, 85)), 6, GreyoutColor);
+      if (SignalLevel > 120) {
+        segments = map(SignalLevel, 100, 700, 0, 85);
+      }
+
+      byte constrainedSegments = segments;
+      byte significantSegments = segments;
+
+      if (constrainedSegments > 85) constrainedSegments = 85;
+      if (significantSegments > 85) significantSegments = 85;
+
+      int length1 = 2 * segments;
+      int length2 = 2 * (significantSegments - 56);
+      int length3 = 2 * (85 - constrainedSegments);
+
+      tft.fillRect(134, 129, length1, 6, BarInsignificantColor);
+      tft.fillRect(134 + 2 * 56, 129, length2, 6, BarSignificantColor);
+      tft.fillRect(134 + 2 * constrainedSegments, 129, length3, 6, GreyoutColor);
+
       SignalLevelold = SignalLevelprint;
     }
 

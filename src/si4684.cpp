@@ -332,10 +332,10 @@ void DAB::EnsembleInfo(void) {
 
       if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
         EnsembleInfoSet = true;
-        EID[0] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 12) & 0xF;
-        EID[1] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 8) & 0xF;
-        EID[2] = (SPIbuffer[5] + (SPIbuffer[6] << 8) >> 4) & 0xF;
-        EID[3] = SPIbuffer[5] + (SPIbuffer[6] << 8) & 0xF;
+        EID[0] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 12) & 0xF;
+        EID[1] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 8) & 0xF;
+        EID[2] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 4) & 0xF;
+        EID[3] = SPIbuffer[5] + ((SPIbuffer[6] << 8) & 0xF);
         EID[4] = '\0';
         for (int i = 0; i < 4; i++) {
           if (EID[i] < 10) {
@@ -479,7 +479,7 @@ void DAB::getServiceData(void) {
 
 
 void DAB::ServiceInfo(void) {
-  for (byte x; x < numberofservices; x++) {
+  for (byte x = 0; x < numberofservices; x++) {
     SPIbuffer[0] = 0xBE;
     SPIbuffer[1] = 0x00;
     SPIbuffer[2] = 0x00;

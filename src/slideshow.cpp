@@ -52,21 +52,21 @@ void ShowSlideShow(void) {
       return;
     }
     int16_t rc = png.open("/slideshow.img",
-    [&pngfile](const char *filename, int32_t *size) -> void * {
+    +[](const char *filename, int32_t *size) -> void * {
       *size = pngfile.size();
       return &pngfile;
     },
-    [&pngfile](void *handle) {
+    +[](void *handle) {
     },
-    [&pngfile](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
+    +[](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
       if (!pngfile || !pngfile.available()) return 0;
       return pngfile.read(buffer, length);
     },
-    [&pngfile](PNGFILE * page, int32_t position) -> int32_t {
+    +[](PNGFILE * page, int32_t position) -> int32_t {
       if (!pngfile || !pngfile.available()) return 0;
       return pngfile.seek(position);
     },
-    [&pngfile, &tft](PNGDRAW * pDraw) {
+    +[](PNGDRAW * pDraw) {
       uint16_t lineBuffer[320];
       png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
       tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
@@ -85,6 +85,6 @@ void ShowSlideShow(void) {
 
   for (int x = 0; x <= ContrastSet; x++) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(10);
+    delay(5);
   }
 }

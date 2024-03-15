@@ -1,5 +1,5 @@
-#ifndef slideshow_h
-#define slideshow_h
+#ifndef SLIDESHOW_H
+#define SLIDESHOW_H
 
 #include "Arduino.h"
 #include <LittleFS.h>
