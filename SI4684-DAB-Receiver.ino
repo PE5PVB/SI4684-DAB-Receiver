@@ -175,7 +175,6 @@ void setup(void) {
   memorypos = EEPROM.readByte(EE_BYTE_MEMORYPOS);
   autoslideshow = EEPROM.readByte(EE_BYTE_AUTOSLIDESHOW);
   tot = EEPROM.readByte(EE_BYTE_TOT);
-  wifi = EEPROM.readByte(EE_BYTE_WIFI);
   CurrentTheme = EEPROM.readByte(EE_BYTE_THEME);
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
