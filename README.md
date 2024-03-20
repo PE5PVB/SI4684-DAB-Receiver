@@ -8,6 +8,15 @@ The version in the repository is an ongoing development. It could and will conta
 Advanced DAB Tuner software for Skyworks SI4684 tuner with ESP32 board and a color LCD\
 More information: https://www.pe5pvb.nl/
 
+# Building instructions
+On Youtube I published a video how to build your own radio.
+
+In English:
+https://www.youtube.com/watch?v=C_xd0h_HTuU
+
+In Dutch:
+https://www.youtube.com/watch?v=wV3G2J327qg
+
 # Libraries
 These are the libraries used for this project:
 - https://github.com/Bodmer/TFT_eSPI
@@ -23,7 +32,14 @@ Use these settings in the TFT_eSPI library:
 #define SPI_FREQUENCY   50000000
 #define SMOOTH_FONT
 ```
-
+# Buttons
+A brief instruction for the buttons:
+- Top encoder: Choose frequency or memory channel
+- Bottom encoder: Choose service or set headphones volume
+- Top button: Short press: Service information, Long press: Stand-by mode.
+- Middle button: Short press: Set mode, Long press: Open menu.
+- Lower button: Toggle Slideshow view.
+  
 ## Contributing
 I'm open for a new ideas in our project. Feel free to share your thoughts in [Discussions](https://github.com/PE5PVB/SI4684-DAB-Receiver/discussions).\
 You can also contribute your own code using [Pull Requests](https://github.com/PE5PVB/SI4684-DAB-Receiver/pulls). We will review it and merge into main branch.
