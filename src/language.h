@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[3][82] PROGMEM = {
+static const char* const myLanguage[4][82] PROGMEM = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -20,7 +20,7 @@ static const char* const myLanguage[3][82] PROGMEM = {
     "Channellist", // 11
     "Language", // 12
     "Brightness", // 13
-    "Thema", // 14
+    "Theme", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
     "WiFi", // 17
@@ -255,7 +255,91 @@ static const char* const myLanguage[3][82] PROGMEM = {
     "ΑΝΑΜΟΝΗ", // 78
     "Ανάπτυξη", // 79
     "Γραφικά", // 80
-    "Περί" // 81
+    "Περί" // 81,
+  },
+  {
+    "Deutsch", // Deutsch
+    "Drehrichtung geändert", // 1
+    "Bitte Taste loslassen", // 2
+    "Bildschirm gedreht", // 3
+    "Analoge Anzeige kalibrieren", // 4
+    "Taste loslassen, wenn bereit..", // 5
+    "Encoder auf 'optisch' gesetzt", // 6
+    "Encoder auf Standard gesetzt", // 7
+    "SI-DAB-Empfänger", // 8
+    "Software", // 9
+    "Standardeinstellungen geladen", // 10
+    "Kanalliste", // 11
+    "Sprache", // 12
+    "Helligkeit", // 13
+    "Thema", // 14
+    "Automatische Slideshow", // 15
+    "Messeinheiten", // 16
+    "WiFi", // 17
+    "WiFi konfigurieren", // 18
+    "MODE DRÜCKEN, UM ZURÜCKZUKEHREN", // 19
+    "KONFIGURATION", // 20
+    "Hoch", // 21
+    "Niedrig", // 22
+    "An", // 23
+    "Aus", // 24
+    "Zeit bis Standby", // 25
+    "Min.", // 26
+    "Serviceinformationen", // 27
+    "Frequenz", // 28
+    "Ensemblename", // 29
+    "Servicename", // 30
+    "Programmtyp", // 31
+    "Protection Level", // 32
+    "Samplerate", // 33
+    "Bitrate", // 34
+    "Audio-Modus", // 35
+    "Signalinformationen", // 36
+    "Unbekannt", // 37
+    "Nachrichten", // 38
+    "Aktuelle Ereignisse", // 39
+    "Information", // 40
+    "Sport", // 41
+    "Bildung", // 42
+    "Drama", // 43
+    "Kultur", // 44
+    "Wissenschaft", // 45
+    "Gemischt", // 46
+    "Popmusik", // 47
+    "Rockmusik", // 48
+    "Leichte Musik", // 49
+    "Leichte Klassik", // 50
+    "Ernsthafte Klassik", // 51
+    "Andere Musik", // 52
+    "Wetter", // 53
+    "Finanzen", // 54
+    "Kinder", // 55
+    "Soziale Angelegenheiten", // 56
+    "Religion", // 57
+    "Call-In Sendung", // 58
+    "Reisen", // 59
+    "Freizeit", // 60
+    "Jazzmusik", // 61
+    "Countrymusik", // 62
+    "Nationalmusik", // 63
+    "Oldies Musik", // 64
+    "Folkmusik", // 65
+    "Dokumentation", // 66
+    "Wi-Fi konfigurieren", // 67
+    "Verbinden mit", // 68
+    "Verbinde Wi-Fi..", // 69
+    "FEHLGESCHLAGEN!", // 70
+    "VERBUNDEN!", // 71
+    "DAB-Empfänger", // 72
+    "", // 73
+    "Service auswählen", // 74
+    "Suche...", // 75
+    "Kein Signal", // 76
+    "Tuner nicht erkannt!", // 77
+    "STANDBY-MODUS", // 78
+    "Entwicklung", // 79
+    "Grafikdesign", // 80
+    "Über die Software" // 81
   }
 };
 #endif
