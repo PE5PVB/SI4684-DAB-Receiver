@@ -763,7 +763,7 @@ void ShowPS(void) {
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.setTextDatum(TC_DATUM);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))), 130, 2);
+      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? myLanguage[language][74] : radio.ASCII(_serviceName)))), 130, 2);
       OneBigLineSprite.pushSprite(44, 185);
     }
     PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
@@ -780,8 +780,18 @@ void ShowEN(void) {
   }
 
   if (EnsembleNameOld != radio.ASCII(radio.EnsembleLabel) || displayreset) {
-    tftReplace(0, EnsembleNameOld, radio.ASCII(radio.EnsembleLabel), 238, 162, SecondaryColor, SecondaryColorSmooth, BackgroundColor4, 16);
+    tft.fillRect(167, 162, 145, 16, BackgroundColor4);
+    if (tuning || !radio.signallock) {
+      if (tuning) {
+        tftPrint(0, myLanguage[language][75], 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
+      } else if (!radio.signallock) {
+        tftPrint(0, myLanguage[language][76], 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
+      }
+    } else {
+      tftPrint(0, radio.ASCII(radio.EnsembleLabel), 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
+    }
     EnsembleNameOld = radio.ASCII(radio.EnsembleLabel);
+
   }
   if (!radio.signallock || tuning) radio.EnsembleLabel[0] = '\0';
 }
