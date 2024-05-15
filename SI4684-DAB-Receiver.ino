@@ -99,7 +99,6 @@ int16_t SAvg2;
 int16_t SignalLevel;
 int8_t CNR;
 int8_t CNRold;
-IPAddress remoteip;
 String clockstringOld;
 String datestringOld;
 String EIDold;
@@ -131,7 +130,6 @@ typedef struct _Memory {
 } DABMemory;
 
 TFT_eSprite FullLineSprite = TFT_eSprite(&tft);
-TFT_eSprite VolumeSprite = TFT_eSprite(&tft);
 TFT_eSprite OneBigLineSprite = TFT_eSprite(&tft);
 TFT_eSprite LongSprite = TFT_eSprite(&tft);
 TFT_eSprite MediumSprite = TFT_eSprite(&tft);
@@ -215,34 +213,25 @@ void setup(void) {
   tft.fillScreen(BackgroundColor);
 
   OneBigLineSprite.createSprite(270, 30);
-  OneBigLineSprite.loadFont(FONT28);
   OneBigLineSprite.setSwapBytes(true);
 
   ShortSprite.createSprite(36, 16);
-  ShortSprite.loadFont(FONT16);
   ShortSprite.setSwapBytes(true);
 
   MediumSprite.createSprite(70, 16);
-  MediumSprite.loadFont(FONT16);
   MediumSprite.setSwapBytes(true);
 
   LongSprite.createSprite(150, 17);
-  LongSprite.loadFont(FONT16);
   LongSprite.setSwapBytes(true);
 
   FullLineSprite.createSprite(308, 20);
-  FullLineSprite.loadFont(FONT16);
   FullLineSprite.setSwapBytes(true);
-
-  VolumeSprite.createSprite(240, 50);
-  VolumeSprite.setTextDatum(TC_DATUM);
-  VolumeSprite.loadFont(FONT28);
-  VolumeSprite.setSwapBytes(true);
 
   ModeSprite.createSprite(46, 47);
   ModeSprite.setTextDatum(TC_DATUM);
-  ModeSprite.loadFont(FONT16);
   ModeSprite.setSwapBytes(true);
+
+  loadFonts(true);
 
   if (digitalRead(SLBUTTON) == LOW && digitalRead(ROTARY_BUTTON) == HIGH) {
     if (rotarymode == 0) rotarymode = 1; else rotarymode = 0;
@@ -1003,4 +992,22 @@ void deepSleep(void) {
   StoreFrequency();
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, LOW);
   esp_deep_sleep_start();
+}
+
+void loadFonts(bool option) {
+  if (option) {
+    OneBigLineSprite.loadFont(FONT28);
+    ShortSprite.loadFont(FONT16);
+    MediumSprite.loadFont(FONT16);
+    LongSprite.loadFont(FONT16);
+    FullLineSprite.loadFont(FONT16);
+    ModeSprite.loadFont(FONT16);
+  } else {
+    OneBigLineSprite.unloadFont();
+    ShortSprite.unloadFont();
+    MediumSprite.unloadFont();
+    LongSprite.unloadFont();
+    FullLineSprite.unloadFont();
+    ModeSprite.unloadFont();
+  }
 }

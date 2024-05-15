@@ -101,7 +101,6 @@ extern unsigned long VolumeTimer;
 extern TFT_eSPI tft;
 extern WiFiConnect wc;
 extern TFT_eSprite FullLineSprite;
-extern TFT_eSprite VolumeSprite;
 extern TFT_eSprite OneBigLineSprite;
 extern TFT_eSprite LongSprite;
 extern TFT_eSprite MediumSprite;
@@ -144,6 +143,7 @@ extern void tryWiFi(void);
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
 extern void tftReplace(int8_t offset, const String & textold, const String & text, int16_t x, int16_t y, int color, int smoothcolor, int backcolor, uint8_t fontsize);
 extern void ShowMemoryPos(void);
+extern void loadFonts(bool option);
 extern bool IsStationEmpty(void);
 
 #endif

@@ -612,6 +612,7 @@ void DoMenu(void) {
           tftPrint(0, "ESP_" + String(ESP_getChipId()), 155, 98, PrimaryColor, PrimaryColorSmooth, 28);
           tftPrint(0, myLanguage[language][67], 155, 138, ActiveColor, ActiveColorSmooth, 28);
           tftPrint(0, "http://192.168.4.1", 155, 174, PrimaryColor, PrimaryColorSmooth, 16);
+          loadFonts(false);
           wc.startConfigurationPortal(AP_WAIT);
           wifi = true;
           tryWiFi();
@@ -1027,13 +1028,13 @@ void ShowMemoryPos(void) {
 }
 
 void ShowVolume(void) {
-  uint8_t segments = map(volume, 0, 63, 0, 93);
-  VolumeSprite.pushImage (0, 0, 240, 50, volumebackground);
-  if (segments > 93) segments = 93;
-  VolumeSprite.fillRect(52, 9, 2 * segments, 9, BarInsignificantColor);
-  VolumeSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
-  VolumeSprite.drawString(String(map(volume, 0, 62, 0, 100)), 136, 22);
-  VolumeSprite.pushSprite(46, 46);
+  uint8_t segments = map(volume, 0, 63, 0, 100);
+  tft.pushImage(25, 46, 270, 50, volumebackground);
+  OneBigLineSprite.pushImage(0, 0, 270, 50, volumebackground);
+  if (segments > 100) segments = 100;
+  OneBigLineSprite.fillRect(60, 9, 2 * segments, 9, BarInsignificantColor);
+  OneBigLineSprite.pushSprite(25, 46);
+  tftPrint(0, String(map(volume, 0, 62, 0, 100)), 190, 68, ActiveColor, ActiveColorSmooth, 28);  
   Headphones.SetVolume(volume);
   EEPROM.writeByte(EE_BYTE_VOLUME, volume);
   EEPROM.commit();
