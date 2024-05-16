@@ -428,13 +428,27 @@ void doRecovery(void) {
 
 void DABSelectService(bool dir) {
   if (radio.numberofservices > 0) {
+    bool hasValidService = false;
+    for (int i = 0; i < radio.numberofservices; i++) {
+      if (radio.service[i].ServiceType == 0x00 || 
+          radio.service[i].ServiceType == 0x04 || 
+          radio.service[i].ServiceType == 0x05) {
+        hasValidService = true;
+        break;
+      }
+    }
+
+    if (!hasValidService) return;
+
     if (dir) {
       radio.ServiceIndex = (radio.ServiceIndex + 1) % radio.numberofservices;
     } else {
       radio.ServiceIndex = (radio.ServiceIndex == 0) ? (radio.numberofservices - 1) : (radio.ServiceIndex - 1);
     }
 
-    while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && radio.service[radio.ServiceIndex].ServiceType != 0x04 && radio.service[radio.ServiceIndex].ServiceType != 0x05) {
+    while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && 
+           radio.service[radio.ServiceIndex].ServiceType != 0x04 && 
+           radio.service[radio.ServiceIndex].ServiceType != 0x05) {
       if (dir) {
         radio.ServiceIndex = (radio.ServiceIndex + 1) % radio.numberofservices;
       } else {
