@@ -332,11 +332,14 @@ void DAB::EnsembleInfo(void) {
 
       if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
         EnsembleInfoSet = true;
-        EID[0] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 12) & 0xF;
-        EID[1] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 8) & 0xF;
-        EID[2] = ((SPIbuffer[5] + (SPIbuffer[6] << 8)) >> 4) & 0xF;
-        EID[3] = SPIbuffer[5] + ((SPIbuffer[6] << 8) & 0xF);
+        uint16_t value = (SPIbuffer[6] << 8) | SPIbuffer[5];
+
+        EID[0] = (value >> 12) & 0xF;
+        EID[1] = (value >> 8) & 0xF;
+        EID[2] = (value >> 4) & 0xF;
+        EID[3] = value & 0xF;
         EID[4] = '\0';
+
         for (int i = 0; i < 4; i++) {
           if (EID[i] < 10) {
             EID[i] += '0';
@@ -640,11 +643,15 @@ void DAB::setService(uint8_t _index) {
   SPIbuffer[10] = (service[ServiceIndex].CompID >> 16) & 0xff;
   SPIbuffer[11] = (service[ServiceIndex].CompID >> 24) & 0xff;
   SPIwrite(SPIbuffer, 12);
-  SID[0] = (service[ServiceIndex].ServiceID >> 12) & 0xF;
-  SID[1] = (service[ServiceIndex].ServiceID >> 8) & 0xF;
-  SID[2] = (service[ServiceIndex].ServiceID >> 4) & 0xF;
-  SID[3] = service[ServiceIndex].ServiceID & 0xF;
+
+  uint16_t serviceID = service[ServiceIndex].ServiceID;
+
+  SID[0] = (serviceID >> 12) & 0xF;
+  SID[1] = (serviceID >> 8) & 0xF;
+  SID[2] = (serviceID >> 4) & 0xF;
+  SID[3] = serviceID & 0xF;
   SID[4] = '\0';
+
   for (int i = 0; i < 4; i++) {
     if (SID[i] < 10) {
       SID[i] += '0';
@@ -652,6 +659,7 @@ void DAB::setService(uint8_t _index) {
       SID[i] += 'A' - 10;
     }
   }
+
   CurrentServiceID = service[ServiceIndex].ServiceID;
   ServiceInfo();
 }
