@@ -355,7 +355,7 @@ void BuildDisplay(void) {
 
   for (byte segments = 0; segments < 13; segments++) tft.fillRect(134 + (segments * 14), 135, 2, 3, (segments < 8 ? BarInsignificantColor : BarSignificantColor));
   tft.drawLine(134, 138, 302, 138, ActiveColor);
-  tftPrint(-1, "1   3   5   7   9  +10  +30 +60", 134, 140, ActiveColor, ActiveColorSmooth, 16);
+  tftPrint(-1, "1   3   5   7   9  +10 +30", 134, 140, ActiveColor, ActiveColorSmooth, 16);
   tft.drawRect(134, 90, 141, 12, GreyoutColor);
 
   ShowFreq();
@@ -812,8 +812,8 @@ void ShowProtectionlevel(void) {
 void ShowAudioMode(void) {
   if (!radio.ServiceStart) radio.servicetype = 9;
   if (servicetypeold != radio.servicetype || displayreset) {
-    tftPrint(-1, ServiceTypeText[4], 67, 33, GreyoutColor, BackgroundColor, 16);
-    if (radio.servicetype == 4 || radio.servicetype == 5) tftPrint(-1, ServiceTypeText[radio.servicetype], 67, 33, SecondaryColor, SecondaryColorSmooth, 16);
+    tftPrint(-1, ServiceTypeText[4], 70, 33, GreyoutColor, BackgroundColor, 16);
+    if (radio.servicetype == 4 || radio.servicetype == 5) tftPrint(-1, ServiceTypeText[radio.servicetype], 70, 33, SecondaryColor, SecondaryColorSmooth, 16);
     servicetypeold = radio.servicetype;
   }
 
