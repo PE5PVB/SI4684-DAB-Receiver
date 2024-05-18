@@ -79,7 +79,7 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "FAILED!", // 70
     "CONNECTED!", // 71
     "DAB Receiver", // 72
-    "", // 73
+    "Waiting for list", // 73
     "Select service", // 74
     "Tuning...", // 75
     "No signal", // 76
@@ -163,7 +163,7 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "MISLUKT!", // 70
     "VERBONDEN!", // 71
     "DAB Ontvanger", // 72
-    "", // 73
+    "Lijst ophalen...", // 73
     "Kies service", // 74
     "Afstemmen....", // 75
     "Geen signaal", // 76
@@ -247,7 +247,7 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "ΑΠΟΤΥΧΙΑ!", // 70
     "ΣΕ ΣΥΝΔΕΣΗ!", // 71
     "Δέκτης DAB", // 72
-    "", // 73
+    "Waiting for list", // 73
     "Επιλογή υπηρεσίας", // 74
     "Συντονισμός...", // 75
     "Χωρίς σήμα", // 76
@@ -331,7 +331,7 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "FEHLGESCHLAGEN!", // 70
     "VERBUNDEN!", // 71
     "DAB-Empfänger", // 72
-    "", // 73
+    "Waiting for list", // 73
     "Service auswählen", // 74
     "Suche...", // 75
     "Kein Signal", // 76

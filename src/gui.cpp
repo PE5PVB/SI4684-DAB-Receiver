@@ -723,11 +723,11 @@ void ShowRT(void) {
 void ShowSID(void) {
   if (!radio.ServiceStart) radio.SID[0] = '\0';
   if (String(radio.SID) != SIDold || displayreset) {
-    ShortSprite.pushImage(-36, -120, 320, 240, Background);
+    ShortSprite.pushImage(-38, -120, 320, 240, Background);
     ShortSprite.setTextDatum(TL_DATUM);
     ShortSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    ShortSprite.drawString(String(radio.SID), 2, 0);
-    ShortSprite.pushSprite(36, 120);
+    ShortSprite.drawString(String(radio.SID), 0, 0);
+    ShortSprite.pushSprite(38, 120);
     SIDold = String(radio.SID);
   }
 }
@@ -735,11 +735,11 @@ void ShowSID(void) {
 void ShowEID(void) {
   if (tuning) radio.EID[0] = '\0';
   if (String(radio.EID) != EIDold || displayreset) {
-    ShortSprite.pushImage(-36, -106, 320, 240, Background);
+    ShortSprite.pushImage(-38, -106, 320, 240, Background);
     ShortSprite.setTextDatum(TL_DATUM);
     ShortSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    ShortSprite.drawString(String(radio.EID), 2, 0);
-    ShortSprite.pushSprite(36, 106);
+    ShortSprite.drawString(String(radio.EID), 0, 0);
+    ShortSprite.pushSprite(38, 106);
     EIDold = String(radio.EID);
   }
 }
@@ -747,7 +747,7 @@ void ShowEID(void) {
 void ShowPS(void) {
   if (tunemode != TUNE_MEM && !radio.ServiceStart && !tuning && !seek) {
     if (radio.signallock && !radio.ServiceStart) {
-      strncpy(_serviceName, myLanguage[language][74], sizeof(_serviceName));
+      strncpy(_serviceName, (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]), sizeof(_serviceName));
       _serviceName[sizeof(_serviceName) - 1] = '\0';
     } else if (radio.signallock && radio.ServiceStart) {
       for (byte x = 0; x < 16; x++) _serviceName[x] = '\0';
@@ -764,7 +764,7 @@ void ShowPS(void) {
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.setTextDatum(TC_DATUM);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? myLanguage[language][74] : radio.ASCII(_serviceName)))), 130, 2);
+      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]) : radio.ASCII(_serviceName)))), 130, 2);
       OneBigLineSprite.pushSprite(44, 185);
     }
     PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
@@ -1034,7 +1034,7 @@ void ShowVolume(void) {
   if (segments > 100) segments = 100;
   OneBigLineSprite.fillRect(60, 9, 2 * segments, 9, BarInsignificantColor);
   OneBigLineSprite.pushSprite(25, 46);
-  tftPrint(0, String(map(volume, 0, 62, 0, 100)), 190, 68, ActiveColor, ActiveColorSmooth, 28);  
+  tftPrint(0, String(map(volume, 0, 62, 0, 100)), 190, 68, ActiveColor, ActiveColorSmooth, 28);
   Headphones.SetVolume(volume);
   EEPROM.writeByte(EE_BYTE_VOLUME, volume);
   EEPROM.commit();
