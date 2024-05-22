@@ -275,8 +275,8 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "Thema", // 14
     "Automatische Slideshow", // 15
     "Messeinheiten", // 16
-    "WiFi", // 17
-    "WiFi konfigurieren", // 18
+    "WLAN", // 17
+    "WLAN konfigurieren", // 18
     "MODE DRÜCKEN, UM ZURÜCKZUKEHREN", // 19
     "KONFIGURATION", // 20
     "Hoch", // 21
@@ -290,8 +290,8 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "Ensemblename", // 29
     "Servicename", // 30
     "Programmtyp", // 31
-    "Protection Level", // 32
-    "Samplerate", // 33
+    "Fehlerschutz", // 32
+    "Samplingrate", // 33
     "Bitrate", // 34
     "Audio-Modus", // 35
     "Signalinformationen", // 36
@@ -325,13 +325,13 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "Oldies Musik", // 64
     "Folkmusik", // 65
     "Dokumentation", // 66
-    "Wi-Fi konfigurieren", // 67
+    "WLAN konfigurieren", // 67
     "Verbinden mit", // 68
-    "Verbinde Wi-Fi..", // 69
+    "Verbinde WLAN..", // 69
     "FEHLGESCHLAGEN!", // 70
     "VERBUNDEN!", // 71
     "DAB-Empfänger", // 72
-    "Waiting for list", // 73
+    "Warte auf Liste", // 73
     "Service auswählen", // 74
     "Suche...", // 75
     "Kein Signal", // 76
