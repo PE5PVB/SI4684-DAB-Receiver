@@ -75,6 +75,10 @@ const char* DAB::getChannel(uint8_t freq) {
   return DABfrequencyTable_DAB[freq].label;
 }
 
+void DAB::vol(uint8_t vol) {
+  Set_Property(0x0300, (vol & 0x3F));
+}
+
 static void SPIwrite(unsigned char *data, uint32_t length) {
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite (slaveSelectPin, LOW);
@@ -332,12 +336,11 @@ void DAB::EnsembleInfo(void) {
 
       if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
         EnsembleInfoSet = true;
-        uint16_t value = (SPIbuffer[6] << 8) | SPIbuffer[5];
 
-        EID[0] = (value >> 12) & 0xF;
-        EID[1] = (value >> 8) & 0xF;
-        EID[2] = (value >> 4) & 0xF;
-        EID[3] = value & 0xF;
+        EID[2] = (SPIbuffer[5] & 0xF0) >> 4;
+        EID[3] = (SPIbuffer[5] & 0x0F);
+        EID[0] = (SPIbuffer[6] & 0xF0) >> 4;
+        EID[1] = (SPIbuffer[6] & 0x0F);
         EID[4] = '\0';
 
         for (int i = 0; i < 4; i++) {
@@ -347,7 +350,6 @@ void DAB::EnsembleInfo(void) {
             EID[i] += 'A' - 10;
           }
         }
-
         for (uint8_t i = 0; i < 16 && SPIbuffer[7 + i] != '\0'; i++) {
           EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
         }
@@ -614,6 +616,11 @@ void DAB::setFreq(uint8_t freq) {
 }
 
 void DAB::setService(uint8_t _index) {
+  union {
+    uint32_t combine;
+    uint8_t monoctet[4];
+  } u;
+
   pty = 36;
   bitrate = 0;
   protectionlevel = 0;
@@ -643,14 +650,12 @@ void DAB::setService(uint8_t _index) {
   SPIbuffer[10] = (service[ServiceIndex].CompID >> 16) & 0xff;
   SPIbuffer[11] = (service[ServiceIndex].CompID >> 24) & 0xff;
   SPIwrite(SPIbuffer, 12);
+  u.combine = service[ServiceIndex].ServiceID;
 
-  uint16_t serviceID = service[ServiceIndex].ServiceID;
-
-  SID[0] = (serviceID >> 12) & 0xF;
-  SID[1] = (serviceID >> 8) & 0xF;
-  SID[2] = (serviceID >> 4) & 0xF;
-  SID[3] = serviceID & 0xF;
-  SID[4] = '\0';
+  SID[3] = u.monoctet[0] & 0xF;
+  SID[2] = (u.monoctet[0] & 0xF0) >> 4;
+  SID[1] = u.monoctet[1] & 0xF;
+  SID[0] = (u.monoctet[1] & 0xF0) >> 4;
 
   for (int i = 0; i < 4; i++) {
     if (SID[i] < 10) {
@@ -659,7 +664,6 @@ void DAB::setService(uint8_t _index) {
       SID[i] += 'A' - 10;
     }
   }
-
   CurrentServiceID = service[ServiceIndex].ServiceID;
   ServiceInfo();
 }
@@ -675,6 +679,8 @@ void DAB::Update(void) {
 
 String DAB::ASCII(const char* input) {
   wchar_t temp[256] = L"";
+
+
   RDScharConverter(input, temp, sizeof(temp) / sizeof(wchar_t));
   String temp2 = convertToUTF8(temp);
   temp2 = extractUTF8Substring(temp2, 0, temp2.length());
@@ -692,8 +698,23 @@ static int compareCompID(const void *a, const void *b) {
 }
 
 static void RDScharConverter(const char* input, wchar_t* output, size_t size) {
-  for (size_t i = 0; i < size - 1; i++) {
-    char currentChar = input[i];
+
+  size_t i = 0;
+  for (size_t dbi = 0; dbi < size - 1; dbi++) {
+    char currentChar = input[dbi];
+    if ((currentChar >> 5) == 0x6) {
+      if ((input[dbi + 1] >> 6) == 0x2) {
+        if (input[dbi + 1] == 0xA9) {
+          currentChar = 0x82;
+          dbi++;
+        }
+        if (input[dbi + 1] == 0xB0) {
+          currentChar = 0xB0;
+          dbi++;
+        }
+      }
+    }
+
     switch (currentChar) {
       case 0x20: output[i] = L' '; break;
       case 0x21 ... 0x5D: output[i] = static_cast<wchar_t>(currentChar); break;
@@ -832,8 +853,9 @@ static void RDScharConverter(const char* input, wchar_t* output, size_t size) {
       case 0xFE: output[i] = L'ŧ'; break;
       case 0xFF: output[i] = L' '; break;
     }
+    i++;
   }
-  output[size - 1] = L'\0';
+  output[i - 1] = L'\0';
 }
 
 static String extractUTF8Substring(const String & utf8String, size_t start, size_t length) {

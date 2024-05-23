@@ -71,12 +71,13 @@ typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
   char      Label[17];
-  byte		ServiceType;
+  byte    ServiceType;
 } DABService;
 
 class DAB {
   public:
     bool begin(uint8_t SSpin);
+    void vol(uint8_t vol);
     void EnsembleInfo(void);
     void ServiceInfo(void);
     void getServiceData(void);
