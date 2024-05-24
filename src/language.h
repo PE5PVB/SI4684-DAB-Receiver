@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[4][82] PROGMEM = {
+static const char* const myLanguage[5][82] PROGMEM = {
   { "English", // English
     "Rotary direction changed", // 1
     "Please release button", // 2
@@ -257,6 +257,7 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "Γραφικά", // 80
     "Περί" // 81,
   },
+
   {
     "Deutsch", // Deutsch
     "Drehrichtung geändert", // 1
@@ -340,6 +341,91 @@ static const char* const myLanguage[4][82] PROGMEM = {
     "Entwicklung", // 79
     "Grafikdesign", // 80
     "Über die Software" // 81
+  },
+
+  {
+    "Français", // Français
+    "Rotation change", // 1
+    "Relacher le bouton", // 2
+    "Bascule Ecran", // 3
+    "calibrer le compteur", // 4
+    "Relacher le bouton et start", // 5
+    "Encodeur regle optique", // 6
+    "Encodeur sur standard", // 7
+    "SI-DAB Reception", // 8
+    "Logiciel", // 9
+    "Chargement par defaut", // 10
+    "Liste canaux", // 11
+    "Language", // 12
+    "Brillance", // 13
+    "Theme", // 14
+    "Auto Diapo", // 15
+    "Unite de Signal ", // 16
+    "WiFi", // 17
+    "Configuration WiFi", // 18
+    "Appuyer pour retour", // 19
+    "CONFIGURATION", //20
+    "Haut", //21
+    "Bas", // 22
+    "On", // 23
+    "Off", // 24
+    "Tempo", // 25
+    "Min.", // 26
+    "Service information", // 27
+    "Frequence", // 28
+    "Nom ensemble", // 29
+    "Nom de service", // 30
+    "Programme type", // 31
+    "niveau de protection", // 32
+    "Echantillonnage", // 33
+    "Debit", // 34
+    "Mode audio", // 35
+    "Information signal", // 36
+    "Inconnu", // 37
+    "Nouvelles", // 38
+    "Actualite", // 39
+    "Information", // 40
+    "Sport", // 41
+    "Education", // 42
+    "Dramatique", // 43
+    "Culture", // 44
+    "Science", // 45
+    "Variete", // 46
+    "Pop musique", // 47
+    "Rock", // 48
+    "Cool", // 49
+    "Classique leger", // 50
+    "Classique serieux", // 51
+    "Autres musiques", // 52
+    "Meteo", // 53
+    "Economie", // 54
+    "Enfants", // 55
+    "Affaires sociales", // 56
+    "Religion", // 57
+    "Phoning", // 58
+    "Voyage", // 59
+    "Loisir", // 60
+    "Jazz", // 61
+    "Country", // 62
+    "musique national", // 63
+    "Musique ancienne", // 64
+    "Folk", // 65
+    "Documentaires", // 66
+    "Vers config WIFI", // 67
+    "Connexion vers", // 68
+    "En cours de cnx Wi-Fi...", // 69
+    "Echecs!", // 70
+    "CONNECTER!", // 71
+    "DAB plus", // 72
+    "Attente liste", // 73
+    "Selectionnez SVP", // 74
+    "Recherche....", // 75
+    "No Signal", // 76
+    "Pas de Tuner", // 77
+    "MODE STAND-BY", // 78
+    "Developpement", // 79
+    "Design graphique", // 80
+    "a propos" // 81
   }
 };
 #endif
