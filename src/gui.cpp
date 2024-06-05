@@ -764,7 +764,7 @@ void ShowPS(void) {
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.setTextDatum(TC_DATUM);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]) : radio.ASCII(_serviceName)))), 130, 2);
+      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]) : radio.ASCII(_serviceName)))), 130, 4);
       OneBigLineSprite.pushSprite(44, 185);
     }
     PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
