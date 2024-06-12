@@ -363,6 +363,7 @@ void DAB::EnsembleInfo(void) {
           }
         }
         ecc = SPIbuffer[23];
+        EnsembleLabelCharset = SPIbuffer[24];
       } else {
         EnsembleInfoSet = false;
       }
@@ -561,6 +562,7 @@ void DAB::ServiceInfo(void) {
       }
 
       pty = (SPIbuffer[5] >> 1) & 0x1F;
+      ServiceLabelCharset = SPIbuffer[7];
     }
   }
 }
@@ -677,13 +679,16 @@ void DAB::Update(void) {
   }
 }
 
-String DAB::ASCII(const char* input) {
+String DAB::ASCII(const char* input, uint8_t charset) {
   wchar_t temp[256] = L"";
-
-
-  RDScharConverter(input, temp, sizeof(temp) / sizeof(wchar_t));
-  String temp2 = convertToUTF8(temp);
-  temp2 = extractUTF8Substring(temp2, 0, temp2.length());
+  String temp2;
+  if (charset == 0) {
+    RDScharConverter(input, temp, sizeof(temp) / sizeof(wchar_t));
+    temp2 = convertToUTF8(temp);
+    temp2 = extractUTF8Substring(temp2, 0, temp2.length());
+  } else {
+    temp2 = input;
+  }
   return temp2;
 }
 

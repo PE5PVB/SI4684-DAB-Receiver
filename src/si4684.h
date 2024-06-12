@@ -88,7 +88,7 @@ class DAB {
     bool panic(void);
     uint32_t getFreq(uint8_t freq);
     const char* getChannel(uint8_t freq);
-    String ASCII(const char* input);
+    String ASCII(const char* input, uint8_t charset);
 
     DABService service[32];
     char* getChipID(void);
@@ -104,6 +104,8 @@ class DAB {
     uint8_t audiomode;
     uint8_t servicetype;
     uint8_t protectionlevel;
+    uint8_t EnsembleLabelCharset;
+    uint8_t ServiceLabelCharset;
     uint8_t pty;
     uint16_t ecc;
     uint16_t Year;

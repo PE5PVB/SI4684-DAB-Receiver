@@ -164,8 +164,8 @@ void ShowServiceInfo(void) {
   tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 166, 36, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(unitString[unit]) + "  MER:", 193, 56, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, "dB", 281, 56, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.EnsembleLabel), 166, 76, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label), 166, 96, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset), 166, 76, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label, radio.ServiceLabelCharset), 166, 96, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 166, 116, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, ProtectionText[radio.protectionlevel], 166, 136, PrimaryColor, PrimaryColorSmooth, 16);
   String bitrateString = String(radio.samplerate);
@@ -232,7 +232,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
 
     FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
     FullLineSprite.setTextDatum(TL_DATUM);
-    FullLineSprite.drawString(String(radio.ASCII(radio.service[item].Label)), 84, 3);
+    FullLineSprite.drawString(String(radio.ASCII(radio.service[item].Label, radio.ServiceLabelCharset)), 84, 3);
 
     FullLineSprite.setTextDatum(TC_DATUM);
     FullLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
@@ -693,12 +693,12 @@ void ShowRT(void) {
   }
 
   FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-  if (radio.ASCII(radio.ServiceData).length() > 0) {
-    RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData));
+  if (radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset).length() > 0) {
+    RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
     if (RTWidth < 300) {
       xPos = 0;
       FullLineSprite.setTextDatum(TC_DATUM);
-      FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), 154, 1);
+      FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), 154, 1);
       FullLineSprite.pushSprite(6, 219);
     } else {
       if (millis() - rtticker >= 20) {
@@ -707,8 +707,8 @@ void ShowRT(void) {
 
         if (xPos < -RTWidth - 50) xPos = 0;
         FullLineSprite.setTextDatum(TL_DATUM);
-        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos, 1);
-        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData)), xPos + RTWidth + 50, 1);
+        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), xPos, 1);
+        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), xPos + RTWidth + 50, 1);
         FullLineSprite.pushSprite(6, 219);
         rtticker = millis();
       }
@@ -716,8 +716,8 @@ void ShowRT(void) {
   } else {
     FullLineSprite.pushSprite(6, 220);
   }
-  if (RTold != radio.ASCII(radio.ServiceData)) xPos = 0;
-  RTold = radio.ASCII(radio.ServiceData);
+  if (RTold != radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)) xPos = 0;
+  RTold = radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset);
 }
 
 void ShowSID(void) {
@@ -758,16 +758,16 @@ void ShowPS(void) {
     strcpy(_serviceName, radio.service[radio.ServiceIndex].Label);
   }
 
-  if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label) : radio.ASCII(_serviceName)) != PSold || displayreset) {
-    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName))).length() != 0)) {
+  if ((radio.ServiceStart ? radio.ASCII(radio.service[radio.ServiceIndex].Label, radio.ServiceLabelCharset) : radio.ASCII(_serviceName, radio.ServiceLabelCharset)) != PSold || displayreset) {
+    if (tunemode != TUNE_MEM || (tunemode == TUNE_MEM && String((radio.signallock && radio.ServiceStart ? radio.ASCII(radio.PStext, radio.ServiceLabelCharset) : radio.ASCII(_serviceName, radio.ServiceLabelCharset))).length() != 0)) {
       OneBigLineSprite.pushImage(-44, -185, 320, 240, Background);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
       OneBigLineSprite.setTextDatum(TC_DATUM);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]) : radio.ASCII(_serviceName)))), 130, 4);
+      OneBigLineSprite.drawString(String((radio.ServiceStart ? radio.ASCII(radio.PStext, radio.ServiceLabelCharset) : (radio.signallock && tunemode != TUNE_MEM && !tuning && !seek ? (radio.numberofservices > 0 ? myLanguage[language][74] : myLanguage[language][73]) : radio.ASCII(_serviceName, radio.ServiceLabelCharset)))), 130, 4);
       OneBigLineSprite.pushSprite(44, 185);
     }
-    PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext) : radio.ASCII(_serviceName));
+    PSold = (radio.ServiceStart ? radio.ASCII(radio.PStext, radio.ServiceLabelCharset) : radio.ASCII(_serviceName, radio.ServiceLabelCharset));
   }
 }
 
@@ -780,7 +780,7 @@ void ShowEN(void) {
     radio.EnsembleLabel[sizeof(radio.EnsembleLabel) - 1] = '\0';
   }
 
-  if (EnsembleNameOld != radio.ASCII(radio.EnsembleLabel) || displayreset) {
+  if (EnsembleNameOld != radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset) || displayreset) {
     tft.fillRect(167, 162, 145, 16, BackgroundColor4);
     if (tuning || !radio.signallock) {
       if (tuning) {
@@ -789,9 +789,9 @@ void ShowEN(void) {
         tftPrint(0, myLanguage[language][76], 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
       }
     } else {
-      tftPrint(0, radio.ASCII(radio.EnsembleLabel), 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
+      tftPrint(0, radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset), 238, 162, SecondaryColor, SecondaryColorSmooth, 16);
     }
-    EnsembleNameOld = radio.ASCII(radio.EnsembleLabel);
+    EnsembleNameOld = radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset);
 
   }
   if (!radio.signallock || tuning) radio.EnsembleLabel[0] = '\0';
