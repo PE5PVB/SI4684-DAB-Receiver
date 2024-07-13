@@ -257,7 +257,7 @@ void DAB::EnsembleInfo(void) {
     cts();
     SPIread(8);
 
-    if (SPIbuffer[6] != 0 && SPIbuffer[5] + (SPIbuffer[6] << 8) + 6 < sizeof(SPIbuffer)) {
+    if (SPIbuffer[5] + (SPIbuffer[6] << 8) + 6 < sizeof(SPIbuffer)) {
       SPIread(SPIbuffer[5] + (SPIbuffer[6] << 8) + 6);
       uint8_t numberofcomponents;
 
