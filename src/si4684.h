@@ -124,6 +124,7 @@ class DAB {
     uint32_t SlideShowLength;
     bool SlideShowAvailable;
     bool SlideShowUpdate;
+    bool SlideShowUpdate2;
     bool isJPG;
     bool isPNG;
 

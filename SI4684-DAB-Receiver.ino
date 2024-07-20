@@ -24,6 +24,7 @@ DAB radio;
 TFT_eSPI tft = TFT_eSPI(240, 320);
 
 bool autoslideshow;
+bool connectedSerial;
 bool ChannelListView;
 bool direction;
 bool displayreset;

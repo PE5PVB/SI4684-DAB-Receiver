@@ -13,14 +13,12 @@ void ShowSlideShow(void) {
   if (radio.isJPG) {
     tft.fillScreen(TFT_BLACK);
     jpgfile = LittleFS.open("/slideshow.img", "rb");
-    if (!jpgfile) {
-      return;
-    }
+    if (!jpgfile) return;
+
     bool decoded = JpegDec.decodeFsFile(jpgfile);
-    if (!decoded) {
-      jpgfile.close();
-      return;
-    }
+    jpgfile.close();
+    if (!decoded) return;
+
     uint16_t mcu_w = JpegDec.MCUWidth;
     uint16_t mcu_h = JpegDec.MCUHeight;
     uint32_t max_x = JpegDec.width;
@@ -44,13 +42,11 @@ void ShowSlideShow(void) {
 
       tft.endWrite();
     }
-    jpgfile.close();
   } else if (radio.isPNG) {
     tft.fillScreen(TFT_BLACK);
     pngfile = LittleFS.open("/slideshow.img", "rb");
-    if (!pngfile) {
-      return;
-    }
+    if (!pngfile) return;
+
     int16_t rc = png.open("/slideshow.img",
     +[](const char *filename, int32_t *size) -> void * {
       *size = pngfile.size();
@@ -59,12 +55,14 @@ void ShowSlideShow(void) {
     +[](void *handle) {
     },
     +[](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
-      if (!pngfile || !pngfile.available()) return 0;
-      return pngfile.read(buffer, length);
+      File *file = static_cast<File *>(page->fHandle);
+      if (!file || !file->available()) return 0;
+      return file->read(buffer, length);
     },
     +[](PNGFILE * page, int32_t position) -> int32_t {
-      if (!pngfile || !pngfile.available()) return 0;
-      return pngfile.seek(position);
+      File *file = static_cast<File *>(page->fHandle);
+      if (!file || !file->available()) return 0;
+      return file->seek(position);
     },
     +[](PNGDRAW * pDraw) {
       uint16_t lineBuffer[320];
@@ -81,6 +79,8 @@ void ShowSlideShow(void) {
     rc = png.decode(nullptr, 0);
     png.close();
     tft.endWrite();
+
+    pngfile.close();
   }
 
   for (int x = 0; x <= ContrastSet; x++) {

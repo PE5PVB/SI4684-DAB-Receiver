@@ -415,7 +415,7 @@ void DAB::getServiceData(void) {
             if (!sourceFile) return;
 
             // Remove existing slideshow file
-            LittleFS.remove("/slideshow.img");
+            if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
 
             // Create and copy to destination file
             File destinationFile = LittleFS.open("/slideshow.img", "wb");
@@ -433,6 +433,7 @@ void DAB::getServiceData(void) {
             // Update variables
             SlideShowLengthOld = SlideShowLength;
             SlideShowUpdate = true;
+            SlideShowUpdate2 = true;
             SlideShowAvailable = true;
             SlideShowInit = false;
           }
