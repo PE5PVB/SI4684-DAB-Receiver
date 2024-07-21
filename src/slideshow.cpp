@@ -10,15 +10,27 @@ void ShowSlideShow(void) {
     delay(5);
   }
 
+  auto closeFiles = [&]() {
+    if (jpgfile) {
+      jpgfile.close();
+    }
+    if (pngfile) {
+      pngfile.close();
+    }
+  };
+
   if (radio.isJPG) {
     tft.fillScreen(TFT_BLACK);
     jpgfile = LittleFS.open("/slideshow.img", "rb");
-    if (!jpgfile) return;
-
+    if (!jpgfile) {
+      closeFiles();
+      return;
+    }
     bool decoded = JpegDec.decodeFsFile(jpgfile);
-    jpgfile.close();
-    if (!decoded) return;
-
+    if (!decoded) {
+      closeFiles();
+      return;
+    }
     uint16_t mcu_w = JpegDec.MCUWidth;
     uint16_t mcu_h = JpegDec.MCUHeight;
     uint32_t max_x = JpegDec.width;
@@ -42,11 +54,14 @@ void ShowSlideShow(void) {
 
       tft.endWrite();
     }
+    closeFiles();
   } else if (radio.isPNG) {
     tft.fillScreen(TFT_BLACK);
     pngfile = LittleFS.open("/slideshow.img", "rb");
-    if (!pngfile) return;
-
+    if (!pngfile) {
+      closeFiles();
+      return;
+    }
     int16_t rc = png.open("/slideshow.img",
     +[](const char *filename, int32_t *size) -> void * {
       *size = pngfile.size();
@@ -55,14 +70,12 @@ void ShowSlideShow(void) {
     +[](void *handle) {
     },
     +[](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
-      File *file = static_cast<File *>(page->fHandle);
-      if (!file || !file->available()) return 0;
-      return file->read(buffer, length);
+      if (!pngfile || !pngfile.available()) return 0;
+      return pngfile.read(buffer, length);
     },
     +[](PNGFILE * page, int32_t position) -> int32_t {
-      File *file = static_cast<File *>(page->fHandle);
-      if (!file || !file->available()) return 0;
-      return file->seek(position);
+      if (!pngfile || !pngfile.available()) return 0;
+      return pngfile.seek(position);
     },
     +[](PNGDRAW * pDraw) {
       uint16_t lineBuffer[320];
@@ -71,7 +84,7 @@ void ShowSlideShow(void) {
     });
 
     if (rc != PNG_SUCCESS) {
-      pngfile.close();
+      closeFiles();
       return;
     }
 
@@ -79,8 +92,7 @@ void ShowSlideShow(void) {
     rc = png.decode(nullptr, 0);
     png.close();
     tft.endWrite();
-
-    pngfile.close();
+    closeFiles();
   }
 
   for (int x = 0; x <= ContrastSet; x++) {
