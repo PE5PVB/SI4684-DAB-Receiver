@@ -204,7 +204,7 @@ static void DataPrint(String data) {
 
 static String ServiceList(void) {
   String ServiceList;
-  ServiceList = "$L=COUNT=" + String(radio.numberofservices) + ",SERVICES=";
+  ServiceList = "$L=COUNT=" + String(radio.numberofservices) + ",ENSEMBLE=" + String(radio.EID) + "," + String(radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset)) + ";SERVICES=";
 
   if (radio.signallock) {
     for (int x = 0; x < radio.numberofservices; x++) {
