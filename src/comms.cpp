@@ -7,46 +7,11 @@ byte dabfreqOld;
 String ServiceListOld;
 String ServiceInfoOld;
 String ServiceDataOld;
-
-void tryWiFi(void) {
-  if (!setupmode && wifi && WiFi.status() != WL_CONNECTED) {
-    tft.drawRoundRect(1, 60, 319, 140, 5, ActiveColor);
-    tft.fillRoundRect(3, 62, 315, 136, 5, BackgroundColor3);
-    loadFonts(true);
-    tftPrint(0, myLanguage[language][69], 155, 88, ActiveColor, ActiveColorSmooth, 28);
-    loadFonts(false);
-  }
-
-  if (wifi) {
-    if (WiFi.status() != WL_CONNECTED) {
-      if (wc.autoConnect()) {
-        Server.begin();
-        loadFonts(true);
-        if (!setupmode) tftPrint(0, myLanguage[language][71], 155, 128, InsignificantColor, InsignificantColorSmooth, 28);
-        loadFonts(false);
-      } else {
-        loadFonts(true);
-        if (!setupmode) tftPrint(0, myLanguage[language][70], 155, 128, SignificantColor, SignificantColorSmooth, 28);
-        loadFonts(false);
-        Server.end();
-        WiFi.disconnect();
-        WiFi.mode(WIFI_OFF);
-        wifi = false;
-      }
-      if (!setupmode) delay(2000);
-    }
-  } else {
-    Server.end();
-    WiFi.disconnect();
-    WiFi.mode(WIFI_OFF);
-  }
-  loadFonts(true);
-}
+bool connectedSerial;
 
 void Communication(void) {
   if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n');
-
     unsigned int equalsIndex = input.indexOf('=');
 
     if (equalsIndex == -1) {
@@ -106,7 +71,7 @@ void Communication(void) {
                     ShowFreq();
                   }
                   DataPrint("#0\n*TUNE=" + String(dabfreq) + "\n");
-                  DataPrint("$M=0\n");
+                  DataPrint("$M=SLIDESHOW=0\n");
                 } else {
                   DataPrint("#1\n");
                 }
@@ -120,7 +85,7 @@ void Communication(void) {
                   radio.ServiceStart = true;
                   store = true;
                   DataPrint("#0\n*SERVICE=" + String(radio.ServiceIndex) + "\n");
-                  DataPrint("$M=0\n");
+                  DataPrint("$M=SLIDESHOW=0\n");
                 } else {
                   DataPrint("#1\n");
                 }
@@ -150,13 +115,13 @@ void Communication(void) {
   if (connectedSerial) {
     if (radio.ServiceIndex != ServiceIndexOld) {
       if (radio.ServiceStart) DataPrint("*SERVICE=" + String(radio.ServiceIndex) + "\n");
-      DataPrint("$M=0\n");
+      DataPrint("$M=SLIDESHOW=0\n");
       ServiceIndexOld = radio.ServiceIndex;
     }
 
     if (dabfreq != dabfreqOld) {
       DataPrint("*TUNE=" + String(dabfreq) + "\n");
-      DataPrint("$M=0\n");
+      DataPrint("$M=SLIDESHOW=0\n");
       dabfreqOld = dabfreq;
     }
 
@@ -257,12 +222,12 @@ static void doEnableConnection(void) {
 
   if (radio.ServiceStart) DataPrint("*SERVICE=" + String(radio.ServiceIndex) + "\n");
   DataPrint("*TUNE=" + String(dabfreq) + "\n");
-  DataPrint("$M=0\n");
+  DataPrint("$M=SLIDESHOW=0\n");
 
   ServiceListOld = "";
   ServiceInfoOld = "";
   ServiceDataOld = "";
-  if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true; else DataPrint("$M=0\n");
+  if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true; else DataPrint("$M=SLIDESHOW=0\n");
 }
 
 static void doMOTShow(void) {

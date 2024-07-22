@@ -4,8 +4,6 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <TimeLib.h>
-#include "WiFiConnect.h"
-#include "WiFiConnectParam.h"
 #include "si4684.h"
 #include "tpa6130a2.h"
 #include "language.h"
@@ -29,7 +27,6 @@ extern bool SlideShowAvailableOld;
 extern bool SlideShowView;
 extern bool trysetservice;
 extern bool tuning;
-extern bool wifi;
 extern byte audiomodeold;
 extern byte ContrastSet;
 extern byte CurrentTheme;
@@ -99,7 +96,6 @@ extern unsigned long rttickerhold;
 extern unsigned long VolumeTimer;
 
 extern TFT_eSPI tft;
-extern WiFiConnect wc;
 extern TFT_eSprite FullLineSprite;
 extern TFT_eSprite OneBigLineSprite;
 extern TFT_eSprite LongSprite;
@@ -139,7 +135,6 @@ void ShowRSSI(void);
 void ShowOneLine(byte position, byte item, bool selected);
 
 extern void ShowTuneMode(void);
-extern void tryWiFi(void);
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
 extern void tftReplace(int8_t offset, const String & textold, const String & text, int16_t x, int16_t y, int color, int smoothcolor, int backcolor, uint8_t fontsize);
 extern void ShowMemoryPos(void);

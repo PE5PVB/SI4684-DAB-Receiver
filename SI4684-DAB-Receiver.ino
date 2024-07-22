@@ -3,11 +3,8 @@
 #include <TimeLib.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#include <WiFiClient.h>
 #include <EEPROM.h>
 #include <Wire.h>
-#include "src/WiFiConnect.h"
-#include "src/WiFiConnectParam.h"
 #include "src/font.h"
 #include "src/constants.h"
 #include "src/graphics.h"
@@ -24,7 +21,6 @@ DAB radio;
 TFT_eSPI tft = TFT_eSPI(240, 320);
 
 bool autoslideshow;
-bool connectedSerial;
 bool ChannelListView;
 bool direction;
 bool displayreset;
@@ -42,10 +38,7 @@ bool store;
 bool trysetservice;
 bool tuned;
 bool tuning;
-bool wifi;
-bool wificonnected;
 byte audiomodeold;
-byte charwidth = 8;
 byte ContrastSet;
 byte CurrentTheme;
 byte dabfreq;
@@ -137,10 +130,6 @@ TFT_eSprite MediumSprite = TFT_eSprite(&tft);
 TFT_eSprite ModeSprite = TFT_eSprite(&tft);
 TFT_eSprite ShortSprite = TFT_eSprite(&tft);
 
-WiFiConnect wc;
-WiFiServer Server(7373);
-WiFiClient RemoteClient;
-
 DABMemory memory[EE_PRESETS_CNT];
 
 void setup(void) {
@@ -167,7 +156,6 @@ void setup(void) {
   displayflip = EEPROM.readByte(EE_BYTE_DISPLAYFLIP);
   rotarymode = EEPROM.readByte(EE_BYTE_ROTARYMODE);
   tunemode = EEPROM.readByte(EE_BYTE_TUNEMODE);
-  wifi = EEPROM.readByte(EE_BYTE_WIFI);
   unit = EEPROM.readByte(EE_BYTE_UNIT);
   dabfreq = EEPROM.readByte(EE_BYTE_DABFREQ);
   volume = EEPROM.readByte(EE_BYTE_VOLUME);
@@ -291,13 +279,6 @@ void setup(void) {
 
   delay(1500);
 
-  if (wifi) {
-    tryWiFi();
-    delay(2000);
-  } else {
-    Server.end();
-  }
-
   if (tunemode == TUNE_MEM && !IsStationEmpty()) {
     DoMemoryPosTune();
   } else {
@@ -385,7 +366,6 @@ void ProcessDAB(void) {
   if (!SlideShowView && !menu) {
     if (!ShowServiceInformation && !ChannelListView) {
       if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) SlideShowButtonPress();
-      ShowRSSI();
       ShowBitrate();
       ShowEID();
       ShowSID();
@@ -560,7 +540,6 @@ void ModeButtonPress(void) {
     EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, autoslideshow);
     EEPROM.writeByte(EE_BYTE_UNIT, unit);
     EEPROM.writeByte(EE_BYTE_TOT, tot);
-    EEPROM.writeByte(EE_BYTE_WIFI, wifi);
     EEPROM.writeByte(EE_BYTE_THEME, CurrentTheme);
     EEPROM.commit();
     menu = false;
@@ -916,7 +895,6 @@ void DefaultSettings(void) {
   EEPROM.writeByte(EE_BYTE_DISPLAYFLIP, 0);
   EEPROM.writeByte(EE_BYTE_ROTARYMODE, 0);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, 0);
-  EEPROM.writeByte(EE_BYTE_WIFI, 0);
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
   EEPROM.writeByte(EE_BYTE_VOLUME, 40);
   EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);

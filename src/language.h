@@ -1,7 +1,7 @@
 #ifndef LANGUAGE_H
 #define LANGUAGE_H
 
-#define VERSION "v1.00"
+#define VERSION "v1.10 beta"
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
@@ -23,8 +23,8 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Theme", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
-    "WiFi", // 17
-    "Configure WiFi", // 18
+    "", // 17
+    "", // 18
     "PRESS MODE TO RETURN", // 19
     "CONFIGURATION", // 20
     "High", // 21
@@ -73,11 +73,11 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Oldies Music", // 64
     "Folk Music", // 65
     "Documentary", // 66
-    "to configure Wi-Fi", // 67
-    "Connect to", // 68
-    "Trying to connect Wi-Fi", // 69
-    "FAILED!", // 70
-    "CONNECTED!", // 71
+    "", // 67
+    "", // 68
+    "", // 69
+    "", // 70
+    "", // 71
     "DAB Receiver", // 72
     "Waiting for list", // 73
     "Select service", // 74
@@ -107,8 +107,8 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Thema", // 14
     "Auto slideshow", // 15
     "Signaal eenheid", // 16
-    "WiFi", // 17
-    "Configureer WiFi", // 18
+    "", // 17
+    "", // 18
     "DRUK MODE OM AF TE SLUITEN", // 19
     "CONFIGURATIE", // 20
     "Hoog", // 21
@@ -157,11 +157,11 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Gouwe ouwe", // 64
     "Volksmuziek", // 65
     "Documentaires", // 66
-    "om WiFi te configureren", // 67
-    "Maak verbinding met", // 68
-    "Verbinden met Wi-Fi...", // 69
-    "MISLUKT!", // 70
-    "VERBONDEN!", // 71
+    "", // 67
+    "", // 68
+    "", // 69
+    "", // 70
+    "", // 71
     "DAB Ontvanger", // 72
     "Lijst ophalen...", // 73
     "Kies service", // 74
@@ -191,8 +191,8 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Θέμα", // 14
     "Αυτόματη παρουσίαση", // 15
     "Μονάδες σήματος", // 16
-    "WiFi", // 17
-    "Ρύθμιση WiFi", // 18
+    "", // 17
+    "", // 18
     "ΠΙΕΣΤΕ MODE ΓΙΑ ΕΠΙΣΤΡΟΦΗ", // 19
     "ΡΥΘΜΙΣΕΙΣ", // 20
     "Υψηλό", // 21
@@ -241,11 +241,11 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Παλιά Τραγούδια", // 64
     "Παραδοσιακά", // 65
     "Ντοκιμαντέρ", // 66
-    "για ρύθμιση του Wi-Fi", // 67
-    "Σύνδεση σε", // 68
-    "Προσπάθεια σύνδεσης με το Wi-Fi", // 69
-    "ΑΠΟΤΥΧΙΑ!", // 70
-    "ΣΕ ΣΥΝΔΕΣΗ!", // 71
+    "", // 67
+    "", // 68
+    "", // 69
+    "", // 70
+    "", // 71
     "Δέκτης DAB", // 72
     "Waiting for list", // 73
     "Επιλογή υπηρεσίας", // 74
@@ -276,8 +276,8 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Thema", // 14
     "Automatische Slideshow", // 15
     "Messeinheiten", // 16
-    "WLAN", // 17
-    "WLAN konfigurieren", // 18
+    "", // 17
+    "", // 18
     "MODE DRÜCKEN, UM ZURÜCKZUKEHREN", // 19
     "KONFIGURATION", // 20
     "Hoch", // 21
@@ -326,11 +326,11 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Oldies Musik", // 64
     "Folkmusik", // 65
     "Dokumentation", // 66
-    "WLAN konfigurieren", // 67
-    "Verbinden mit", // 68
-    "Verbinde WLAN..", // 69
-    "FEHLGESCHLAGEN!", // 70
-    "VERBUNDEN!", // 71
+    "", // 67
+    "", // 68
+    "", // 69
+    "", // 70
+    "", // 71
     "DAB-Empfänger", // 72
     "Warte auf Liste", // 73
     "Service auswählen", // 74
@@ -361,8 +361,8 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Theme", // 14
     "Auto Diapo", // 15
     "Unite de Signal ", // 16
-    "WiFi", // 17
-    "Configuration WiFi", // 18
+    "", // 17
+    "", // 18
     "Appuyer pour retour", // 19
     "CONFIGURATION", //20
     "Haut", //21
@@ -411,11 +411,11 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Musique ancienne", // 64
     "Folk", // 65
     "Documentaires", // 66
-    "Vers config WIFI", // 67
-    "Connexion vers", // 68
-    "En cours de cnx Wi-Fi...", // 69
-    "Echecs!", // 70
-    "CONNECTER!", // 71
+    "", // 67
+    "", // 68
+    "", // 69
+    "", // 70
+    "", // 71
     "DAB plus", // 72
     "Attente liste", // 73
     "Selectionnez SVP", // 74

@@ -3,9 +3,6 @@
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>
-#include <WiFiClient.h>
-#include "WiFiConnect.h"
-#include "WiFiConnectParam.h"
 #include "language.h"
 #include "constants.h"
 #include "si4684.h"
@@ -13,7 +10,6 @@
 #include <LittleFS.h>
 
 extern bool ChannelListView;
-extern bool connectedSerial;
 extern bool menu;
 extern bool setupmode;
 extern bool ShowServiceInformation;
@@ -35,18 +31,16 @@ extern int16_t SignalLevel;
 
 extern DAB radio;
 extern TFT_eSPI tft;
-extern WiFiClient RemoteClient;
-extern WiFiServer Server;
-extern WiFiConnect wc;
 
 void Communication(void);
-void tryWiFi(void);
 static char hashCommand(String command);
 static void DataPrint(String data);
 static String ServiceList(void);
 static String ServiceInfo(void);
 static void doEnableConnection(void);
 static void doMOTShow(void);
+static void handleCommunication(void);
+static void outputCommunication(void);
 
 extern void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int color, int smoothcolor, uint8_t fontsize);
 extern void loadFonts(bool option);

@@ -290,18 +290,6 @@ void ShowOneLine(byte position, byte item, bool selected) {
         FullLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
         break;
 
-      case 6:
-        FullLineSprite.drawString((wifi ? String(myLanguage[language][17]) + " IP: " + String(WiFi.localIP().toString()) : myLanguage[language][17]), 6, 3);
-        FullLineSprite.setTextDatum(TR_DATUM);
-        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-        FullLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
-        break;
-
-      case 7:
-        FullLineSprite.drawString(myLanguage[language][18], 6, 3);
-        FullLineSprite.setTextDatum(TR_DATUM);
-        break;
-
       case 8:
         FullLineSprite.drawString(myLanguage[language][81], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
@@ -368,7 +356,10 @@ void MenuUp(void) {
     ShowOneLine(menuoption, menuitem, false);
     menuoption += ITEM_GAP;
     menuitem++;
-    if (menuitem > 8) {
+    if (menuitem > 5 && menuitem < 8) {
+      menuitem = 8;
+      menuoption = ITEM9;
+    } else if (menuitem > 8) {
       menuitem = 0;
       menuoption = ITEM1;
     }
@@ -442,12 +433,6 @@ void MenuUp(void) {
         }
         OneBigLineSprite.pushSprite(24, 118);
         break;
-
-      case ITEM7:
-        if (wifi) wifi = false; else wifi = true;
-        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
-        OneBigLineSprite.pushSprite(24, 118);
-        break;
     }
   }
 }
@@ -457,7 +442,10 @@ void MenuDown(void) {
     ShowOneLine(menuoption, menuitem, false);
     menuoption -= ITEM_GAP;
     menuitem--;
-    if (menuitem > 7) {
+    if (menuitem < 8 && menuitem > 5) {
+      menuoption = ITEM6;
+      menuitem = 5;
+    } else if (menuitem > 8) {
       menuoption = ITEM9;
       menuitem = 8;
     }
@@ -532,12 +520,6 @@ void MenuDown(void) {
         }
         OneBigLineSprite.pushSprite(24, 118);
         break;
-
-      case ITEM7:
-        if (wifi) wifi = false; else wifi = true;
-        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
-        OneBigLineSprite.pushSprite(24, 118);
-        break;
     }
   }
 }
@@ -601,26 +583,6 @@ void DoMenu(void) {
         OneBigLineSprite.pushSprite(24, 118);
         break;
 
-      case ITEM7:
-        Infoboxprint(myLanguage[language][17]);
-        OneBigLineSprite.drawString((wifi ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
-        OneBigLineSprite.pushSprite(24, 118);
-        break;
-
-      case ITEM8: {
-          tftPrint(0, myLanguage[language][68], 155, 58, ActiveColor, ActiveColorSmooth, 28);
-          tftPrint(0, "ESP_" + String(ESP_getChipId()), 155, 98, PrimaryColor, PrimaryColorSmooth, 28);
-          tftPrint(0, myLanguage[language][67], 155, 138, ActiveColor, ActiveColorSmooth, 28);
-          tftPrint(0, "http://192.168.4.1", 155, 174, PrimaryColor, PrimaryColorSmooth, 16);
-          loadFonts(false);
-          wc.startConfigurationPortal(AP_WAIT);
-          wifi = true;
-          tryWiFi();
-          delay(2000);
-          menuopen = false;
-          BuildMenu();
-        } break;
-
       case ITEM9:
         tftPrint(0, myLanguage[language][79], 155, 40, ActiveColor, ActiveColorSmooth, 28);
         tftPrint(0, "PE5PVB", 155, 72, PrimaryColor, PrimaryColorSmooth, 28);
@@ -631,7 +593,6 @@ void DoMenu(void) {
     }
   } else {
     menuopen = false;
-    if (menuoption == ITEM7) tryWiFi();
     BuildMenu();
   }
 }
@@ -1204,22 +1165,4 @@ void ShowTuneMode(void) {
   ModeSprite.pushSprite(6, 33);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, tunemode);
   EEPROM.commit();
-}
-
-void ShowRSSI(void) {
-  if (wifi) rssi = WiFi.RSSI(); else rssi = 0;
-  if (rssiold != rssi || displayreset) {
-    if (rssi == 0) {
-      tft.pushImage(290, 4, 24, 19, WiFi4);
-    } else if (rssi > -50) {
-      tft.pushImage(290, 4, 24, 19, WiFi0);
-    } else if (rssi > -60) {
-      tft.pushImage(290, 4, 24, 19, WiFi1);
-    } else if (rssi > -70) {
-      tft.pushImage(290, 4, 24, 19, WiFi2);
-    } else if (rssi < -70) {
-      tft.pushImage(290, 4, 24, 19, WiFi3);
-    }
-    rssiold = rssi;
-  }
 }
