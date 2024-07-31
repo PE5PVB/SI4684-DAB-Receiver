@@ -36,6 +36,7 @@
 #define EE_BYTE_DISPLAYFLIP         3
 #define EE_BYTE_ROTARYMODE          4
 #define EE_BYTE_TUNEMODE            5
+#define EE_BYTE_BUFFERSLIDESHOW     6
 #define EE_BYTE_UNIT                7
 #define EE_BYTE_DABFREQ             8
 #define EE_BYTE_VOLUME              9

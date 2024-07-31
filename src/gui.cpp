@@ -163,7 +163,7 @@ void ShowServiceInfo(void) {
 
   tftPrint(-1, String(radio.getChannel(dabfreq)) + " - " + String(radio.getFreq(dabfreq) / 1000) + "." + (radio.getFreq(dabfreq) % 1000 < 100 ? "0" : "") + String(radio.getFreq(dabfreq) % 1000) + " MHz", 166, 36, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(unitString[unit]) + "  MER:", 193, 56, PrimaryColor, PrimaryColorSmooth, 16);
-  tftPrint(-1, "dB", 281, 56, PrimaryColor, PrimaryColorSmooth, 16);
+  tftPrint(-1, "dB", 286, 56, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset), 166, 76, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, radio.ASCII(radio.service[radio.ServiceIndex].Label, radio.ServiceLabelCharset), 166, 96, PrimaryColor, PrimaryColorSmooth, 16);
   tftPrint(-1, String(radio.pty, DEC) + ": " + String(myLanguage[language][37 + radio.pty]), 166, 116, PrimaryColor, PrimaryColorSmooth, 16);
@@ -290,6 +290,14 @@ void ShowOneLine(byte position, byte item, bool selected) {
         FullLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
         break;
 
+	  case 6:
+        FullLineSprite.drawString(myLanguage[language][17], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString((radio.BufferSlideShow ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
+        break;
+	  
+
       case 8:
         FullLineSprite.drawString(myLanguage[language][81], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
@@ -356,7 +364,7 @@ void MenuUp(void) {
     ShowOneLine(menuoption, menuitem, false);
     menuoption += ITEM_GAP;
     menuitem++;
-    if (menuitem > 5 && menuitem < 8) {
+    if (menuitem > 6 && menuitem < 8) {
       menuitem = 8;
       menuoption = ITEM9;
     } else if (menuitem > 8) {
@@ -433,6 +441,12 @@ void MenuUp(void) {
         }
         OneBigLineSprite.pushSprite(24, 118);
         break;
+		
+      case ITEM7:
+        radio.BufferSlideShow = !radio.BufferSlideShow;
+        OneBigLineSprite.drawString((radio.BufferSlideShow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
+        break;		
     }
   }
 }
@@ -442,9 +456,9 @@ void MenuDown(void) {
     ShowOneLine(menuoption, menuitem, false);
     menuoption -= ITEM_GAP;
     menuitem--;
-    if (menuitem < 8 && menuitem > 5) {
-      menuoption = ITEM6;
-      menuitem = 5;
+    if (menuitem < 8 && menuitem > 6) {
+      menuoption = ITEM7;
+      menuitem = 6;
     } else if (menuitem > 8) {
       menuoption = ITEM9;
       menuitem = 8;
@@ -520,6 +534,12 @@ void MenuDown(void) {
         }
         OneBigLineSprite.pushSprite(24, 118);
         break;
+		
+      case ITEM7:
+        radio.BufferSlideShow = !radio.BufferSlideShow;
+        OneBigLineSprite.drawString((radio.BufferSlideShow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
+        OneBigLineSprite.pushSprite(24, 118);
+        break;			
     }
   }
 }
@@ -580,6 +600,12 @@ void DoMenu(void) {
         } else {
           OneBigLineSprite.drawString(myLanguage[language][24], 135, 2);
         }
+        OneBigLineSprite.pushSprite(24, 118);
+        break;
+
+      case ITEM7:
+        Infoboxprint(myLanguage[language][17]);
+        OneBigLineSprite.drawString((radio.BufferSlideShow ? myLanguage[language][23] : myLanguage[language][24]), 135, 2);
         OneBigLineSprite.pushSprite(24, 118);
         break;
 
@@ -1077,7 +1103,7 @@ void ShowSignalLevel(void) {
     }
 
     if (((CNRold != CNR) && !setvolume) || displayreset) {
-      tftReplace(1, String(CNRold), String(CNR), 279, 56, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
+      tftReplace(1, String(CNRold), String(CNR), 284, 56, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
       CNRold = CNR;
     }
   }

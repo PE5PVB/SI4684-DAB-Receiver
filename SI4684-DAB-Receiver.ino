@@ -147,7 +147,7 @@ void setup(void) {
   LittleFS.begin();
   LittleFS.format();
 
-  Serial.begin(115200);
+  Serial.begin(1000000);
 
   EEPROM.begin(EE_TOTAL_CNT);
   if (EEPROM.readByte(EE_BYTE_CHECKBYTE) != EE_CHECKBYTE_VALUE) DefaultSettings();
@@ -163,6 +163,7 @@ void setup(void) {
   autoslideshow = EEPROM.readByte(EE_BYTE_AUTOSLIDESHOW);
   tot = EEPROM.readByte(EE_BYTE_TOT);
   CurrentTheme = EEPROM.readByte(EE_BYTE_THEME);
+  radio.BufferSlideShow = EEPROM.readByte(EE_BYTE_BUFFERSLIDESHOW);
 
   for (int i = 0; i < EE_PRESETS_CNT; i++) {
     memory[i].Channel = EEPROM.readByte(i + EE_PRESETS_FREQ_START);
@@ -364,22 +365,25 @@ void ProcessDAB(void) {
   }
 
   if (!SlideShowView && !menu) {
-    if (!ShowServiceInformation && !ChannelListView) {
-      if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) SlideShowButtonPress();
-      ShowBitrate();
-      ShowEID();
-      ShowSID();
-      ShowPTY();
-      ShowProtectionlevel();
-      ShowPS();
-      ShowEN();
-      ShowAudioMode();
-      ShowClock();
-      ShowSlideShowIcon();
-      ShowECC();
-    }
     if (!ChannelListView) ShowSignalLevel();
     ShowRT();
+    if (!ShowServiceInformation && !ChannelListView) {
+      if (autoslideshow && radio.SlideShowAvailable && radio.SlideShowUpdate) {
+        SlideShowButtonPress();
+      } else {
+        ShowBitrate();
+        ShowEID();
+        ShowSID();
+        ShowPTY();
+        ShowProtectionlevel();
+        ShowPS();
+        ShowEN();
+        ShowAudioMode();
+        ShowClock();
+        ShowSlideShowIcon();
+        ShowECC();
+      }
+    }
   } else {
     if (radio.SlideShowAvailable && radio.SlideShowUpdate && !menu) {
       ShowSlideShow();
@@ -411,8 +415,8 @@ void DABSelectService(bool dir) {
   if (radio.numberofservices > 0) {
     bool hasValidService = false;
     for (int i = 0; i < radio.numberofservices; i++) {
-      if (radio.service[i].ServiceType == 0x00 || 
-          radio.service[i].ServiceType == 0x04 || 
+      if (radio.service[i].ServiceType == 0x00 ||
+          radio.service[i].ServiceType == 0x04 ||
           radio.service[i].ServiceType == 0x05) {
         hasValidService = true;
         break;
@@ -427,8 +431,8 @@ void DABSelectService(bool dir) {
       radio.ServiceIndex = (radio.ServiceIndex == 0) ? (radio.numberofservices - 1) : (radio.ServiceIndex - 1);
     }
 
-    while (radio.service[radio.ServiceIndex].ServiceType != 0x00 && 
-           radio.service[radio.ServiceIndex].ServiceType != 0x04 && 
+    while (radio.service[radio.ServiceIndex].ServiceType != 0x00 &&
+           radio.service[radio.ServiceIndex].ServiceType != 0x04 &&
            radio.service[radio.ServiceIndex].ServiceType != 0x05) {
       if (dir) {
         radio.ServiceIndex = (radio.ServiceIndex + 1) % radio.numberofservices;
@@ -541,6 +545,7 @@ void ModeButtonPress(void) {
     EEPROM.writeByte(EE_BYTE_UNIT, unit);
     EEPROM.writeByte(EE_BYTE_TOT, tot);
     EEPROM.writeByte(EE_BYTE_THEME, CurrentTheme);
+    EEPROM.writeByte(EE_BYTE_BUFFERSLIDESHOW, radio.BufferSlideShow);
     EEPROM.commit();
     menu = false;
     BuildDisplay();
@@ -899,6 +904,7 @@ void DefaultSettings(void) {
   EEPROM.writeByte(EE_BYTE_VOLUME, 40);
   EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
   EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, 0);
+  EEPROM.writeByte(EE_BYTE_BUFFERSLIDESHOW, 1);
   EEPROM.writeByte(EE_BYTE_TOT, 0);
   EEPROM.writeByte(EE_BYTE_THEME, 0);
   EEPROM.put(EE_UINT32_SERVICEID, 0);

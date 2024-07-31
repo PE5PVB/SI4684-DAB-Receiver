@@ -23,7 +23,7 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Theme", // 14
     "Auto slideshow", // 15
     "Signal units", // 16
-    "", // 17
+    "Buffer Slideshows", // 17
     "", // 18
     "PRESS MODE TO RETURN", // 19
     "CONFIGURATION", // 20
@@ -107,7 +107,7 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Thema", // 14
     "Auto slideshow", // 15
     "Signaal eenheid", // 16
-    "", // 17
+    "Onthoud Slideshows", // 17
     "", // 18
     "DRUK MODE OM AF TE SLUITEN", // 19
     "CONFIGURATIE", // 20
@@ -191,7 +191,7 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Θέμα", // 14
     "Αυτόματη παρουσίαση", // 15
     "Μονάδες σήματος", // 16
-    "", // 17
+    "Buffer Slideshows", // 17
     "", // 18
     "ΠΙΕΣΤΕ MODE ΓΙΑ ΕΠΙΣΤΡΟΦΗ", // 19
     "ΡΥΘΜΙΣΕΙΣ", // 20
@@ -276,7 +276,7 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Thema", // 14
     "Automatische Slideshow", // 15
     "Messeinheiten", // 16
-    "", // 17
+    "Buffer Slideshows", // 17
     "", // 18
     "MODE DRÜCKEN, UM ZURÜCKZUKEHREN", // 19
     "KONFIGURATION", // 20
@@ -361,7 +361,7 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "Theme", // 14
     "Auto Diapo", // 15
     "Unite de Signal ", // 16
-    "", // 17
+    "Buffer Slideshows", // 17
     "", // 18
     "Appuyer pour retour", // 19
     "CONFIGURATION", //20

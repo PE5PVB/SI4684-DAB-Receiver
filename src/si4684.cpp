@@ -1,9 +1,16 @@
 #include "si4684.h"
 
 unsigned char SPIbuffer[4096];
+uint8_t EPGbuffer[12000];
+uint16_t EPGbufferByteCounter;
+uint8_t EPGbufferIDOld;
+bool once = false;
+
 unsigned long DataUpdate = 0;
+unsigned long SlideShowRecoverTimer = 0;
 bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
+bool processEPG;
 
 static void SPIwrite(unsigned char *data, uint32_t length);
 static void SPIread(uint16_t length);
@@ -233,7 +240,7 @@ bool DAB::begin(uint8_t SSpin) {
     Set_Property(0xB301, 0x0000);
     Set_Property(0xB302, 0x0000);
     Set_Property(0xB303, 0x0000);
-    Set_Property(0xB400, 0x0003);
+    Set_Property(0xB400, 0x0097);
     Set_Property(0xB401, 0x0002);
     Set_Property(0xB500, 0x0000);
   }
@@ -398,9 +405,9 @@ void DAB::getServiceData(void) {
 
     if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24 < sizeof(SPIbuffer)) {
       if ((SPIbuffer[19] + (SPIbuffer[20] << 8)) > 0) {
+        cts();
         SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
         byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
-
 
         // Read Radiotext
         if (((SPIbuffer[8] >> 6) & 0x03) == 0x02 && !((SPIbuffer[25] & 0x10) == 0x10)) {
@@ -420,13 +427,25 @@ void DAB::getServiceData(void) {
             // Create and copy to destination file
             File destinationFile = LittleFS.open("/slideshow.img", "wb");
             if (destinationFile) {
-              while (sourceFile.available()) {
-                destinationFile.write(sourceFile.read());
-              }
+              while (sourceFile.available()) destinationFile.write(byte(sourceFile.read()));
               destinationFile.close();
             }
 
-            // Close source file and remove it
+            size_t freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
+            if (BufferSlideShow && freeSpace >= 100 * 1024) {
+              if (LittleFS.exists("/" + getDynamicFilename())) LittleFS.remove("/" + getDynamicFilename());
+
+              sourceFile = LittleFS.open("/temp.img", "rb");
+              if (sourceFile) {
+                File piFile = LittleFS.open("/" + getDynamicFilename(), "wb");
+                if (piFile) {
+                  while (sourceFile.available()) piFile.write(byte(sourceFile.read()));
+                  piFile.close();
+                }
+              }
+            }
+
+            // Remove old temporary file
             sourceFile.close();
             LittleFS.remove("/temp.img");
 
@@ -437,6 +456,7 @@ void DAB::getServiceData(void) {
             SlideShowAvailable = true;
             SlideShowInit = false;
           }
+
 
           SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37]  >> 4)) & 0x00FFFF;
 
@@ -453,15 +473,6 @@ void DAB::getServiceData(void) {
         } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12 && SlideShowNew) {
           File slideshowFile;
           if (SlideShowInit) {
-            if (SPIbuffer[34] == 0xff && SPIbuffer[35] == 0xd8 && SPIbuffer[36] == 0xff && (SPIbuffer[37] == 0xe0 || SPIbuffer[37] == 0xe1)) {
-              isJPG = true;
-              isPNG = false;
-            }
-            if (SPIbuffer[34] == 0x89 && SPIbuffer[35] == 0x50 && SPIbuffer[36] == 0x4e && SPIbuffer[37] == 0x47 && SPIbuffer[38] == 0x0d && SPIbuffer[39] == 0x0a && SPIbuffer[40] == 0x1a && SPIbuffer[41] == 0x0a) {
-              isPNG = true;
-              isJPG = false;
-            }
-
             if (!LittleFS.exists("/temp.img")) {
               slideshowFile = LittleFS.open("/temp.img", "wb");
               if (!slideshowFile) return;
@@ -477,13 +488,39 @@ void DAB::getServiceData(void) {
             }
             slideshowFile.close();
           }
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x00) {
+          if (SPIbuffer[28] == 0x00 && SPIbuffer[34] == 0x02) processEPG = true; else if (SPIbuffer[28] == 0x00 && SPIbuffer[34] != 0x02) processEPG = false;
+
+          if (EPGbufferByteCounter != 0 && SPIbuffer[31] != EPGbufferIDOld && EPGbuffer[0] == 0x02) parseEPG();
+
+          if (processEPG) {
+            EPGbufferIDOld = SPIbuffer[31];
+            if (EPGbufferByteCounter + (byte_count - 11) <= sizeof(EPGbuffer)) {
+              for (byte_number = 0; byte_number < byte_count - 11; byte_number++) {
+                EPGbuffer[EPGbufferByteCounter] = SPIbuffer[34 + byte_number];
+                EPGbufferByteCounter++;
+              }
+            } else {
+              processEPG = false;
+              EPGbufferByteCounter = 0;
+            }
+          } else {
+            EPGbufferByteCounter = 0;
+          }
         }
       }
     }
   }
 }
 
+void DAB::parseEPG(void) {
+  // To do
+}
 
+String DAB::getDynamicFilename(void) {
+  uint16_t serviceID = service[ServiceIndex].ServiceID & 0xFFFF;
+  return String(serviceID, HEX) + ".img";
+}
 
 void DAB::ServiceInfo(void) {
   for (byte x = 0; x < numberofservices; x++) {
@@ -595,11 +632,10 @@ void DAB::setFreq(uint8_t freq) {
   ecc = 0;
   protectionlevel = 0;
   bitrate = 0;
+  dataServiceCheck = 0;
   ServiceStart = false;
   SlideShowInit = false;
   SlideShowAvailable = false;
-  isJPG = false;
-  isPNG = false;
   SPIbuffer[0] = 0xB0;
   SPIbuffer[1] = 0x00;
   SPIbuffer[2] = freq;
@@ -634,8 +670,6 @@ void DAB::setService(uint8_t _index) {
   SlideShowAvailable = false;
   SlideShowNew = true;
   SlideShowInit = false;
-  isJPG = false;
-  isPNG = false;
   ServiceStart = true;
   ServiceIndex = _index;
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
@@ -668,7 +702,29 @@ void DAB::setService(uint8_t _index) {
     }
   }
   CurrentServiceID = service[ServiceIndex].ServiceID;
+  SlideShowRecover = true;
   ServiceInfo();
+  SlideShowRecoverTimer = millis();
+}
+
+void DAB::RecoverSlideShow(void) {
+  if (BufferSlideShow && SlideShowRecover && millis() - SlideShowRecoverTimer > 800) {
+    if (LittleFS.exists("/" + getDynamicFilename())) {
+      File sourceFile = LittleFS.open("/" + getDynamicFilename(), "rb");
+      if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
+      File destinationFile = LittleFS.open("/slideshow.img", "wb");
+
+      if (destinationFile) {
+        while (sourceFile.available()) destinationFile.write(byte(sourceFile.read()));
+
+        sourceFile.close();
+        destinationFile.close();
+        SlideShowAvailable = true;
+        SlideShowNew = false;
+      }
+    }
+    SlideShowRecover = false;
+  }
 }
 
 void DAB::Update(void) {
@@ -676,6 +732,31 @@ void DAB::Update(void) {
   if (millis() - DataUpdate > 500 || !signallock) {
     EnsembleInfo();
     if (signallock) ServiceInfo();
+    if (ServiceStart) RecoverSlideShow();
+
+    if (ServiceStart) {
+      for (int i = 0; i < numberofservices; i++) {
+        if (service[i].ServiceType == 3 && strstr(service[i].Label, "tpeg") == NULL && strstr(service[i].Label, "TPEG") == NULL) {
+          if (service[i].CompID != dataServiceCheck) {
+            SPIbuffer[0] = 0x81;
+            SPIbuffer[1] = 0x01;
+            SPIbuffer[2] = 0x00;
+            SPIbuffer[3] = 0x00;
+            SPIbuffer[4] = service[i].ServiceID & 0xff;
+            SPIbuffer[5] = (service[i].ServiceID >> 8) & 0xff;
+            SPIbuffer[6] = (service[i].ServiceID >> 16) & 0xff;
+            SPIbuffer[7] = (service[i].ServiceID >> 24) & 0xff;
+            SPIbuffer[8] = service[i].CompID & 0xff;
+            SPIbuffer[9] = (service[i].CompID >> 8) & 0xff;
+            SPIbuffer[10] = (service[i].CompID >> 16) & 0xff;
+            SPIbuffer[11] = (service[i].CompID >> 24) & 0xff;
+            SPIwrite(SPIbuffer, 12);
+            dataServiceCheck = service[i].CompID;
+            break;
+          }
+        }
+      }
+    }
     DataUpdate = millis();
   }
 }

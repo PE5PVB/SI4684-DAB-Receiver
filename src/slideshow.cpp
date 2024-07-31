@@ -4,6 +4,9 @@ File pngfile;
 File jpgfile;
 PNG png;
 
+bool isJPG;
+bool isPNG;
+
 void ShowSlideShow(void) {
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2);
@@ -19,7 +22,23 @@ void ShowSlideShow(void) {
     }
   };
 
-  if (radio.isJPG) {
+  File file = LittleFS.open("/slideshow.img", "r");
+  byte header[8];
+  size_t bytesRead = file.read(header, sizeof(header));
+  file.close();
+  if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
+    isJPG = false;
+    isPNG = true;
+  } else if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+    isJPG = true;
+    isPNG = false;
+  } else {
+    isJPG = false;
+    isPNG = false;
+  }
+
+
+  if (isJPG) {
     tft.fillScreen(TFT_BLACK);
     jpgfile = LittleFS.open("/slideshow.img", "rb");
     if (!jpgfile) {
@@ -55,7 +74,7 @@ void ShowSlideShow(void) {
       tft.endWrite();
     }
     closeFiles();
-  } else if (radio.isPNG) {
+  } else if (isPNG) {
     tft.fillScreen(TFT_BLACK);
     pngfile = LittleFS.open("/slideshow.img", "rb");
     if (!pngfile) {

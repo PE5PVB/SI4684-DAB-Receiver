@@ -274,8 +274,22 @@ static void doMOTShow(void) {
 
     buffer[buff_size] = '\0';
 
-    if (radio.isJPG) DataPrint("1,");
-    if (radio.isPNG) DataPrint("2,");
+    file = LittleFS.open("/slideshow.img", "r");
+    uint8_t header[8];
+    size_t bytesRead = file.read(header, sizeof(header));
+    file.close();
+
+    if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
+      DataPrint("2,");
+    } else if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+      DataPrint("1,");
+    } else {
+      DataPrint("3\n");
+      free(image);
+      free(buffer);
+      return;
+    }
+
     DataPrint("BASE64=");
     DataPrint((char*)buffer);
 
