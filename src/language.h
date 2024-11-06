@@ -17,12 +17,12 @@ static const char* const myLanguage[5][82] PROGMEM = {
     "SI-DAB receiver", // 8
     "Software", // 9
     "Defaults loaded", // 10
-    "Channellist", // 11
+    "Channel list", // 11
     "Language", // 12
     "Brightness", // 13
     "Theme", // 14
     "Auto slideshow", // 15
-    "Signal units", // 16
+    "Signal unit", // 16
     "Buffer Slideshows", // 17
     "", // 18
     "PRESS MODE TO RETURN", // 19
