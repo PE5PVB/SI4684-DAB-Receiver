@@ -1,4 +1,4 @@
-#include "tpa6130a2.h"
+#include "TPA6130A2.h"
 
 byte TPA6130A2::Init(void) {
   Wire.begin();

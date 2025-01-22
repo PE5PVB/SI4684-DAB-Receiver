@@ -5,7 +5,7 @@
 #include <TFT_eSPI.h>
 #include <TimeLib.h>
 #include "si4684.h"
-#include "tpa6130a2.h"
+#include "TPA6130A2.h"
 #include "language.h"
 #include "constants.h"
 #include "graphics.h"
