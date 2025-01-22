@@ -381,7 +381,7 @@ void DAB::EnsembleInfo(void) {
     cts();
     SPIread(11);
 
-    if (SPIbuffer[0] == 0xe8) {
+    if (SPIbuffer[0] == 0xE9) {
       Year = SPIbuffer[5] + ((uint16_t)SPIbuffer[6] << 8);
       Months = SPIbuffer[7];
       Days = SPIbuffer[8];
