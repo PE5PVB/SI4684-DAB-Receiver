@@ -495,6 +495,21 @@ void DAB::getServiceData(void) {
               // Different length - other carousel image, ignore
               if (SlideShowDebug) Serial.printf("[SLS] Ignoring header length=%u (collecting %u), TID=%u\n", newLength, SlideShowLength, transportID);
             }
+          } else if (newLength > 0 && SlideShowInit) {
+            // Same image as already displayed — discard collected segments
+            if (SlideShowDebug) Serial.printf("[SLS] Same image (%u bytes), discarding collection\n", newLength);
+            uint8_t maxSeg = SlideShowHighestSegment;
+            for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
+              String segFile = "/seg_" + String(i) + ".bin";
+              if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+            }
+            if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+            SlideShowTransportID = 0;
+            SlideShowByteCounter = 0;
+            SlideShowHighestSegment = 0;
+            SlideShowTotalSegments = 0;
+            SlideShowInit = false;
+            memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
           }
 
           // Read Slideshow packets - store each segment (works with or without header)
@@ -536,6 +551,7 @@ void DAB::getServiceData(void) {
                   SlideShowHighestSegment = segmentNumber;
                 }
                 SlideShowInit = true;
+                SlideShowLastActivity = millis();
                 if (SlideShowDebug) Serial.printf("[SLS] Segment %u saved, %u bytes (total %u/%u) TID=%u\n", segmentNumber, dataLen, SlideShowByteCounter, SlideShowLength, transportID);
 
                 // Check if complete - using byte count + all segments when we have header length
@@ -549,9 +565,24 @@ void DAB::getServiceData(void) {
               // Segment 0 received again (duplicate) - a full broadcast cycle has completed
               if (SlideShowDebug) Serial.printf("[SLS] Segment 0 repeated, highest=%u\n", SlideShowHighestSegment);
               if (allSegmentsReceived()) {
-                SlideShowTotalSegments = SlideShowHighestSegment + 1;
-                if (SlideShowDebug) Serial.printf("[SLS] Complete by cycle detection, assembling %u segments\n", SlideShowTotalSegments);
-                assembleSlideshow();
+                // Check if this is the same image we already displayed
+                if (SlideShowLengthOld > 0 && SlideShowByteCounter == SlideShowLengthOld) {
+                  if (SlideShowDebug) Serial.printf("[SLS] Same image detected (%u bytes), skipping\n", SlideShowByteCounter);
+                  for (uint8_t i = 0; i <= SlideShowHighestSegment; i++) {
+                    String segFile = "/seg_" + String(i) + ".bin";
+                    if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+                  }
+                  SlideShowTransportID = 0;
+                  SlideShowByteCounter = 0;
+                  SlideShowHighestSegment = 0;
+                  SlideShowTotalSegments = 0;
+                  SlideShowInit = false;
+                  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+                } else {
+                  SlideShowTotalSegments = SlideShowHighestSegment + 1;
+                  if (SlideShowDebug) Serial.printf("[SLS] Complete by cycle detection, assembling %u segments\n", SlideShowTotalSegments);
+                  assembleSlideshow();
+                }
               }
             }
           }
@@ -618,6 +649,23 @@ void DAB::assembleSlideshow(void) {
   File destFile = LittleFS.open("/temp.img", "wb");
   if (!destFile) {
     if (SlideShowDebug) Serial.println("[SLS] Failed to create temp.img");
+
+    // Clean up segment files
+    uint8_t maxSeg = SlideShowHighestSegment;
+    for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
+      String segFile = "/seg_" + String(i) + ".bin";
+      if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+    }
+
+    // Reset state to avoid getting stuck
+    SlideShowTransportID = 0;
+    SlideShowByteCounter = 0;
+    SlideShowHighestSegment = 0;
+    SlideShowTotalSegments = 0;
+    SlideShowLength = 0;
+    SlideShowInit = false;
+    memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+
     return;
   }
 
@@ -658,6 +706,7 @@ void DAB::assembleSlideshow(void) {
         }
 
         // Reset state to start fresh
+        SlideShowTransportID = 0;
         SlideShowByteCounter = 0;
         SlideShowHighestSegment = 0;
         SlideShowTotalSegments = 0;
@@ -693,6 +742,7 @@ void DAB::assembleSlideshow(void) {
           else if (i > SlideShowTotalSegments + 10) break;
         }
 
+        SlideShowTransportID = 0;
         SlideShowByteCounter = 0;
         SlideShowHighestSegment = 0;
         SlideShowTotalSegments = 0;
@@ -762,12 +812,29 @@ void DAB::assembleSlideshow(void) {
     if (SlideShowDebug) Serial.printf("[SLS] Buffered to %s\n", getDynamicFilename().c_str());
   }
 
-  // Update state
-  SlideShowLengthOld = SlideShowLength;
+  // Update state — use actual file size for dedup (works for both header and segment-0 paths)
+  {
+    File sizeCheck = LittleFS.open("/slideshow.img", "rb");
+    if (sizeCheck) {
+      SlideShowLengthOld = sizeCheck.size();
+      sizeCheck.close();
+    } else {
+      SlideShowLengthOld = SlideShowLength;
+    }
+  }
   SlideShowUpdate = true;
   SlideShowUpdate2 = true;
   SlideShowAvailable = true;
   SlideShowInit = false;
+
+  // Reset collection state so next image can be received
+  SlideShowTransportID = 0;
+  SlideShowByteCounter = 0;
+  SlideShowHighestSegment = 0;
+  SlideShowTotalSegments = 0;
+  SlideShowLength = 0;
+  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+
   if (SlideShowDebug) Serial.println("[SLS] Slideshow ready for display");
 }
 
@@ -997,6 +1064,7 @@ void DAB::setService(uint8_t _index) {
   SlideShowTotalSegments = 0;
   SlideShowHighestSegment = 0;
   SlideShowTransportID = 0;
+  SlideShowLastActivity = 0;
 
   // Remove old temp and segment files
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
@@ -1065,6 +1133,25 @@ void DAB::RecoverSlideShow(void) {
 void DAB::Update(void) {
   if (signallock) {
     getServiceData();
+  }
+
+  // Timeout for incomplete slideshow collection (30 seconds without new segments)
+  if (SlideShowInit && SlideShowLastActivity > 0 && millis() - SlideShowLastActivity > 30000) {
+    if (SlideShowDebug) Serial.println("[SLS] Collection timeout, resetting");
+    uint8_t maxSeg = SlideShowHighestSegment;
+    for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
+      String segFile = "/seg_" + String(i) + ".bin";
+      if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+    }
+    if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+    SlideShowTransportID = 0;
+    SlideShowByteCounter = 0;
+    SlideShowHighestSegment = 0;
+    SlideShowTotalSegments = 0;
+    SlideShowLength = 0;
+    SlideShowInit = false;
+    SlideShowLastActivity = 0;
+    memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
   }
 
   if (millis() - DataUpdate > 500 || !signallock) {

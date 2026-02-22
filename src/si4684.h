@@ -148,6 +148,7 @@ class DAB {
     uint8_t SlideShowTotalSegments;       // Total segments expected (0 = unknown)
     uint8_t SlideShowHighestSegment;      // Highest segment number seen
     uint16_t SlideShowTransportID;        // Current transport ID
+    uint32_t SlideShowLastActivity;       // millis() of last new segment received
     void assembleSlideshow(void);
     bool allSegmentsReceived(void);
 
