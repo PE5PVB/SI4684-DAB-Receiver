@@ -328,9 +328,11 @@ void setup(void) {
   BuildDisplay();
   setupmode = false;
   tottimer = millis();
+  IRReceiverBegin();
 }
 
 void loop(void) {
+  IRReceiver();
   ProcessDAB();
   Communication();
   displayreset = false;
