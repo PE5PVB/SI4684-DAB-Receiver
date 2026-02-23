@@ -15,6 +15,7 @@
 #include "src/slideshow.h"
 #include "src/si4684.h"
 #include "src/TPA6130A2.h"
+#include "src/IRReceiver.h"
 
 TPA6130A2 Headphones;
 DAB radio;
