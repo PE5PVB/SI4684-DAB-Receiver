@@ -933,15 +933,12 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
 
         int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
         size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
-        int16_t* rowCoefs = (int16_t*)malloc(coefSize);
         size_t pixelBufSize = blocksPerRow * 64;
-        uint8_t* allBlocks = (uint8_t*)malloc(pixelBufSize);
-
-        if (!rowCoefs || !allBlocks) {
-          if (rowCoefs) free(rowCoefs);
-          if (allBlocks) free(allBlocks);
-          return false;
-        }
+        size_t totalSize = coefSize + pixelBufSize;
+        uint8_t* baseBuf = (uint8_t*)malloc(totalSize);
+        if (!baseBuf) return false;
+        int16_t* rowCoefs = (int16_t*)baseBuf;
+        uint8_t* allBlocks = baseBuf + coefSize;
 
         d->mcuCount = 0;
         for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
@@ -967,6 +964,12 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
                 d->br.reset();
               }
             }
+            // Handle RST markers encountered by bitreader read-ahead
+            if (d->br.hitMarker && d->br.markerVal >= M_RST0 && d->br.markerVal <= M_RST7) {
+              d->mcuCount = 0;
+              for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
+              d->br.reset();
+            }
             if (d->br.hitMarker) break;
           }
 
@@ -974,8 +977,7 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
           if (d->br.hitMarker) break;
         }
 
-        free(allBlocks);
-        free(rowCoefs);
+        free(baseBuf);
         return true;
       }
       default:
@@ -1032,32 +1034,40 @@ bool JPEGdecoder(const char* filename, TFT_eSPI& tft,
     result = pjDecodeBaselinePass(f, d, tft, offsetX, offsetY);
   } else {
     // Progressive: multi-pass row-by-row decode
+    // Single allocation to reduce heap fragmentation on ESP32
     int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
     size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
-    int16_t* rowCoefs = (int16_t*)malloc(coefSize);
     size_t pixelBufSize = blocksPerRow * 64;
-    uint8_t* allBlocks = (uint8_t*)malloc(pixelBufSize);
     size_t bitmapSize = d->totalImageBlocks * 8;
-    uint8_t* nzBitmap = (uint8_t*)calloc(1, bitmapSize);
+    size_t totalSize = coefSize + pixelBufSize + bitmapSize;
 
-    if (!rowCoefs || !allBlocks || !nzBitmap) {
-      if (rowCoefs) free(rowCoefs);
-      if (allBlocks) free(allBlocks);
-      if (nzBitmap) free(nzBitmap);
-      free(d); f.close();
-      return false;
+    uint8_t* progBuf = (uint8_t*)calloc(1, totalSize);
+    uint8_t* nzBitmap;
+    if (!progBuf) {
+      // Fallback: allocate without nzBitmap (AC refine may be slightly degraded)
+      bitmapSize = 0;
+      totalSize = coefSize + pixelBufSize;
+      progBuf = (uint8_t*)calloc(1, totalSize);
+      if (!progBuf) {
+        free(d); f.close();
+        return false;
+      }
+      nzBitmap = nullptr;
+    } else {
+      nzBitmap = progBuf + coefSize + pixelBufSize;
     }
+
+    int16_t* rowCoefs = (int16_t*)progBuf;
+    uint8_t* allBlocks = progBuf + coefSize;
 
     for (int row = 0; row < d->mcuCntY; row++) {
       memset(rowCoefs, 0, coefSize);
-      memset(nzBitmap, 0, bitmapSize);
+      if (nzBitmap) memset(nzBitmap, 0, bitmapSize);
       pjProcessFileForRow(f, d, rowCoefs, row, nzBitmap);
       pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
     }
 
-    free(nzBitmap);
-    free(allBlocks);
-    free(rowCoefs);
+    free(progBuf);
     result = true;
   }
 
