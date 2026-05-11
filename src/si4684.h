@@ -1,3 +1,17 @@
+// Driver for the Skyworks (formerly Silicon Labs) SI4684 DAB+ receiver chip.
+//
+// Communicates over SPI (pins set up in begin()). Boots the chip by uploading
+// the rom-patch + firmware blob, then exposes high-level operations:
+//   - tune to a DAB Band III channel
+//   - enumerate the services in the current ensemble
+//   - select a service and start audio
+//   - decode Dynamic Label / Radiotext, PTY, ECC, time, etc.
+//   - reassemble MOT slideshow images into /slideshow.img on LittleFS
+//
+// All chip status comes back via the SPI status byte + a 4 KB SPI rx buffer
+// (`SPIbuffer` in si4684.cpp). Every command goes via cts() to wait for the
+// "command ready" bit before the next byte is written.
+
 #ifndef si4684_h
 #define si4684_h
 
@@ -65,6 +79,9 @@ static const char* const ServiceTypeText[] {
   ""
 };
 
+// One row of the in-memory service table populated by ServiceInfo().
+// Only one CompID per service is stored; secondary components (e.g. data
+// streams in the same service) are intentionally ignored.
 typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
@@ -149,10 +166,18 @@ class DAB {
     uint8_t SlideShowHighestSegment;      // Highest segment number seen
     uint16_t SlideShowTransportID;        // Current transport ID
     uint32_t SlideShowLastActivity;       // millis() of last new segment received
+
+    // RAM-based segment buffer (replaces /seg_N.bin files for speed).
+    // 84 segments * 512 bytes = 42 KB. Practical DAB MOT segments are 501 bytes.
+    static const uint8_t  SLS_MAX_SEGMENTS  = 84;
+    static const uint16_t SLS_MAX_SEG_SIZE  = 512;
+    uint8_t  slideshowSegBuf[SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE];
+    uint16_t slideshowSegLen[SLS_MAX_SEGMENTS];
+    void clearSegmentBuffer(void);
+
     void assembleSlideshow(void);
     bool allSegmentsReceived(void);
 
-    void parseEPG(void);
     void RecoverSlideShow(void);
 };
 

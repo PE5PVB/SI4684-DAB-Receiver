@@ -82,6 +82,8 @@ struct PJHuffTable {
   int total;
 };
 
+// Pre-compute the canonical Huffman lookup tables (mincode/maxcode/valptr)
+// from the per-bit-length counts found in a DHT segment.
 static void pjBuildHuff(PJHuffTable* ht) {
   int code = 0, p = 0;
   uint16_t huffcode[256];
@@ -270,6 +272,7 @@ static void pjSkip(File& f, int n) {
 }
 
 // --- Parse DQT ---
+// DQT (Define Quantization Table) parser - up to 4 tables, 8 or 16 bit each.
 static bool pjParseDQT(File& f, PJDecoder* d) {
   int len = pjRead16(f) - 2;
   while (len > 0) {
@@ -291,6 +294,7 @@ static bool pjParseDQT(File& f, PJDecoder* d) {
 }
 
 // --- Parse DHT ---
+// DHT (Define Huffman Table) parser - stores DC/AC tables for each component.
 static bool pjParseDHT(File& f, PJDecoder* d) {
   int len = pjRead16(f) - 2;
   while (len > 0) {
@@ -313,6 +317,7 @@ static bool pjParseDHT(File& f, PJDecoder* d) {
 }
 
 // --- Parse SOF2 ---
+// SOF (Start Of Frame) parser - extracts image dimensions and subsampling info.
 static bool pjParseSOF(File& f, PJDecoder* d) {
   pjRead16(f); // length
   if (pjRead8(f) != 8) return false; // precision must be 8
@@ -347,6 +352,8 @@ static bool pjParseSOF(File& f, PJDecoder* d) {
 }
 
 // --- Parse SOS ---
+// SOS (Start Of Scan) parser - reads component selectors and the band/Ah/Al
+// fields that drive progressive-mode pass dispatch.
 static bool pjParseSOS(File& f, PJDecoder* d) {
   pjRead16(f); // length
   d->scanNComp = pjRead8(f);
@@ -661,6 +668,8 @@ static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
 #define IDCT_BITS  13
 #define PASS1_BITS 2
 
+// 8x8 inverse DCT (AAN scaled algorithm). Reads dequantized coefficients,
+// writes back 64 spatial-domain samples clipped to 0..255.
 static void pjIDCT(int16_t* coef, const int16_t* qt, uint8_t* out) {
   int32_t ws[64];
 
@@ -761,6 +770,8 @@ static inline uint16_t pjYCbCrToRGB565(int y, int cb, int cr) {
 }
 
 // --- Render one MCU row to TFT ---
+// IDCT every block in one MCU row, then convert YCbCr→RGB565 and push the
+// resulting pixel rows to the TFT (centered horizontally and vertically).
 static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
                            TFT_eSPI& tft, int offsetX, int offsetY,
                            uint8_t* allBlocks) {
@@ -845,6 +856,8 @@ static int pjSkipEntropy(File& f) {
 }
 
 // --- Process entire file for one MCU row ---
+// One pass over the file for the progressive decoder: replays every scan,
+// only retaining coefficients that belong to the target MCU row.
 static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
                                 int targetRow, uint8_t* nzBitmap) {
   f.seek(0);
@@ -904,6 +917,8 @@ static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
 }
 
 // --- Baseline single-pass decode ---
+// Single-pass baseline decoder: walks the file once, decoding and rendering
+// each MCU row on the fly. Used for SOF0 images where no multi-pass needed.
 static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
                                   int offsetX, int offsetY) {
   f.seek(0);
@@ -994,6 +1009,9 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
 }
 
 // --- Main entry point ---
+// Public entry point: opens the file, parses headers, then dispatches to
+// either the single-pass baseline decoder (SOF0) or the multi-pass
+// progressive decoder (SOF2). Returns true on success.
 bool JPEGdecoder(const char* filename, TFT_eSPI& tft,
                  int displayWidth, int displayHeight) {
   File f = LittleFS.open(filename, "rb");

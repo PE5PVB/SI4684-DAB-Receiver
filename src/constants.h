@@ -1,6 +1,15 @@
+// Project-wide constants: hardware pin assignments, EEPROM layout,
+// UI line-spacing offsets, and the user-facing tune-mode / memory-status enums.
+//
+// Pin numbers map to the ESP32 dev-board GPIOs used by the schematic.
+// EEPROM layout defines BOTH the size (EE_TOTAL_CNT) and the offsets of each
+// stored value; the EE_CHECKBYTE_VALUE doubles as a schema version so older
+// layouts get re-initialised via DefaultSettings() on first boot.
+
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+// ---------- Hardware pin assignments ----------
 #define ROTARY_PIN_A    27
 #define ROTARY_PIN_B    34
 #define ROTARY_PIN_2A   33
@@ -10,8 +19,9 @@
 #define STANDBYBUTTON   36
 #define SLBUTTON        26
 #define MODEBUTTON      39
-#define CONTRASTPIN     2
+#define CONTRASTPIN     2          // PWM pin driving the LCD backlight
 
+// ---------- GUI vertical spacing (px) for menu/list items ----------
 #define ITEM_GAP        20
 #define ITEM1           3
 #define ITEM2           23
@@ -24,12 +34,12 @@
 #define ITEM9           163
 #define ITEM10          183
 
-// EEPROM index defines
-#define EE_PRESETS_CNT              99
-#define EE_PRESETS_FREQUENCY        255
-#define EE_CHECKBYTE_VALUE          2 // 0 ~ 255,add new entry, change for new value
+// ---------- EEPROM layout ----------
+#define EE_PRESETS_CNT              99   // number of memory presets supported
+#define EE_PRESETS_FREQUENCY        255  // sentinel marking an empty preset slot
+#define EE_CHECKBYTE_VALUE          2    // bump to invalidate prior EEPROM layouts (forces DefaultSettings)
 
-#define EE_TOTAL_CNT                2614
+#define EE_TOTAL_CNT                2614 // total bytes claimed via EEPROM.begin()
 #define EE_BYTE_CHECKBYTE           0
 #define EE_BYTE_LANGUAGE            1
 #define EE_BYTE_CONTRASTSET         2
@@ -44,20 +54,22 @@
 #define EE_BYTE_THEME               11
 #define EE_BYTE_AUTOSLIDESHOW       12
 #define EE_BYTE_TOT                 13
-#define EE_UINT32_SERVICEID         14
-#define EE_CHAR17_SERVICENAME       22 // 17 bytes!
-#define EE_PRESETS_FREQ_START       39
-#define EE_PRESETS_SERVICEID_START  138
-#define EE_PRESETS_NAME_START       930
-// End of EEPROM index defines
+#define EE_UINT32_SERVICEID         14   // 4 bytes: last-used service ID
+#define EE_CHAR17_SERVICENAME       22   // 17 bytes: last-used service label (16 chars + NUL)
+#define EE_PRESETS_FREQ_START       39   // 1 byte * EE_PRESETS_CNT: per-preset channel index
+#define EE_PRESETS_SERVICEID_START  138  // 8 bytes * EE_PRESETS_CNT: per-preset 64-bit service ID
+#define EE_PRESETS_NAME_START       930  // 17 bytes * EE_PRESETS_CNT: per-preset label
 
+// ---------- UI strings + enums ----------
 static const char* const unitString[] = {"dBμV", "dBf", "dBm"};
 static const char* const Theme[] = {"Elegant", "GoldenDusk", "Vibrant", "Serenity", "Luminous", "Radiant", "Sunset"};
 
+// Manual = rotary changes channel; Auto = seek; Mem = step through presets.
 enum RADIO_TUNE_MODE {
   TUNE_MAN, TUNE_AUTO, TUNE_MEM
 };
 
+// Visual state of the memory-position indicator.
 enum RADIO_MEM_POS_STATUS {
   MEM_DARK, MEM_NORMAL, MEM_EXIST
 };

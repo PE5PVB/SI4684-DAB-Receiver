@@ -1,17 +1,23 @@
+// SI4684 DAB chip driver. See si4684.h for the high-level summary.
+//
+// Implementation notes:
+//   - SPIbuffer is the single 4 KB transfer buffer used for both command
+//     writes and reply reads; cts() polls until the chip ack-bit is set.
+//   - Commands and reply layouts mirror the Si468x programming guide (AN649).
+//   - Slideshow segments are buffered in slideshowSegBuf[] (in the DAB class)
+//     until a full image is received; then assembleSlideshow() writes the
+//     final file to LittleFS as /slideshow.img.
+
 #include "si4684.h"
 #include "mbedtls/base64.h"
 
-unsigned char SPIbuffer[4096];
-uint8_t EPGbuffer[12000];
-uint16_t EPGbufferByteCounter;
-uint8_t EPGbufferIDOld;
+unsigned char SPIbuffer[4096];      // shared SPI tx/rx buffer (commands and replies)
 bool once = false;
 
-unsigned long DataUpdate = 0;
+unsigned long DataUpdate = 0;       // millis() of last EnsembleInfo/ServiceInfo refresh (500 ms throttle)
 unsigned long SlideShowRecoverTimer = 0;
 bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
-bool processEPG;
 
 static void SPIwrite(unsigned char* data, uint32_t length);
 static void SPIread(uint16_t length);
@@ -22,6 +28,7 @@ static String extractUTF8Substring(const String& utf8String, size_t start, size_
 static void charConverter(const char* input, wchar_t* output, size_t size);
 static int compareCompID(const void* a, const void* b);
 
+// Read back the chip identifier string (e.g. "Si4684").
 char* DAB::getChipID(void) {
   SPIbuffer[0] = 0x08;
   SPIbuffer[1] = 0x00;
@@ -35,6 +42,7 @@ char* DAB::getChipID(void) {
   return ChipType;
 }
 
+// Return the loaded firmware version string ("major.minor.build").
 char* DAB::getFirmwareVersion(void) {
   SPIbuffer[0] = 0x12;
   SPIbuffer[1] = 0x00;
@@ -54,6 +62,8 @@ char* DAB::getFirmwareVersion(void) {
   return FirmwVersion;
 }
 
+// Sanity check: query the chip status. Returns true if it looks hung
+// (caller responds by reinitialising the chip via doRecovery()).
 bool DAB::panic(void) {
   SPIbuffer[0] = 0x09;
   SPIbuffer[1] = 0x00;
@@ -86,10 +96,15 @@ const char* DAB::getChannel(uint8_t freq) {
   return DABfrequencyTable_DAB[freq].label;
 }
 
+// Set the chip's internal audio attenuator (the headphone amp does the
+// fine volume; this is mostly a coarse control).
 void DAB::vol(uint8_t vol) {
   Set_Property(0x0300, (vol & 0x3F));
 }
 
+// Low-level SPI command write: pulls CS low, transfers `length` bytes,
+// then releases CS. No reply data is captured here — use SPIread() after cts()
+// when the chip needs to return data.
 static void SPIwrite(unsigned char* data, uint32_t length) {
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(slaveSelectPin, LOW);
@@ -98,11 +113,16 @@ static void SPIwrite(unsigned char* data, uint32_t length) {
   SPI.endTransaction();
 }
 
+// Low-level SPI reply read: clocks `length` dummy bytes out and stores the
+// returned bytes back into SPIbuffer. Expects cts() to have already been
+// called so the chip is ready to respond.
 static void SPIread(uint16_t length) {
   for (uint16_t i = 0; i < length + 1; i++) SPIbuffer[i] = 0;
   SPIwrite(SPIbuffer, length + 1);
 }
 
+// SET_PROPERTY (cmd 0x13): write one of the chip's internal properties such
+// as sample rate, audio output config, FIC interrupt source. See AN649 §6.
 static void Set_Property(uint16_t property, uint16_t value) {
   SPIbuffer[0] = 0x13;
   SPIbuffer[1] = 0x00;
@@ -139,6 +159,12 @@ static void cts(void) {
   }
 }
 
+// Cold-start sequence per AN649:
+//   1. POWER_UP - configure clock + crystal
+//   2. LOAD_INIT + HOST_LOAD - upload the patch + firmware blobs from flash
+//   3. BOOT - jump to firmware
+//   4. Configure DAB-specific properties (sample rate, audio output, FIC etc.)
+// Returns true once the chip reports the DAB image is running.
 bool DAB::begin(uint8_t SSpin) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
@@ -257,6 +283,9 @@ bool DAB::begin(uint8_t SSpin) {
   return result;
 }
 
+// Query DAB ensemble information (RSSI, CNR, FIC quality, sample/lock state,
+// EID, ensemble label) and populate the public fields. Also fetches the
+// service list when freshly locked. Called periodically from Update().
 void DAB::EnsembleInfo(void) {
   static bool lastSignalLock = false;
   static uint8_t lastFic = 0;
@@ -423,6 +452,11 @@ void DAB::EnsembleInfo(void) {
   }
 }
 
+// Pull one chunk of service-data from the chip. Each chunk is either:
+//   - Dynamic Label / Radiotext (group flag 0x02) → copy into ServiceData
+//   - MOT slideshow header     (0x80 0x00 0x12 ...) → record total length, TID
+//   - MOT slideshow segment    (0x00/0x80 ...   ) → memcpy into slideshowSegBuf
+// Called on every Update() while the receiver has signal lock.
 void DAB::getServiceData(void) {
   uint32_t byte_count = 0;
   uint32_t byte_number = 0;
@@ -457,18 +491,12 @@ void DAB::getServiceData(void) {
 
               // If segments were collected with a different TID, discard them
               if (SlideShowTransportID != 0 && transportID != SlideShowTransportID) {
-                if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, discarding old segments\n", transportID, SlideShowTransportID);
-                uint8_t maxSeg = SlideShowHighestSegment;
-                for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
-                  String segFile = "/seg_" + String(i) + ".bin";
-                  if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-                }
-                if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, discarding old segments\n", transportID, SlideShowTransportID);
+                clearSegmentBuffer();
                 SlideShowByteCounter = 0;
                 SlideShowHighestSegment = 0;
                 SlideShowTotalSegments = 0;
                 SlideShowInit = false;
-                memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
               }
 
               SlideShowTransportID = transportID;
@@ -498,18 +526,12 @@ void DAB::getServiceData(void) {
           } else if (newLength > 0 && SlideShowInit) {
             // Same image as already displayed — discard collected segments
             if (SlideShowDebug) Serial.printf("[SLS] Same image (%u bytes), discarding collection\n", newLength);
-            uint8_t maxSeg = SlideShowHighestSegment;
-            for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
-              String segFile = "/seg_" + String(i) + ".bin";
-              if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-            }
-            if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+            clearSegmentBuffer();
             SlideShowTransportID = 0;
             SlideShowByteCounter = 0;
             SlideShowHighestSegment = 0;
             SlideShowTotalSegments = 0;
             SlideShowInit = false;
-            memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
           }
 
           // Read Slideshow packets - store each segment (works with or without header)
@@ -534,15 +556,10 @@ void DAB::getServiceData(void) {
             if (!(SlideShowSegmentBitmap[byteIndex] & (1 << bitIndex))) {
               uint16_t dataLen = byte_count - 11;
 
-              // Ensure enough free space for segment (with margin)
-              ensureFreeSpace(dataLen + 4096);
-
-              // Save segment to individual file
-              String segFile = "/seg_" + String(segmentNumber) + ".bin";
-              File slideshowFile = LittleFS.open(segFile, "wb");
-              if (slideshowFile) {
-                slideshowFile.write(&SPIbuffer[34], dataLen);
-                slideshowFile.close();
+              // Bounds-check: discard segments that don't fit our RAM buffer
+              if (segmentNumber < SLS_MAX_SEGMENTS && dataLen <= SLS_MAX_SEG_SIZE) {
+                memcpy(&slideshowSegBuf[segmentNumber * SLS_MAX_SEG_SIZE], &SPIbuffer[34], dataLen);
+                slideshowSegLen[segmentNumber] = dataLen;
 
                 // Mark segment as received and update highest seen
                 SlideShowSegmentBitmap[byteIndex] |= (1 << bitIndex);
@@ -560,6 +577,8 @@ void DAB::getServiceData(void) {
                   if (SlideShowDebug) Serial.printf("[SLS] Complete by byte count, assembling %u segments\n", SlideShowTotalSegments);
                   assembleSlideshow();
                 }
+              } else {
+                if (SlideShowDebug) Serial.printf("[SLS] Drop seg %u (dataLen=%u out of buffer bounds)\n", segmentNumber, dataLen);
               }
             } else if (segmentNumber == 0 && SlideShowLength == 0 && SlideShowHighestSegment > 0) {
               // Segment 0 received again (duplicate) - a full broadcast cycle has completed
@@ -568,16 +587,12 @@ void DAB::getServiceData(void) {
                 // Check if this is the same image we already displayed
                 if (SlideShowLengthOld > 0 && SlideShowByteCounter == SlideShowLengthOld) {
                   if (SlideShowDebug) Serial.printf("[SLS] Same image detected (%u bytes), skipping\n", SlideShowByteCounter);
-                  for (uint8_t i = 0; i <= SlideShowHighestSegment; i++) {
-                    String segFile = "/seg_" + String(i) + ".bin";
-                    if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-                  }
+                  clearSegmentBuffer();
                   SlideShowTransportID = 0;
                   SlideShowByteCounter = 0;
                   SlideShowHighestSegment = 0;
                   SlideShowTotalSegments = 0;
                   SlideShowInit = false;
-                  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
                 } else {
                   SlideShowTotalSegments = SlideShowHighestSegment + 1;
                   if (SlideShowDebug) Serial.printf("[SLS] Complete by cycle detection, assembling %u segments\n", SlideShowTotalSegments);
@@ -586,36 +601,24 @@ void DAB::getServiceData(void) {
               }
             }
           }
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x00) {
-          if (SPIbuffer[28] == 0x00 && SPIbuffer[34] == 0x02) processEPG = true;
-          else if (SPIbuffer[28] == 0x00 && SPIbuffer[34] != 0x02) processEPG = false;
-
-          if (EPGbufferByteCounter != 0 && SPIbuffer[31] != EPGbufferIDOld && EPGbuffer[0] == 0x02) parseEPG();
-
-          if (processEPG) {
-            EPGbufferIDOld = SPIbuffer[31];
-            if (EPGbufferByteCounter + (byte_count - 11) <= sizeof(EPGbuffer)) {
-              for (byte_number = 0; byte_number < byte_count - 11; byte_number++) {
-                EPGbuffer[EPGbufferByteCounter] = SPIbuffer[34 + byte_number];
-                EPGbufferByteCounter++;
-              }
-            } else {
-              processEPG = false;
-              EPGbufferByteCounter = 0;
-            }
-          } else {
-            EPGbufferByteCounter = 0;
-          }
         }
       }
     }
   }
 }
 
-void DAB::parseEPG(void) {
-  // To do
+// Forget every buffered slideshow segment. Used on TID switch, duplicate-image
+// detection, assembly completion, and timeouts. Clearing the lengths array is
+// enough — the data bytes in slideshowSegBuf only get read for indices where
+// the corresponding length is non-zero.
+void DAB::clearSegmentBuffer(void) {
+  memset(slideshowSegLen, 0, sizeof(slideshowSegLen));
+  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
 }
 
+// Check if we have every segment from 0..N where N is either:
+//   - SlideShowTotalSegments (set from the MOT header when known), or
+//   - SlideShowHighestSegment + 1 (best guess until we see segment 0 wrap).
 bool DAB::allSegmentsReceived(void) {
   // Determine how many segments to check
   uint8_t segmentsToCheck = SlideShowTotalSegments;
@@ -636,6 +639,10 @@ bool DAB::allSegmentsReceived(void) {
   return true;
 }
 
+// Stitch all buffered segments together, validate the result, and publish it
+// as /slideshow.img on LittleFS. Writes to /temp.img first so the previous
+// slideshow stays intact on validation failure. Optionally also caches a
+// per-service copy as /<serviceID>.img when BufferSlideShow is enabled.
 void DAB::assembleSlideshow(void) {
   if (SlideShowDebug) Serial.printf("[SLS] Assembling: %u segments, %u bytes received, %u bytes expected\n", SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
 
@@ -649,39 +656,22 @@ void DAB::assembleSlideshow(void) {
   File destFile = LittleFS.open("/temp.img", "wb");
   if (!destFile) {
     if (SlideShowDebug) Serial.println("[SLS] Failed to create temp.img");
-
-    // Clean up segment files
-    uint8_t maxSeg = SlideShowHighestSegment;
-    for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
-      String segFile = "/seg_" + String(i) + ".bin";
-      if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-    }
-
-    // Reset state to avoid getting stuck
+    clearSegmentBuffer();
     SlideShowTransportID = 0;
     SlideShowByteCounter = 0;
     SlideShowHighestSegment = 0;
     SlideShowTotalSegments = 0;
     SlideShowLength = 0;
     SlideShowInit = false;
-    memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
-
     return;
   }
 
-  // Concatenate all segments in order
-  for (uint8_t i = 0; i < SlideShowTotalSegments; i++) {
-    String segFile = "/seg_" + String(i) + ".bin";
-    File srcFile = LittleFS.open(segFile, "rb");
-    if (srcFile) {
-      uint8_t buf[512];
-      size_t bytesRead;
-      while ((bytesRead = srcFile.read(buf, sizeof(buf))) > 0) {
-        destFile.write(buf, bytesRead);
-      }
-      srcFile.close();
-    } else {
-      if (SlideShowDebug) Serial.printf("[SLS] WARNING: segment %u missing!\n", i);
+  // Concatenate all segments from RAM in order — single sequential write
+  for (uint8_t i = 0; i < SlideShowTotalSegments && i < SLS_MAX_SEGMENTS; i++) {
+    if (slideshowSegLen[i] > 0) {
+      destFile.write(&slideshowSegBuf[i * SLS_MAX_SEG_SIZE], slideshowSegLen[i]);
+    } else if (SlideShowDebug) {
+      Serial.printf("[SLS] WARNING: segment %u missing!\n", i);
     }
   }
 
@@ -697,23 +687,13 @@ void DAB::assembleSlideshow(void) {
       if (actualSize != SlideShowLength) {
         if (SlideShowDebug) Serial.printf("[SLS] REJECTED: size mismatch (got %u, expected %u)\n", actualSize, SlideShowLength);
         LittleFS.remove("/temp.img");
-
-        // Clean up segment files
-        for (uint8_t i = 0; i < 255; i++) {
-          String segFile = "/seg_" + String(i) + ".bin";
-          if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-          else if (i > SlideShowTotalSegments + 10) break;
-        }
-
-        // Reset state to start fresh
+        clearSegmentBuffer();
         SlideShowTransportID = 0;
         SlideShowByteCounter = 0;
         SlideShowHighestSegment = 0;
         SlideShowTotalSegments = 0;
         SlideShowLength = 0;
         SlideShowInit = false;
-        memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
-
         return;
       }
     }
@@ -734,22 +714,13 @@ void DAB::assembleSlideshow(void) {
       if (!validJPEG && !validPNG) {
         if (SlideShowDebug) Serial.printf("[SLS] REJECTED: invalid header (%02X %02X %02X %02X)\n", hdr[0], hdr[1], hdr[2], hdr[3]);
         LittleFS.remove("/temp.img");
-
-        // Clean up segment files
-        for (uint8_t i = 0; i < 255; i++) {
-          String segFile = "/seg_" + String(i) + ".bin";
-          if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-          else if (i > SlideShowTotalSegments + 10) break;
-        }
-
+        clearSegmentBuffer();
         SlideShowTransportID = 0;
         SlideShowByteCounter = 0;
         SlideShowHighestSegment = 0;
         SlideShowTotalSegments = 0;
         SlideShowLength = 0;
         SlideShowInit = false;
-        memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
-
         return;
       }
 
@@ -759,7 +730,18 @@ void DAB::assembleSlideshow(void) {
 
   // Validation passed — replace old slideshow with new one
   if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
-  LittleFS.rename("/temp.img", "/slideshow.img");
+  if (!LittleFS.rename("/temp.img", "/slideshow.img")) {
+    if (SlideShowDebug) Serial.println("[SLS] rename temp.img -> slideshow.img failed");
+    if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+    clearSegmentBuffer();
+    SlideShowTransportID = 0;
+    SlideShowByteCounter = 0;
+    SlideShowHighestSegment = 0;
+    SlideShowTotalSegments = 0;
+    SlideShowLength = 0;
+    SlideShowInit = false;
+    return;
+  }
 
   // Print BASE64 encoded slideshow when debug is enabled
   if (SlideShowDebug) {
@@ -783,11 +765,7 @@ void DAB::assembleSlideshow(void) {
     }
   }
 
-  // Clean up segment files
-  for (uint8_t i = 0; i < SlideShowTotalSegments; i++) {
-    String segFile = "/seg_" + String(i) + ".bin";
-    if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-  }
+  // Segment-buffer in RAM is cleared at the end of this function (see below).
 
   // Save to service-specific buffer file if enabled
   if (BufferSlideShow) {
@@ -833,11 +811,14 @@ void DAB::assembleSlideshow(void) {
   SlideShowHighestSegment = 0;
   SlideShowTotalSegments = 0;
   SlideShowLength = 0;
-  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+  clearSegmentBuffer();
 
   if (SlideShowDebug) Serial.println("[SLS] Slideshow ready for display");
 }
 
+// Garbage-collect helper for BufferSlideShow: find the oldest /<id>.img file
+// (excluding slideshow.img and temp.img) and remove it. Returns false if
+// nothing was found to delete.
 bool DAB::deleteOldestSlideshow(void) {
   File root = LittleFS.open("/");
   if (!root || !root.isDirectory()) return false;
@@ -867,6 +848,9 @@ bool DAB::deleteOldestSlideshow(void) {
   return false;
 }
 
+// Free up at least `requiredBytes` on LittleFS by deleting cached slideshows
+// in oldest-first order. Returns false if even after deleting everything we
+// still don't have enough space.
 bool DAB::ensureFreeSpace(size_t requiredBytes) {
   size_t freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
 
@@ -881,11 +865,16 @@ bool DAB::ensureFreeSpace(size_t requiredBytes) {
   return true;
 }
 
+// Filename for the per-service slideshow cache, e.g. "8203.img". Uses only
+// the low 16 bits of the service ID (collisions are accepted as cosmetic).
 String DAB::getDynamicFilename(void) {
   uint16_t serviceID = service[ServiceIndex].ServiceID & 0xFFFF;
   return String(serviceID, HEX) + ".img";
 }
 
+// Populate per-service metadata (PTY, ECC, bitrate, audio mode, sample rate,
+// time/date, protection level) for the currently selected service. The
+// service list itself is filled in EnsembleInfo().
 void DAB::ServiceInfo(void) {
   for (byte x = 0; x < numberofservices; x++) {
     SPIbuffer[0] = 0xBE;
@@ -977,6 +966,8 @@ void DAB::ServiceInfo(void) {
   }
 }
 
+// Wipe every cached metadata field. Called when re-tuning so stale labels,
+// PTY etc. from the previous channel don't briefly show up on the display.
 void DAB::clearData(void) {
   for (byte x = 0; x < 32; x++) {
     service[x].ServiceID = 0;
@@ -987,6 +978,8 @@ void DAB::clearData(void) {
   for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
 }
 
+// Tune to channel `freq` (an index into DABfrequencyTable_DAB). Sends the
+// DAB_TUNE_FREQ command, waits up to 5 s for the chip to report lock state.
 void DAB::setFreq(uint8_t freq) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   DataUpdate -= 1000;
@@ -1038,6 +1031,8 @@ void DAB::setFreq(uint8_t freq) {
   cts();
 }
 
+// Start audio for service[_index] in the current ensemble. Resets the
+// slideshow segment buffer because the new service has its own MOT stream.
 void DAB::setService(uint8_t _index) {
   union {
     uint32_t combine;
@@ -1059,20 +1054,15 @@ void DAB::setService(uint8_t _index) {
   ecc = 0;  // Reset so ServiceInfo() picks up the new service's ECC
   serviceHasOwnEcc = false;
 
-  // Reset segment tracking
-  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+  // Reset segment tracking (RAM-only)
+  clearSegmentBuffer();
   SlideShowTotalSegments = 0;
   SlideShowHighestSegment = 0;
   SlideShowTransportID = 0;
   SlideShowLastActivity = 0;
 
-  // Remove old temp and segment files
+  // Remove leftover temp.img from a previous failed assembly
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
-  for (uint8_t i = 0; i < 255; i++) {
-    String segFile = "/seg_" + String(i) + ".bin";
-    if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-    else break;  // Stop when no more segment files exist
-  }
 
   SPIbuffer[0] = 0x81;
   SPIbuffer[1] = 0x00;
@@ -1107,29 +1097,39 @@ void DAB::setService(uint8_t _index) {
   SlideShowRecoverTimer = millis();
 }
 
+// On service start: if a cached /<serviceID>.img exists, copy it over
+// /slideshow.img so the UI has something to show until a fresh MOT image
+// arrives. Triggered ~800 ms after the service starts via SlideShowRecover.
 void DAB::RecoverSlideShow(void) {
   if (BufferSlideShow && SlideShowRecover && millis() - SlideShowRecoverTimer > 800) {
     if (LittleFS.exists("/" + getDynamicFilename())) {
       File sourceFile = LittleFS.open("/" + getDynamicFilename(), "rb");
-      if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
-      File destinationFile = LittleFS.open("/slideshow.img", "wb");
+      if (sourceFile) {
+        if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
+        File destinationFile = LittleFS.open("/slideshow.img", "wb");
 
-      if (destinationFile) {
-        uint8_t buf[512];
-        size_t bytesRead;
-        while ((bytesRead = sourceFile.read(buf, sizeof(buf))) > 0) {
-          destinationFile.write(buf, bytesRead);
+        if (destinationFile) {
+          uint8_t buf[512];
+          size_t bytesRead;
+          while ((bytesRead = sourceFile.read(buf, sizeof(buf))) > 0) {
+            destinationFile.write(buf, bytesRead);
+          }
+          destinationFile.close();
+          SlideShowAvailable = true;
+          SlideShowNew = false;
         }
         sourceFile.close();
-        destinationFile.close();
-        SlideShowAvailable = true;
-        SlideShowNew = false;
       }
     }
     SlideShowRecover = false;
   }
 }
 
+// Periodic driver pump. Called every loop iteration:
+//   - Pull any pending service-data (RT / MOT) packets
+//   - Discard the slideshow buffer if no segment has arrived in 30 s
+//   - Every 500 ms, refresh EnsembleInfo + ServiceInfo and start a data
+//     service for TPEG-like data components on first activation
 void DAB::Update(void) {
   if (signallock) {
     getServiceData();
@@ -1138,11 +1138,7 @@ void DAB::Update(void) {
   // Timeout for incomplete slideshow collection (30 seconds without new segments)
   if (SlideShowInit && SlideShowLastActivity > 0 && millis() - SlideShowLastActivity > 30000) {
     if (SlideShowDebug) Serial.println("[SLS] Collection timeout, resetting");
-    uint8_t maxSeg = SlideShowHighestSegment;
-    for (uint8_t i = 0; i <= maxSeg + 10 && i < 255; i++) {
-      String segFile = "/seg_" + String(i) + ".bin";
-      if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
-    }
+    clearSegmentBuffer();
     if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
     SlideShowTransportID = 0;
     SlideShowByteCounter = 0;
@@ -1151,7 +1147,6 @@ void DAB::Update(void) {
     SlideShowLength = 0;
     SlideShowInit = false;
     SlideShowLastActivity = 0;
-    memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
   }
 
   if (millis() - DataUpdate > 500 || !signallock) {
@@ -1189,6 +1184,10 @@ void DAB::Update(void) {
   }
 }
 
+// Convert a label/text from the DAB-side character set to UTF-8 for the TFT.
+// charset 0 = ETSI EBU Latin (the most common), uses a lookup table via
+// charConverter()+convertToUTF8(). All other charsets are assumed UTF-8 already.
+// Also auto-detects already-UTF-8 input to avoid double conversion.
 String DAB::ASCII(const char* input, uint8_t charset) {
   if (!input) return String();
   String result;
@@ -1226,6 +1225,7 @@ String DAB::ASCII(const char* input, uint8_t charset) {
 }
 
 
+// qsort() comparator: order services by component ID low byte ascending.
 static int compareCompID(const void* a, const void* b) {
   uint32_t compID_a = (*((DABService*)a)).CompID & 0xFF;
   uint32_t compID_b = (*((DABService*)b)).CompID & 0xFF;
@@ -1235,6 +1235,9 @@ static int compareCompID(const void* a, const void* b) {
   return 0;
 }
 
+// Translate an EBU-Latin (ETSI EN 300 401) byte string into Unicode code
+// points, handling the DAB-specific shift/escape encodings. Output is a
+// wchar_t buffer that convertToUTF8() later serialises as UTF-8.
 static void charConverter(const char* input, wchar_t* output, size_t outSize) {
     if (!input || !output || outSize == 0) return;
 
@@ -1401,6 +1404,8 @@ static void charConverter(const char* input, wchar_t* output, size_t outSize) {
     output[i] = L'\0';
 }
 
+// Substring helper that operates on code-points (not bytes) so cutting a
+// UTF-8 string at index N doesn't slice a multi-byte sequence in half.
 static String extractUTF8Substring(const String& utf8String, size_t start, size_t length) {
   String substring;
   size_t utf8Length = utf8String.length();
@@ -1432,6 +1437,8 @@ static String extractUTF8Substring(const String& utf8String, size_t start, size_
   return substring;
 }
 
+// Encode the wchar_t code points produced by charConverter() into a UTF-8
+// String suitable for the TFT and the serial protocol.
 static String convertToUTF8(const wchar_t* input) {
   String output;
   while (*input) {

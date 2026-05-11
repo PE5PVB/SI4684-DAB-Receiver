@@ -1,14 +1,22 @@
+// IR remote handling: decode NEC-style frames from an IR receiver module
+// on GPIO12 and re-use the front-panel handlers (KeyUp / KeyDown / etc.)
+// to drive the radio. Three remote codebooks are supported (matching the
+// remotes the user owns).
+
 #include "IRReceiver.h"
 
-uint16_t RECV_PIN = 12;
+uint16_t RECV_PIN = 12;             // IR detector data line
 IRrecv irrecv(RECV_PIN);
 decode_results results;
-uint32_t lastCode = 0;
+uint32_t lastCode = 0;              // last non-repeat code (used to translate NEC repeats)
 
 void IRReceiverBegin() {
   irrecv.enableIRIn();
 }
 
+// Poll for a new IR code each loop. NEC repeats (0xFFFFFFFF) are only
+// accepted for the left/right keys — the up/down/OK/menu/play codes are
+// intentionally NOT repeat-able, so holding them doesn't auto-fire.
 void IRReceiver() {
  if (irrecv.decode(&results)) {
     uint32_t code = results.value;
@@ -16,10 +24,11 @@ void IRReceiver() {
     Serial.println(code ,HEX);
 
    if (code == 0xFFFFFFFF) {
+        // NEC repeat marker — only honor it for keys where auto-repeat feels right
         if (lastCode == 0x77E1604F || lastCode == 0x77E1E04E || lastCode == 0xFF5AA5 || lastCode == 0x77E1904F || lastCode == 0x77E1104E || lastCode == 0xFF10EF) {
             code = lastCode;
         } else {
-            code = 0;  
+            code = 0;
         }
     } else {
         lastCode = code;

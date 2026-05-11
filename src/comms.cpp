@@ -1,20 +1,39 @@
+// Serial-line control protocol implementation.
+//
+// Inbound (PC -> radio): newline-terminated text. Two forms:
+//   "DEBUG"        bare keyword → toggle slideshow debug logging
+//   "CMD=VALUE"    key/value pair → see hashCommand() / handleCommunication()
+//
+// Outbound (radio -> PC): event-driven, only while connectedSerial is true:
+//   $L=...   service list changed
+//   $I=...   service info (bitrate, PTY, etc.) changed
+//   $D=RT=   radiotext changed
+//   $S=...   signal/lock/CNR/FIC (rate-limited by `interval` ms)
+//   $M=...   slideshow availability
+//   *TUNE/*SERVICE/*ENABLE  command acknowledgements
+//   #0..#2   numeric status replies (#0 OK, #1 bad arg, #2 unknown cmd)
+
 #include "comms.h"
 
-unsigned long signalMillis;
-unsigned int interval = 100;
+unsigned long signalMillis;          // last time the periodic signal line was emitted
+unsigned int interval = 100;         // signal-line emission interval (ms), configurable via INTERVAL=
 byte ServiceIndexOld;
 byte dabfreqOld;
-String ServiceListOld;
+String ServiceListOld;               // cached last-emitted service list, used for diff detection
 String ServiceInfoOld;
 String ServiceDataOld;
-bool connectedSerial;
+bool connectedSerial;                // protocol active only after ENABLE=1 handshake
 
+// Called once per main loop. Parses at most one inbound line (non-blocking)
+// and then emits diffs of cached state to the host if connected.
 void Communication(void) {
   if (Serial.available() > 0) {
+    Serial.setTimeout(100);  // partial packet shouldn't freeze the loop for 1s
     String input = Serial.readStringUntil('\n');
     unsigned int equalsIndex = input.indexOf('=');
 
     if (equalsIndex == -1) {
+      // Bare keyword (no '='): only DEBUG is recognised; anything else is #2 (unknown)
       input.trim();
       input.toUpperCase();
       if (input.equals("DEBUG")) {
@@ -119,6 +138,8 @@ void Communication(void) {
     }
   }
 
+  // Outbound diff-stream: only emit changes since the last loop iteration
+  // so the protocol stays event-driven (signal/CNR is the only periodic line).
   if (connectedSerial) {
     if (radio.ServiceIndex != ServiceIndexOld) {
       if (radio.ServiceStart) DataPrint("*SERVICE=" + String(radio.ServiceIndex) + "\n");
@@ -132,19 +153,22 @@ void Communication(void) {
       dabfreqOld = dabfreq;
     }
 
-    if (ServiceList() != ServiceListOld) {
-      DataPrint(ServiceList());
-      ServiceListOld = ServiceList();
+    String currentList = ServiceList();
+    if (currentList != ServiceListOld) {
+      DataPrint(currentList);
+      ServiceListOld = currentList;
     }
 
-    if (ServiceInfo() != ServiceInfoOld) {
-      DataPrint(ServiceInfo());
-      ServiceInfoOld = ServiceInfo();
+    String currentInfo = ServiceInfo();
+    if (currentInfo != ServiceInfoOld) {
+      DataPrint(currentInfo);
+      ServiceInfoOld = currentInfo;
     }
 
-    if (String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)) != ServiceDataOld) {
-      DataPrint("$D=RT=" + String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)) + "\n");
-      ServiceDataOld = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
+    String currentData = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
+    if (currentData != ServiceDataOld) {
+      DataPrint("$D=RT=" + currentData + "\n");
+      ServiceDataOld = currentData;
     }
 
     if (millis() - signalMillis > interval) {
@@ -156,6 +180,8 @@ void Communication(void) {
   }
 }
 
+// Map a command string to a single-char tag for the switch in handleCommunication().
+// Returning 0 = unknown command.
 static char hashCommand(String command) {
   if (command.equals("ENABLE")) {
     return 'E';
@@ -170,10 +196,13 @@ static char hashCommand(String command) {
   }
 }
 
+// Wraps Serial.print so we have one place to swap the transport if needed.
 static void DataPrint(String data) {
   Serial.print(data);
 }
 
+// Build the "$L=..." service-list line for the host. Called once per loop
+// while connected and diffed against ServiceListOld to avoid spam.
 static String ServiceList(void) {
   String ServiceList;
   ServiceList = "$L=COUNT=" + String(radio.numberofservices) + ",ENSEMBLE=" + String(radio.EID) + "," + String(radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset)) + ";SERVICES=";
@@ -194,6 +223,7 @@ static String ServiceList(void) {
   return ServiceList;
 }
 
+// Build the "$I=..." service-info line summarising the currently playing service.
 static String ServiceInfo(void) {
   String ServiceInfo;
   ServiceInfo = "$I=";
@@ -208,6 +238,9 @@ static String ServiceInfo(void) {
   return ServiceInfo;
 }
 
+// Handshake response after the host sends ENABLE=1. Sends version, chip info,
+// the supported mode, the current update interval and the full DAB frequency
+// table so the client can label channels.
 static void doEnableConnection(void) {
   DataPrint("*ENABLE=1," + String(VERSION) + "," + String(radio.getChipID()) + "/" + String(radio.getFirmwareVersion()) + "\n");
   DataPrint(":MODE=3,3-3\n");
@@ -237,6 +270,8 @@ static void doEnableConnection(void) {
   if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true; else DataPrint("$M=SLIDESHOW=0\n");
 }
 
+// When a new slideshow is ready, stream the file to the host as base64
+// in a single "$M=SLIDESHOW=..." line so a client can preview it.
 static void doMOTShow(void) {
   if (radio.SlideShowAvailable && radio.SlideShowUpdate2) {
     DataPrint("$M=SLIDESHOW=");

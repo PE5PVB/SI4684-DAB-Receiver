@@ -1,7 +1,15 @@
+// All TFT rendering. Each Show*() function updates one piece of the screen;
+// they only redraw what has actually changed by comparing against a "*Old"
+// shadow variable, so the loop can call them all every iteration cheaply.
+// BuildDisplay() / BuildChannelList() / BuildMenu() do the full redraws
+// when the active view switches.
+
 #include "gui.h"
 
-byte menuitem;
+byte menuitem;                    // current highlight when the menu is open
 
+// Apply the user-selected colour theme to the global PrimaryColor/etc. used
+// by every draw routine. Use the linked RGB565 picker to author new themes.
 void doTheme(void) {  // Use this to put your own colors in: http://www.barth-dev.de/online/rgb565-color-picker/
   switch (CurrentTheme) {
     case 0:  // Elegant
@@ -146,6 +154,8 @@ void doTheme(void) {  // Use this to put your own colors in: http://www.barth-de
   }
 }
 
+// Full-screen overlay listing every metadata field for the current service
+// (chip, firmware, ensemble, ECC, PTY, audio mode, bitrate, sample rate).
 void ShowServiceInfo(void) {
   setvolume = false;
   displayreset = true;
@@ -175,6 +185,8 @@ void ShowServiceInfo(void) {
   tftPrint(-1, String(ServiceTypeText[radio.servicetype]) + " - " + AudioModeText[radio.audiomode], 166, 196, PrimaryColor, PrimaryColorSmooth, 16);
 }
 
+// Render the scrollable list of services in the current ensemble. Used as
+// the alternative to "main display" when the user opens the channel list.
 void BuildChannelList(void) {
   setvolume = false;
   tft.pushImage (0, 0, 320, 240, servicelistbackground);
@@ -215,6 +227,9 @@ void BuildChannelList(void) {
   }
 }
 
+// Draw one row of a list/menu. `position` is the vertical line slot
+// (ITEM1..ITEM10) and `item` is the data row to read from. `selected`
+// switches between highlighted vs normal styling.
 void ShowOneLine(byte position, byte item, bool selected) {
   if (ChannelListView) {
     FullLineSprite.pushImage (-8, -position - 35, 320, 240, servicelistbackground);
@@ -307,6 +322,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
   }
 }
 
+// Full redraw of the settings menu (entered by long-pressing MODE).
 void BuildMenu(void) {
   SlideShowView = false;
   ShowServiceInformation = false;
@@ -327,6 +343,9 @@ void BuildMenu(void) {
   ShowOneLine(ITEM9, 8, (menuoption == ITEM9 ? true : false));
 }
 
+// Full redraw of the main radio screen (frequency, PS, RT, signal bars,
+// memory slot, clock). Called when switching back from another view or
+// after a theme/display-orientation change.
 void BuildDisplay(void) {
   SlideShowView = false;
   ShowServiceInformation = false;
@@ -359,6 +378,8 @@ void BuildDisplay(void) {
   ShowMemoryPos();
 }
 
+// Menu navigation: handle the rotary-up event while the settings menu is
+// open. Either steps a value of the current row or moves to the next row.
 void MenuUp(void) {
   if (!menuopen) {
     ShowOneLine(menuoption, menuitem, false);
@@ -451,6 +472,7 @@ void MenuUp(void) {
   }
 }
 
+// Menu navigation: rotary-down counterpart of MenuUp().
 void MenuDown(void) {
   if (!menuopen) {
     ShowOneLine(menuoption, menuitem, false);
@@ -544,6 +566,8 @@ void MenuDown(void) {
   }
 }
 
+// Menu confirm: rotary-button click while in the menu. Either enters a sub-
+// menu, applies the current change, or commits the value to EEPROM.
 void DoMenu(void) {
   if (!menuopen) {
     tft.pushImage (13, 30, 292, 170, popupbackground);
@@ -623,6 +647,8 @@ void DoMenu(void) {
   }
 }
 
+// Render a centered text line in the small "info" box at the top of the
+// screen (used for transient messages like "Saved" / "No signal").
 void Infoboxprint(const char* input) {
   int length = strlen(input);
   int newlineIndex = -1;
@@ -650,6 +676,10 @@ void Infoboxprint(const char* input) {
     tftPrint(0, input, 155, 78, ActiveColor, ActiveColorSmooth, 28);
   }
 }
+
+// The Show*() routines below are individually called from ProcessDAB() every
+// loop. Each one diffs the current radio.* / live state against a `*Old` shadow
+// variable and only pushes its sprite/region to the TFT when something changed.
 
 void ShowFreq(void) {
   tftReplace(0, radio.getChannel(dabfreqold), radio.getChannel(dabfreq), 145, 45, PrimaryColor, PrimaryColorSmooth, BackgroundColor2, 28);
@@ -1029,8 +1059,10 @@ void ShowVolume(void) {
 }
 
 
+// Signal-level meter (RSSI bar). 100 ms throttle so quick fluctuations don't
+// flood the SPI bus; the rest is just the standard diff-vs-old logic.
 void ShowSignalLevel(void) {
-  if (millis() >= rssiTimer + 100) {
+  if (millis() - rssiTimer >= 100) {
     rssiTimer = millis();
     CNR = radio.cnr;
   }

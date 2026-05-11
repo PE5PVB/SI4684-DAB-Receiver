@@ -1,8 +1,21 @@
+// Renders the assembled MOT image (/slideshow.img) on the TFT.
+// Format detection is done by looking at the magic bytes:
+//   FF D8 FF ...                  → JPEG (further check: SOF0 baseline vs SOF2 progressive)
+//   89 50 4E 47 0D 0A 1A 0A       → PNG
+// Both decoders run synchronously; the screen fades down before redraw
+// and fades back up afterwards to avoid a hard flicker.
+//
+// The PNG decoder is callback-based, so `pngfile` is a file-scope global
+// referenced by the read/seek lambdas passed to PNGdec.
+
 #include "slideshow.h"
 
-File pngfile;
+File pngfile;                       // shared file handle used by PNGdec callbacks
 PNG png;
 
+// Walks the JPEG markers to find the Start-Of-Frame:
+// 0xC0 = baseline, 0xC2 = progressive. Other markers are skipped using
+// their length field. Returns false on any parse error.
 static bool isProgressiveJPEG(void) {
   File f = LittleFS.open("/slideshow.img", "rb");
   if (!f) return false;
@@ -26,6 +39,8 @@ static bool isProgressiveJPEG(void) {
   return false;
 }
 
+// Ramp the backlight to zero with ~5 ms steps to hide the image change.
+// Blocking by design — we want a clean visible fade.
 static void fadeDown(void) {
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2);
@@ -34,6 +49,7 @@ static void fadeDown(void) {
   analogWrite(CONTRASTPIN, 0);
 }
 
+// Ramp the backlight back up to the user-selected ContrastSet value.
 static void fadeUp(void) {
   for (int x = 0; x <= ContrastSet; x++) {
     analogWrite(CONTRASTPIN, x * 2 + 27);
@@ -41,6 +57,8 @@ static void fadeUp(void) {
   }
 }
 
+// Entry point: opens /slideshow.img, sniffs the format, and dispatches to
+// the appropriate decoder. No-op if the file isn't readable.
 void ShowSlideShow(void) {
   if (radio.SlideShowDebug) Serial.println("[SLS] ShowSlideShow() called");
   File file = LittleFS.open("/slideshow.img", "r");

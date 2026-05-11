@@ -1,3 +1,11 @@
+// GUI module: all TFT rendering for the radio.
+// Renders directly to the 320x240 ILI9341 panel via TFT_eSPI, plus uses
+// TFT_eSprite objects (defined in the .ino) for flicker-free partial updates
+// of frequency, signal level, radiotext, slideshow icons, etc.
+//
+// Visual state lives in the bool flags declared below; the routines in
+// gui.cpp inspect those + the live radio.* fields to decide what to redraw.
+
 #ifndef GUI_H
 #define GUI_H
 
@@ -62,8 +70,8 @@ extern int InsignificantColorSmooth;
 extern int menuoption;
 extern int PrimaryColor;
 extern int PrimaryColorSmooth;
-extern int rotary;
-extern int rotary2;
+extern volatile int rotary;
+extern volatile int rotary2;
 extern int rssi;
 extern int rssiold;
 extern int RTWidth;
