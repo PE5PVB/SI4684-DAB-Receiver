@@ -168,8 +168,9 @@ class DAB {
     uint32_t SlideShowLastActivity;       // millis() of last new segment received
 
     // RAM-based segment buffer (replaces /seg_N.bin files for speed).
-    // 84 segments * 512 bytes = 42 KB. Practical DAB MOT segments are 501 bytes.
-    static const uint8_t  SLS_MAX_SEGMENTS  = 84;
+    // 80 segments * 512 bytes = 40 KB. Practical DAB MOT segments are 501 bytes.
+    // Sized to leave a few KB of DRAM headroom for future Arduino-core upgrades.
+    static const uint8_t  SLS_MAX_SEGMENTS  = 80;
     static const uint16_t SLS_MAX_SEG_SIZE  = 512;
     uint8_t  slideshowSegBuf[SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE];
     uint16_t slideshowSegLen[SLS_MAX_SEGMENTS];
