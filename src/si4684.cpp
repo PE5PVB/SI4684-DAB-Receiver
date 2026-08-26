@@ -8,6 +8,9 @@
 //   - Slideshow segments and the assembled current image stay in RAM.
 
 #include "si4684.h"
+#include "esp_heap_caps.h"
+
+extern void SlideshowReceptionState(bool active);
 #include "Si468xROM.h"
 // Arduino defines interrupts() as a function-like macro; the standalone
 // driver also has a reply field named `interrupts`.
@@ -15,11 +18,18 @@
 #undef interrupts
 #endif
 #include "vendor/si468x/Si468x.h"
+// V15 A/B test: use the newer DAB 6.0.9 application image.
 #include "vendor/si468x/dab_6_0_9.h"
 #include "vendor/si468x/fmhd_5_3_3.h"
 
 unsigned char SPIbuffer[4096];      // shared SPI tx/rx buffer (commands and replies)
 bool once = false;
+
+// Second fixed slideshow buffer: incoming MOT assembly.
+// The class member slideshowSegBuf remains the last complete image.
+static uint8_t* slideshowIncomingBuf = nullptr;
+static constexpr size_t SLS_INCOMING_BYTES = 80U * 512U;
+static uint32_t slideshowFirstSegmentMs = 0;
 
 unsigned long DataUpdate = 0;       // millis() of last EnsembleInfo/ServiceInfo refresh (500 ms throttle)
 bool EnsembleInfoSet;
@@ -31,7 +41,41 @@ static si468x::Si468x chip;
 static uint8_t chipWorkspace[512];
 static volatile uint8_t lastStatus0;
 
+// Boot diagnostics. HOST_LOAD is intentionally not logged chunk-by-chunk;
+// progress is reported roughly every 64 KiB to keep the UART readable.
+static uint8_t diagLoadPhase = 0;
+static uint32_t diagPhaseBytes[3] = {0, 0, 0};
+static uint32_t diagNextLoadReport = 65536UL;
+static volatile uint8_t diagLastCommand = 0;
+
 static bool hostWriteCommand(void*, uint8_t command, const uint8_t* args, uint16_t length) {
+  diagLastCommand = command;
+  if (command == 0x01) {
+    Serial.printf("[RADIO/SPI] POWER_UP args=%u data=", length);
+    for (uint16_t i = 0; i < length; ++i) Serial.printf("%02X%s", args[i], (i + 1U < length) ? " " : "");
+    Serial.println();
+  } else if (command == 0x06) {
+    if (diagLoadPhase < 2) ++diagLoadPhase;
+    diagPhaseBytes[diagLoadPhase] = 0;
+    diagNextLoadReport = 65536UL;
+    Serial.printf("[RADIO/SPI] LOAD_INIT phase=%u (%s)\n",
+                  diagLoadPhase, diagLoadPhase == 1 ? "PATCH" : "FIRMWARE");
+  } else if (command == 0x04) {
+    if (diagLoadPhase <= 2) {
+      diagPhaseBytes[diagLoadPhase] += length;
+      if (diagPhaseBytes[diagLoadPhase] == static_cast<uint32_t>(length) ||
+          diagPhaseBytes[diagLoadPhase] >= diagNextLoadReport) {
+        Serial.printf("[RADIO/SPI] HOST_LOAD phase=%u bytes=%u\n",
+                      diagLoadPhase, diagPhaseBytes[diagLoadPhase]);
+        while (diagNextLoadReport <= diagPhaseBytes[diagLoadPhase])
+          diagNextLoadReport += 65536UL;
+      }
+    }
+  } else if (command == 0x07) {
+    Serial.printf("[RADIO/SPI] BOOT patchBytes=%u fwBytes=%u\n",
+                  diagPhaseBytes[1], diagPhaseBytes[2]);
+  }
+
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(command);
@@ -49,6 +93,21 @@ static bool hostReadReply(void*, uint8_t* destination, uint16_t length) {
   for (uint16_t i = 0; i < length; ++i) destination[i] = SPI.transfer(0);
   digitalWrite(slaveSelectPin, HIGH);
   SPI.endTransaction();
+
+  // Print raw replies for the two boot-state commands and for every command error.
+  // This exposes RESP4 (the AN649 command-error reason) without depending on
+  // any higher-level library diagnostic API.
+  if (diagLastCommand == 0x01 || diagLastCommand == 0x09 || (destination[0] & 0x40U)) {
+    const uint16_t shown = length < 12 ? length : 12;
+    Serial.printf("[RADIO/SPI] REPLY cmd=0x%02X len=%u data=",
+                  static_cast<unsigned>(diagLastCommand), static_cast<unsigned>(length));
+    for (uint16_t i = 0; i < shown; ++i)
+      Serial.printf("%02X%s", destination[i], (i + 1U < shown) ? " " : "");
+    if (length > shown) Serial.print(" ...");
+    Serial.println();
+    if ((destination[0] & 0x40U) && length >= 5)
+      Serial.printf("[RADIO/SPI] ERR_CMD reason RESP4=0x%02X\n", destination[4]);
+  }
   return true;
 }
 
@@ -110,22 +169,20 @@ void DAB::vol(uint8_t vol) {
   Set_Property(0x0300, (vol & 0x3F));
 }
 
-// Low-level SPI command write: pulls CS low, transfers `length` bytes,
-// then releases CS. No reply data is captured here — use SPIread() after cts()
-// when the chip needs to return data.
+// v6 A/B transport test: legacy DAB runtime uses the exact proven SPI model
+// from the stable driver.  This is intentionally separate from the Si468x
+// HostInterface used for POWER_UP/HOST_LOAD/BOOT and identity queries.
 static void SPIwrite(unsigned char* data, uint32_t length) {
-  if (!data || !length || data[0] == 0) return;
-  chip.executeRaw(data[0], length > 1 ? data + 1 : nullptr,
-                  length > 1 ? static_cast<uint16_t>(length - 1) : 0,
-                  nullptr, 0, 1000000UL);
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+  digitalWrite(slaveSelectPin, LOW);
+  SPI.transfer(data, length);
+  digitalWrite(slaveSelectPin, HIGH);
+  SPI.endTransaction();
 }
 
-// Low-level SPI reply read: clocks `length` dummy bytes out and stores the
-// returned bytes back into SPIbuffer. Expects cts() to have already been
-// called so the chip is ready to respond.
 static void SPIread(uint16_t length) {
-  memset(SPIbuffer, 0, static_cast<size_t>(length) + 1U);
-  chip.readCurrentReply(SPIbuffer + 1, length);
+  for (uint16_t i = 0; i < length + 1; i++) SPIbuffer[i] = 0;
+  SPIwrite(SPIbuffer, length + 1);
 }
 
 // SET_PROPERTY (cmd 0x13): write one of the chip's internal properties such
@@ -142,7 +199,30 @@ static void Set_Property(uint16_t property, uint16_t value) {
 }
 
 static void cts(void) {
-  // SPIwrite() above already completed CTS through Si468x::executeRaw().
+  bool timeout = false;
+  uint16_t countdown = 200;
+
+  while (!(SPIbuffer[1] & 0x80)) {
+    delay(2);
+    memset(SPIbuffer, 0, 5);
+    SPIwrite(SPIbuffer, 5);
+
+    countdown--;
+    if (countdown == 0) {
+      timeout = true;
+      break;
+    }
+  }
+
+  if (SPIbuffer[1] & 0x40) {
+    Serial.printf("[V7.1/LEGACY] CTS ERR status=0x%02X\n", SPIbuffer[1]);
+    memset(SPIbuffer, 0, 5);
+  }
+
+  if (timeout && sizeof(SPIbuffer) > 5) {
+    Serial.println("[V7.1/LEGACY] CTS TIMEOUT");
+    SPIbuffer[5] |= (1 << 7);
+  }
 }
 
 // Cold-start sequence per AN649:
@@ -152,6 +232,35 @@ static void cts(void) {
 //   4. Configure DAB-specific properties (sample rate, audio output, FIC etc.)
 // Returns true once the chip reports the DAB image is running.
 bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
+  // Allocate the second slideshow buffer once for the entire runtime.
+  // Keeping this out of .bss avoids the ESP32 static-DRAM linker limit.
+  // The block is never freed or resized, so slideshow operation cannot
+  // fragment the heap.
+  if (!slideshowIncomingBuf) {
+    slideshowIncomingBuf = static_cast<uint8_t*>(
+        heap_caps_malloc(SLS_INCOMING_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    Serial.printf("[RAM/SLS] incoming fixed-lifetime buffer=%p size=%u free=%u largest=%u\n",
+                  slideshowIncomingBuf,
+                  (unsigned)SLS_INCOMING_BYTES,
+                  ESP.getFreeHeap(),
+                  heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if (!slideshowIncomingBuf) {
+      Serial.println("[RAM/SLS] ERROR: cannot allocate incoming slideshow buffer");
+      return false;
+    }
+  }
+
+  Serial.println();
+  Serial.println("[RADIO] ================================================");
+  Serial.printf("[RADIO] begin SS=%u requestedMode=%s\n",
+                SSpin, requestedMode == RADIO_MODE_FM ? "FM" : "DAB");
+  Serial.printf("[RADIO] heap before begin=%u min=%u\n",
+                ESP.getFreeHeap(), ESP.getMinFreeHeap());
+
+  diagLoadPhase = 0;
+  diagPhaseBytes[0] = diagPhaseBytes[1] = diagPhaseBytes[2] = 0;
+  diagNextLoadReport = 65536UL;
+
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   slaveSelectPin = SSpin;
   tunePending = false;
@@ -165,7 +274,17 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
 
   pinMode(slaveSelectPin, OUTPUT);
   digitalWrite(slaveSelectPin, HIGH);
-  SPI.begin(14, 16, 13, SSpin);
+  // V16: the Arduino SPI object is initialised once in setup() BEFORE the
+  // shared GPIO17 reset and before TFT_eSPI init.  Do not call SPI.begin()
+  // again here; all radio traffic is wrapped in beginTransaction/endTransaction.
+  Serial.println("[RADIO] V16 shared SPI already initialised in setup; SPI.begin SKIPPED");
+  digitalWrite(slaveSelectPin, HIGH);
+#ifdef TFT_CS
+  pinMode(TFT_CS, OUTPUT);
+  digitalWrite(TFT_CS, HIGH);
+  Serial.printf("[RADIO] V16 TFT_CS=%d forced HIGH before radio traffic\n", TFT_CS);
+#endif
+  Serial.println("[RADIO] SPI ready");
 
   si468x::HostInterface host;
   host.writeCommand = hostWriteCommand;
@@ -178,6 +297,45 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   chip.setCtsPollIntervalUs(1000);
   // INTB is not routed to an ESP32 GPIO on this PCB, so use bounded polling.
   chip.setIdleStatusPollIntervalUs(20000);
+  Serial.printf("[RADIO] driver configured workspace=%u B CTS poll=1000 us\n",
+                static_cast<unsigned>(sizeof(chipWorkspace)));
+
+  // Check which image is already running before POWER_UP. This is important on
+  // this PCB because resetting/reflashing the ESP32 does not necessarily reset
+  // the Si4684. POWER_UP is a bootloader/startup command and is rejected by an
+  // already running DAB/FM application image.
+  delay(5);
+  si468x::SystemState preState;
+  Serial.println("[RADIO] PRECHECK GET_SYS_STATE before POWER_UP");
+  si468x::Result preResult = chip.getSystemState(preState, 100000UL);
+  Serial.printf("[RADIO] PRECHECK result=%d image=%u status0=0x%02X status3=0x%02X\n",
+                static_cast<int>(preResult),
+                preResult == si468x::Result::Ok ? static_cast<unsigned>(preState.image) : 255U,
+                preResult == si468x::Result::Ok ? static_cast<unsigned>(preState.status.status0) : static_cast<unsigned>(lastStatus0),
+                preResult == si468x::Result::Ok ? static_cast<unsigned>(preState.status.status3) : 0U);
+
+  const si468x::Image expected = requestedMode == RADIO_MODE_FM ? si468x::Image::FMHD : si468x::Image::DAB;
+  const bool reuseRunningImage =
+      preResult == si468x::Result::Ok && preState.image == expected;
+
+  // V9: do not touch the shared GPIO17 reset when the requested application is
+  // already running.  This preserves the TFT controller state.  A fresh/cold
+  // Si4684 STARTUP state (for example the diagnostic image value seen as 9) is
+  // still allowed to continue through POWER_UP + HOST_LOAD + BOOT.  If a real
+  // opposite application image is active, refuse here; mode switching is kept
+  // separate from this startup test because GPIO17 also resets the TFT.
+  if (reuseRunningImage) {
+    Serial.printf("[RADIO] V9 active image already matches requested=%u - REUSE, no POWER_UP/upload\n",
+                  static_cast<unsigned>(expected));
+  } else if (preResult == si468x::Result::Ok &&
+             (preState.image == si468x::Image::DAB || preState.image == si468x::Image::FMHD)) {
+    Serial.printf("[RADIO] V9 opposite active application image=%u requested=%u - refusing shared reset\n",
+                  static_cast<unsigned>(preState.image), static_cast<unsigned>(expected));
+    return false;
+  } else {
+    Serial.printf("[RADIO] V9 startup/bootloader state image=%u - boot sequence required\n",
+                  preResult == si468x::Result::Ok ? static_cast<unsigned>(preState.image) : 255U);
+  }
 
   si468x::PowerUpConfig power;
   power.ctsInterruptEnable = false;
@@ -188,42 +346,114 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   power.cTune = 0x1F;
   power.iBiasRun = 0x18;
 
-  const uint8_t* image = requestedMode == RADIO_MODE_FM ? si468x_fmhd_5_3_3 : si468x_dab_6_0_9;
-  const uint32_t imageSize = requestedMode == RADIO_MODE_FM ? si468x_fmhd_5_3_3_size : si468x_dab_6_0_9_size;
-  si468x::Result result = chip.bootHostImage(
-      power,
-      progmemImageReader, const_cast<uint8_t*>(rom_patch_016), sizeof(rom_patch_016),
-      progmemImageReader, const_cast<uint8_t*>(image), imageSize,
-      1000000UL);
-  if (result != si468x::Result::Ok) return false;
+  // V15 clean A/B test:
+  //   FM  -> FMHD 5.3.3 (unchanged)
+  //   DAB -> DAB 6.0.9 (only firmware-image change versus V14.1)
+  // Reset handling, TFT recovery, patch, SPI transport and legacy DAB runtime
+  // commands are intentionally unchanged.
+  const uint8_t* image =
+      requestedMode == RADIO_MODE_FM ? si468x_fmhd_5_3_3 : si468x_dab_6_0_9;
+  const uint32_t imageSize =
+      requestedMode == RADIO_MODE_FM ? si468x_fmhd_5_3_3_size : si468x_dab_6_0_9_size;
+
+  si468x::Result result = si468x::Result::Ok;
+  if (!reuseRunningImage) {
+    Serial.printf("[RADIO] bootHostImage start: patch=%u B image=%s %u B\n",
+                  static_cast<unsigned>(sizeof(rom_patch_016)),
+                  requestedMode == RADIO_MODE_FM ? "FMHD 5.3.3" : "DAB 6.0.9",
+                  static_cast<unsigned>(imageSize));
+    const uint32_t bootStartMs = millis();
+
+    result = chip.bootHostImage(
+        power,
+        progmemImageReader, const_cast<uint8_t*>(rom_patch_016), sizeof(rom_patch_016),
+        progmemImageReader, const_cast<uint8_t*>(image), imageSize,
+        1000000UL);
+
+    Serial.printf("[RADIO] bootHostImage result=%d elapsed=%u ms status0=0x%02X patchBytes=%u fwBytes=%u\n",
+                  static_cast<int>(result),
+                  static_cast<unsigned>(millis() - bootStartMs),
+                  static_cast<unsigned>(lastStatus0),
+                  static_cast<unsigned>(diagPhaseBytes[1]),
+                  static_cast<unsigned>(diagPhaseBytes[2]));
+    if (result != si468x::Result::Ok) {
+      Serial.println("[RADIO] ERROR: bootHostImage failed");
+      return false;
+    }
+  } else {
+    Serial.println("[RADIO] V9 bootHostImage skipped; preserving running image and TFT state");
+  }
 
   si468x::PartInfo part;
   si468x::SystemState state;
-  if (chip.getPartInfo(part) != si468x::Result::Ok || part.partNumber != 4684) return false;
+
+  Serial.println("[RADIO] GET_PART_INFO");
+  result = chip.getPartInfo(part);
+  Serial.printf("[RADIO] GET_PART_INFO result=%d part=%u status0=0x%02X\n",
+                static_cast<int>(result),
+                result == si468x::Result::Ok ? static_cast<unsigned>(part.partNumber) : 0U,
+                static_cast<unsigned>(lastStatus0));
+  if (result != si468x::Result::Ok || part.partNumber != 4684) {
+    Serial.println("[RADIO] ERROR: GET_PART_INFO failed or part != 4684");
+    return false;
+  }
   snprintf(ChipType, sizeof(ChipType), "SI%u", part.partNumber);
-  if (chip.getSystemState(state) != si468x::Result::Ok) return false;
-  const si468x::Image expected = requestedMode == RADIO_MODE_FM ? si468x::Image::FMHD : si468x::Image::DAB;
-  if (state.image != expected) return false;
+
+  Serial.println("[RADIO] GET_SYS_STATE");
+  result = chip.getSystemState(state);
+  Serial.printf("[RADIO] GET_SYS_STATE result=%d image=%u status0=0x%02X\n",
+                static_cast<int>(result),
+                result == si468x::Result::Ok ? static_cast<unsigned>(state.image) : 0xFFU,
+                static_cast<unsigned>(lastStatus0));
+  if (result != si468x::Result::Ok) {
+    Serial.println("[RADIO] ERROR: GET_SYS_STATE failed");
+    return false;
+  }
+  if (state.image != expected) {
+    Serial.printf("[RADIO] ERROR: wrong active image expected=%u actual=%u\n",
+                  static_cast<unsigned>(expected), static_cast<unsigned>(state.image));
+    return false;
+  }
   activeMode = requestedMode;
 
   si468x::FunctionInfo functionInfo;
-  if (chip.getFunctionInfo(functionInfo) != si468x::Result::Ok) return false;
+  Serial.println("[RADIO] GET_FUNC_INFO");
+  result = chip.getFunctionInfo(functionInfo);
+  Serial.printf("[RADIO] GET_FUNC_INFO result=%d status0=0x%02X\n",
+                static_cast<int>(result), static_cast<unsigned>(lastStatus0));
+  if (result != si468x::Result::Ok) {
+    Serial.println("[RADIO] ERROR: GET_FUNC_INFO failed");
+    return false;
+  }
   snprintf(FirmwVersion, sizeof(FirmwVersion), "%u.%u.%u",
            functionInfo.major, functionInfo.minor, functionInfo.build);
   Serial.printf("[RADIO] Si%u image=%s firmware=%s\n", part.partNumber,
                 requestedMode == RADIO_MODE_FM ? "FMHD" : "DAB", FirmwVersion);
 
+  Serial.println("[RADIO] shared properties begin");
   // Shared audio/front-end setup retained from the proven DAB configuration.
   Set_Property(0x0200, 0x8000);
   Set_Property(0x0202, 0x1600);
   Set_Property(0x0800, 0x0003);
   Set_Property(0x1710, 0xFC4A);
   Set_Property(0x1711, 0x00F8);
+  Serial.println("[RADIO] shared properties done");
 
   if (requestedMode == RADIO_MODE_DAB) {
-    uint32_t frequencies[38];
-    for (uint8_t i = 0; i < 38; ++i) frequencies[i] = DABfrequencyTable_DAB[i].frequency;
-    if (chip.dabSetFrequencyList(frequencies, 38) != si468x::Result::Ok) return false;
+    Serial.println("[RADIO] DAB frequency list + properties (V9 legacy transport)");
+    SPIbuffer[0] = 0xB8;
+    SPIbuffer[1] = 0x26;
+    SPIbuffer[2] = 0x00;
+    SPIbuffer[3] = 0x00;
+    for (uint8_t i = 0; i < 38; ++i) {
+      const uint32_t f = DABfrequencyTable_DAB[i].frequency;
+      SPIbuffer[4 + (i * 4)] = f & 0xFF;
+      SPIbuffer[5 + (i * 4)] = (f >> 8) & 0xFF;
+      SPIbuffer[6 + (i * 4)] = (f >> 16) & 0xFF;
+      SPIbuffer[7 + (i * 4)] = (f >> 24) & 0xFF;
+    }
+    SPIwrite(SPIbuffer, 4 + (38 * 4));
+    cts();
     Set_Property(0x8100, 0x0001);
     Set_Property(0x8101, 0x0064);
     Set_Property(0xB200, 0x0000);
@@ -234,9 +464,10 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
     Set_Property(0xB400, 0x0097);
     Set_Property(0xB401, 0x0002);
     Set_Property(0xB500, 0x0000);
-    chip.setInterruptEnable(si468x::INTERRUPT_STC | si468x::INTERRUPT_DSRV |
-                            si468x::INTERRUPT_RSQ | si468x::INTERRUPT_DEVICE_EVENT);
+    // INTB is not routed on this PCB.  v6 intentionally leaves runtime
+    // interrupt configuration exactly as the legacy polling implementation.
   } else {
+    Serial.println("[RADIO] FM band/RDS properties");
     Set_Property(0x3100, FM_BAND_BOTTOM_10KHZ);
     Set_Property(0x3101, FM_BAND_TOP_10KHZ);
     Set_Property(0x3102, FM_STEP_10KHZ);
@@ -254,6 +485,9 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   }
 
   clearData();
+  Serial.printf("[RADIO] begin SUCCESS mode=%s firmware=%s heap=%u min=%u\n",
+                requestedMode == RADIO_MODE_FM ? "FM" : "DAB",
+                FirmwVersion, ESP.getFreeHeap(), ESP.getMinFreeHeap());
   return true;
 }
 
@@ -435,7 +669,9 @@ void DAB::getServiceData(void) {
   uint32_t byte_count = 0;
   uint32_t byte_number = 0;
 
-  if (lastStatus0 & si468x::INTERRUPT_DSRV) {
+  // DAB runtime uses legacy direct-SPI polling. DSRV must therefore come
+  // from the directly-polled status byte, not lastStatus0 from chip.service().
+  if (bitRead(SPIbuffer[1], 4)) {
     SPIbuffer[0] = 0x84;
     SPIbuffer[1] = 0x01;
     SPIwrite(SPIbuffer, 2);
@@ -455,7 +691,9 @@ void DAB::getServiceData(void) {
           ServiceData[byte_number] = '\0';
 
           // Read Slideshow header - extract total length
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 200) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 &&
+                   SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 &&
+                   SPIbuffer[29] == 0x12 && byte_count < 200) {
           uint16_t transportID = (SPIbuffer[30] << 8) | SPIbuffer[31];
           uint32_t newLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
 
@@ -463,8 +701,7 @@ void DAB::getServiceData(void) {
             if (SlideShowLength == 0) {
               // First header - set length and lock onto this image
               SlideShowLength = newLength;
-              SlideShowAvailable = false;
-              slideshowRamSize = 0;
+              SlideshowReceptionState(true);
 
               // If segments were collected with a different TID, discard them
               if (SlideShowTransportID != 0 && transportID != SlideShowTransportID) {
@@ -505,13 +742,13 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
               SlideShowHighestSegment = 0;
               SlideShowTotalSegments = 0;
               SlideShowInit = true;
-              SlideShowAvailable = false;
-              slideshowRamSize = 0;
             }
           }
 
           // Read Slideshow packets - store each segment (works with or without header)
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 &&
+                   (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) &&
+                   SPIbuffer[29] == 0x12) {
           uint16_t transportID = (SPIbuffer[30] << 8) | SPIbuffer[31];
           uint8_t segmentNumber = SPIbuffer[28];
 
@@ -519,8 +756,6 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
           if (SlideShowTransportID == 0) {
             clearSegmentBuffer();
             SlideShowTransportID = transportID;
-            SlideShowAvailable = false;
-            slideshowRamSize = 0;
             if (SlideShowDebug) Serial.printf("[SLS] Transport ID set to %u\n", transportID);
           } else if (transportID != SlideShowTransportID) {
             // Different carousel object - skip this segment, don't reset
@@ -537,11 +772,14 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
 
               // Bounds-check: discard segments that don't fit our RAM buffer
               if (segmentNumber < SLS_MAX_SEGMENTS && dataLen <= SLS_MAX_SEG_SIZE) {
-                memcpy(&slideshowSegBuf[segmentNumber * SLS_MAX_SEG_SIZE], &SPIbuffer[34], dataLen);
+                if (!slideshowIncomingBuf) return;
+                memcpy(&slideshowIncomingBuf[segmentNumber * SLS_MAX_SEG_SIZE], &SPIbuffer[34], dataLen);
                 slideshowSegLen[segmentNumber] = dataLen;
 
                 // Mark segment as received and update highest seen
                 SlideShowSegmentBitmap[byteIndex] |= (1 << bitIndex);
+                if (SlideShowByteCounter == 0) slideshowFirstSegmentMs = millis();
+                if (SlideShowByteCounter == 0) SlideshowReceptionState(true);
                 SlideShowByteCounter += dataLen;
                 if (segmentNumber > SlideShowHighestSegment) {
                   SlideShowHighestSegment = segmentNumber;
@@ -580,6 +818,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
 // enough — the data bytes in slideshowSegBuf only get read for indices where
 // the corresponding length is non-zero.
 void DAB::clearSegmentBuffer(void) {
+  SlideshowReceptionState(false);
   memset(slideshowSegLen, 0, sizeof(slideshowSegLen));
   memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
 }
@@ -611,43 +850,122 @@ bool DAB::allSegmentsReceived(void) {
 // and publish the resulting contiguous RAM buffer. memmove is safe here
 // because every destination begins at or below its source slot.
 void DAB::assembleSlideshow(void) {
-  if (SlideShowDebug) Serial.printf("[SLS] Assembling: %u segments, %u bytes received, %u bytes expected\n", SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
+  if (SlideShowDebug) {
+    Serial.printf("[SLS] Assembling: %u segments, %u bytes received, %u bytes expected\n",
+                  SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
+  }
+
+  if (!slideshowIncomingBuf) {
+    Serial.println("[SLS] ERROR: incoming buffer not allocated");
+    clearSegmentBuffer();
+    SlideShowInit = false;
+    SlideShowTransportID = 0;
+    SlideShowLength = 0;
+    return;
+  }
+
+  // Incoming MOT segments live in fixed 512-byte slots. Compact those slots
+  // IN THE INCOMING BUFFER before validating/copying the finished image.
+  // V16.6.1 accidentally compacted slideshowSegBuf (the previous display
+  // image) and then copied the still-gapped incoming buffer, which produced
+  // a valid JPEG/PNG signature followed by 512-byte-slot holes -> black image.
   uint32_t actualSize = 0;
   for (uint8_t i = 0; i < SlideShowTotalSegments && i < SLS_MAX_SEGMENTS; i++) {
     if (slideshowSegLen[i] > 0) {
-      memmove(slideshowSegBuf + actualSize,
-              slideshowSegBuf + static_cast<size_t>(i) * SLS_MAX_SEG_SIZE,
+      const size_t src = static_cast<size_t>(i) * SLS_MAX_SEG_SIZE;
+      memmove(slideshowIncomingBuf + actualSize,
+              slideshowIncomingBuf + src,
               slideshowSegLen[i]);
       actualSize += slideshowSegLen[i];
     } else if (SlideShowDebug) {
       Serial.printf("[SLS] WARNING: segment %u missing!\n", i);
     }
   }
-  const bool sizeValid = actualSize > 8 && (SlideShowLength == 0 || actualSize == SlideShowLength);
-  const bool validJPEG = sizeValid && slideshowSegBuf[0] == 0xFF && slideshowSegBuf[1] == 0xD8 && slideshowSegBuf[2] == 0xFF;
-  const bool validPNG = sizeValid && slideshowSegBuf[0] == 0x89 && slideshowSegBuf[1] == 0x50 &&
-                        slideshowSegBuf[2] == 0x4E && slideshowSegBuf[3] == 0x47 &&
-                        slideshowSegBuf[4] == 0x0D && slideshowSegBuf[5] == 0x0A &&
-                        slideshowSegBuf[6] == 0x1A && slideshowSegBuf[7] == 0x0A;
+
+  const bool sizeValid =
+      actualSize > 8 &&
+      actualSize <= (SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE) &&
+      (SlideShowLength == 0 || actualSize == SlideShowLength);
+
+  const bool validJPEG =
+      sizeValid &&
+      slideshowIncomingBuf[0] == 0xFF &&
+      slideshowIncomingBuf[1] == 0xD8 &&
+      slideshowIncomingBuf[2] == 0xFF;
+
+  const bool validPNG =
+      sizeValid &&
+      slideshowIncomingBuf[0] == 0x89 &&
+      slideshowIncomingBuf[1] == 0x50 &&
+      slideshowIncomingBuf[2] == 0x4E &&
+      slideshowIncomingBuf[3] == 0x47 &&
+      slideshowIncomingBuf[4] == 0x0D &&
+      slideshowIncomingBuf[5] == 0x0A &&
+      slideshowIncomingBuf[6] == 0x1A &&
+      slideshowIncomingBuf[7] == 0x0A;
+
   if (!validJPEG && !validPNG) {
-    if (SlideShowDebug) Serial.println("[SLS] REJECTED: size or image header invalid");
-    clearSegmentBuffer();
-    SlideShowLength = 0;
-    slideshowRamSize = 0;
-    SlideShowAvailable = false;
+    // Important: reject ONLY the new incoming object. Do not destroy the
+    // previous valid slideshow stored in slideshowSegBuf.
+    if (SlideShowDebug) {
+      Serial.printf("[SLS] REJECTED new image: size=%u expected=%u hdr=%02X %02X %02X %02X\n",
+                    actualSize, SlideShowLength,
+                    actualSize > 0 ? slideshowIncomingBuf[0] : 0,
+                    actualSize > 1 ? slideshowIncomingBuf[1] : 0,
+                    actualSize > 2 ? slideshowIncomingBuf[2] : 0,
+                    actualSize > 3 ? slideshowIncomingBuf[3] : 0);
+    }
   } else {
+    // Atomic user-visible replacement: only after the incoming object is
+    // complete and validated do we overwrite the last-display buffer.
+    uint32_t incomingHash = 2166136261u;
+    for (uint32_t n = 0; n < actualSize; ++n) {
+      incomingHash ^= slideshowIncomingBuf[n];
+      incomingHash *= 16777619u;
+    }
+
+    memcpy(slideshowSegBuf, slideshowIncomingBuf, actualSize);
+
+    uint32_t displayHash = 2166136261u;
+    for (uint32_t n = 0; n < actualSize; ++n) {
+      displayHash ^= slideshowSegBuf[n];
+      displayHash *= 16777619u;
+    }
+
+    Serial.printf("[SLS/COPY] size=%u inHash=%08X outHash=%08X hdr=%02X %02X %02X %02X tail=%02X %02X\n",
+                  actualSize,
+                  incomingHash,
+                  displayHash,
+                  slideshowSegBuf[0], slideshowSegBuf[1],
+                  slideshowSegBuf[2], slideshowSegBuf[3],
+                  slideshowSegBuf[actualSize - 2],
+                  slideshowSegBuf[actualSize - 1]);
     slideshowRamSize = actualSize;
     SlideShowUpdate = true;
     SlideShowUpdate2 = true;
     SlideShowAvailable = true;
-    if (SlideShowDebug) Serial.printf("[SLS] RAM image ready: %s, %u bytes\n", validJPEG ? "JPEG" : "PNG", actualSize);
+
+    if (SlideShowDebug) {
+      Serial.printf("[SLS] RAM image ready: %s, %u bytes\n",
+                    validJPEG ? "JPEG" : "PNG", actualSize);
+    }
+    Serial.printf("[SLS/UI] READY: icon/button enabled, %u bytes\n", actualSize);
+    SlideshowReceptionState(false);
+    Serial.printf("[SLS/TIME] first-segment-to-ready=%u ms\n", slideshowFirstSegmentMs ? (millis() - slideshowFirstSegmentMs) : 0U);
+    Serial.printf("[RAM/SLS] incoming=%u last=%u total=%u image=%u\n",
+                  80U * 512U, 80U * 512U, 2U * 80U * 512U, actualSize);
   }
+
+  // Reset only the incoming-object state. The completed display buffer and
+  // SlideShowAvailable remain untouched until a valid newer image replaces it
+  // or the user changes service/frequency.
   SlideShowInit = false;
   SlideShowTransportID = 0;
   SlideShowByteCounter = 0;
   SlideShowHighestSegment = 0;
   SlideShowTotalSegments = 0;
   SlideShowLength = 0;
+  slideshowFirstSegmentMs = 0;
   clearSegmentBuffer();
 }
 
@@ -795,10 +1113,35 @@ void DAB::setFreq(uint8_t freq) {
   fic = 0;
   cnr = 0;
   lastStatus0 = 0;
-  const si468x::Result result = chip.startDabTune(freq);
-  tunePending = result == si468x::Result::Pending || result == si468x::Result::Ok;
-  tuneDeadline = millis() + 5000UL;
-  fmRsqTimer = 0;
+
+  // V7: exact legacy DAB_TUNE_FREQ transaction from stable commit 4fab606.
+  SPIbuffer[0] = 0xB0;
+  SPIbuffer[1] = 0x00;
+  SPIbuffer[2] = freq;
+  SPIbuffer[3] = 0x00;
+  SPIbuffer[4] = 0x00;
+  SPIbuffer[5] = 0x00;
+  Serial.printf("[V7/LEGACY] DAB_TUNE_FREQ B0 00 %02X 00 00 00\n", freq);
+  SPIwrite(SPIbuffer, 6);
+  cts();
+
+  uint16_t timeout = 250;
+  while (bitRead(SPIbuffer[1], 0) == false) {
+    delay(20);
+    memset(SPIbuffer, 0, 5);
+    SPIwrite(SPIbuffer, 5);
+    if (--timeout == 0) {
+      Serial.println("[V7/LEGACY] DAB tune STC timeout");
+      break;
+    }
+  }
+  Serial.printf("[V7/LEGACY] tune completion status=0x%02X timeoutLeft=%u\n", SPIbuffer[1], timeout);
+
+  // Clear STC exactly as legacy driver did.
+  SPIbuffer[0] = 0xB2;
+  SPIbuffer[1] = 0x01;
+  SPIwrite(SPIbuffer, 2);
+  cts();
 }
 
 void DAB::clearFmData(void) {
@@ -815,6 +1158,10 @@ void DAB::clearFmData(void) {
   fmRtMask = 0;
   fmRtAb = false;
   memset(fmPs, 0, sizeof(fmPs));
+  // GUI historically falls back to showing the frequency when fmPs is empty.
+  // Use an explicit placeholder until RDS PS is confirmed, so the frequency
+  // remains only in the frequency field and is not mistaken for station name.
+  strncpy(fmPs, "---", sizeof(fmPs) - 1);
   memset(fmRadioText, 0, sizeof(fmRadioText));
   memset(fmPsWork, ' ', 8); fmPsWork[8] = '\0';
   memset(fmPsCandidate, 0, sizeof(fmPsCandidate));
@@ -858,13 +1205,17 @@ bool DAB::startFmSeek(bool up) {
 void DAB::processFmRds(void) {
   si468x::FmRdsGroup group;
   if (chip.fmRdsStatus(group, false, false, true, 100000UL) != si468x::Result::Ok) return;
-  if (!group.sync || group.fifoLost) {
+  // Loss of instantaneous RDS sync must not erase a text that was already
+  // assembled correctly. A FIFO overrun invalidates only the in-progress
+  // assembly; the last published PS/RT remains on screen until replaced.
+  if (!group.sync) return;
+  if (group.fifoLost) {
     fmPsMask = 0;
     fmRtMask = 0;
     memset(fmPsCandidate, 0, sizeof(fmPsCandidate));
     memset(fmPsWork, ' ', 8); fmPsWork[8] = '\0';
     memset(fmRtWork, ' ', 64); fmRtWork[64] = '\0';
-    if (group.fifoLost) chip.fmRdsStatus(group, true, true, true, 100000UL);
+    chip.fmRdsStatus(group, true, true, true, 100000UL);
     return;
   }
 
@@ -889,9 +1240,11 @@ void DAB::processFmRds(void) {
         memcpy(fmPs, fmPsWork, 8); fmPs[8] = '\0';
         memset(PStext, 0, sizeof(PStext));
         memcpy(PStext, fmPs, 8);
+        Serial.printf("[FM/RDS] PS confirmed='%s'\n", fmPs);
       } else {
         memcpy(fmPsCandidate, fmPsWork, 8);
         fmPsCandidate[8] = '\0';
+        Serial.printf("[FM/RDS] PS candidate='%s'\n", fmPsCandidate);
       }
       fmPsMask = 0;
     }
@@ -917,16 +1270,48 @@ void DAB::processFmRds(void) {
       return;
     }
     fmRtMask |= static_cast<uint16_t>(1U << segment);
-    memcpy(fmRadioText, fmRtWork, 64); fmRadioText[64] = '\0';
-    for (uint8_t i = 0; i < 64; ++i) {
-      if (fmRadioText[i] == '\r' || fmRadioText[i] == '\n') {
-        fmRadioText[i] = '\0';
+
+    // Publish RadioText only when every segment from zero through the segment
+    // containing the RDS end marker (0x0D) has arrived. If no end marker is
+    // present, wait for all 16 segments. This prevents the UI from displaying
+    // a partially assembled string with apparent "missing characters".
+    const uint8_t charsPerSegment = versionB ? 2U : 4U;
+    const uint8_t maxChars = versionB ? 32U : 64U;
+    int16_t endPos = -1;
+    for (uint8_t i = 0; i < maxChars; ++i) {
+      const uint8_t c = static_cast<uint8_t>(fmRtWork[i]);
+      if (c == 0x0D || c == '\n') {
+        endPos = i;
         break;
       }
     }
-    for (int8_t i = 63; i >= 0 && fmRadioText[i] == ' '; --i) fmRadioText[i] = '\0';
-    memset(ServiceData, 0, sizeof(ServiceData));
-    strncpy(ServiceData, fmRadioText, sizeof(ServiceData) - 1);
+
+    uint8_t requiredLastSegment = 15U;
+    if (endPos >= 0) {
+      requiredLastSegment = static_cast<uint8_t>(endPos / charsPerSegment);
+    }
+
+    const uint16_t requiredMask =
+        requiredLastSegment == 15U
+            ? 0xFFFFU
+            : static_cast<uint16_t>((1UL << (requiredLastSegment + 1U)) - 1UL);
+
+    if ((fmRtMask & requiredMask) == requiredMask) {
+      memcpy(fmRadioText, fmRtWork, maxChars);
+      fmRadioText[maxChars] = '\0';
+
+      if (endPos >= 0 && endPos < maxChars) fmRadioText[endPos] = '\0';
+
+      for (int16_t i = static_cast<int16_t>(maxChars) - 1;
+           i >= 0 && fmRadioText[i] == ' '; --i) {
+        fmRadioText[i] = '\0';
+      }
+
+      memset(ServiceData, 0, sizeof(ServiceData));
+      strncpy(ServiceData, fmRadioText, sizeof(ServiceData) - 1);
+      Serial.printf("[FM/RDS] RT complete mask=0x%04X text='%s'\n",
+                    fmRtMask, fmRadioText);
+    }
   }
 }
 
@@ -997,7 +1382,6 @@ void DAB::setService(uint8_t _index) {
   ServiceIndex = _index;
   ecc = 0;  // Reset so ServiceInfo() picks up the new service's ECC
   serviceHasOwnEcc = false;
-
   // Reset segment tracking (RAM-only)
   clearSegmentBuffer();
   SlideShowTotalSegments = 0;
@@ -1042,44 +1426,28 @@ void DAB::setService(uint8_t _index) {
 //   - Every 500 ms, refresh EnsembleInfo + ServiceInfo and start a data
 //     service for TPEG-like data components on first activation
 void DAB::Update(void) {
-  chip.service();
   if (isFm()) {
+    // FM is outside this DAB transport experiment; keep the known compiling FM path.
+    chip.service();
     updateFm();
     return;
   }
-  if (chip.busy()) return;
 
-  if (tunePending && millis() - fmRsqTimer >= 100U) {
-    si468x::DabDigradStatus status;
-    const bool stc = (lastStatus0 & si468x::INTERRUPT_STC) != 0;
-    if (chip.dabDigradStatus(status, true, false, stc, 100000UL) == si468x::Result::Ok) {
-      signallock = status.acquired && status.valid;
-      fic = status.ficQuality;
-      cnr = status.cnr;
-      dabRssi10 = static_cast<int16_t>(status.rssi) * 10;
-      if (stc || static_cast<int32_t>(millis() - tuneDeadline) >= 0) tunePending = false;
-      lastStatus0 &= static_cast<uint8_t>(~si468x::INTERRUPT_STC);
-    }
-    fmRsqTimer = millis();
-    if (tunePending) return;
-  }
-
-  if (!tunePending && millis() - dabSignalTimer >= 250U) {
-    si468x::DabDigradStatus status;
-    if (chip.dabDigradStatus(status, false, false, false, 100000UL) == si468x::Result::Ok) {
-      signallock = status.acquired && status.valid;
-      fic = status.ficQuality;
-      cnr = status.cnr;
-      dabRssi10 = static_cast<int16_t>(status.rssi) * 10;
-    }
-    dabSignalTimer = millis();
-  }
-
+  // DAB runtime uses legacy raw SPI transactions only.
+  // INTB is not connected, therefore poll STATUS0 explicitly and drain a
+  // small bounded number of queued service-data items. This avoids waiting
+  // for some unrelated command to refresh SPIbuffer[1] and materially speeds
+  // up MOT slideshow reception without reintroducing chip.service().
   if (signallock) {
-    getServiceData();
+    for (uint8_t n = 0; n < 4; ++n) {
+      memset(SPIbuffer, 0, 5);
+      SPIwrite(SPIbuffer, 5);                 // direct status poll
+      if (!bitRead(SPIbuffer[1], 4)) break;  // DSRV not pending
+      getServiceData();
+    }
   }
 
-  // Timeout for incomplete slideshow collection (30 seconds without new segments)
+  // Current project keeps slideshow data in RAM; do not pull old LittleFS code back in.
   if (SlideShowInit && SlideShowLastActivity > 0 && millis() - SlideShowLastActivity > 30000) {
     if (SlideShowDebug) Serial.println("[SLS] Collection timeout, resetting");
     clearSegmentBuffer();
@@ -1088,8 +1456,9 @@ void DAB::Update(void) {
     SlideShowHighestSegment = 0;
     SlideShowTotalSegments = 0;
     SlideShowLength = 0;
-    slideshowRamSize = 0;
-    SlideShowAvailable = false;
+    // Dual-buffer design: timeout applies only to the NEW incoming object.
+    // Keep slideshowRamSize/SlideShowAvailable so the previous complete image
+    // and its ready icon remain usable.
     SlideShowInit = false;
     SlideShowLastActivity = 0;
   }
@@ -1100,6 +1469,7 @@ void DAB::Update(void) {
     if (signallock) {
       ServiceInfo();
     }
+
     if (ServiceStart) {
       for (int i = 0; i < numberofservices; i++) {
         if (service[i].ServiceType == 3 && strstr(service[i].Label, "tpeg") == NULL && strstr(service[i].Label, "TPEG") == NULL) {
@@ -1128,9 +1498,6 @@ void DAB::Update(void) {
 }
 
 // Convert a label/text from the DAB-side character set to UTF-8 for the TFT.
-// charset 0 = ETSI EBU Latin (the most common), uses a lookup table via
-// charConverter()+convertToUTF8(). All other charsets are assumed UTF-8 already.
-// Also auto-detects already-UTF-8 input to avoid double conversion.
 String DAB::ASCII(const char* input, uint8_t charset) {
   if (!input) return String();
   String result;
