@@ -1,5 +1,5 @@
 # Name      ,Type ,SubType ,Offset   ,Size
-# Optimized for maximum SPIFFS - App: 2.94MB (20% headroom), SPIFFS: 1MB
+# Single application image. Slideshow data is RAM-only, so the former 1 MiB
+# filesystem partition is assigned to the app to hold both supplied firmwares.
 nvs         ,data ,nvs     ,0x9000   ,0x4000
-app         ,app  ,factory ,0x10000  ,0x2F0000
-spiffs      ,data ,spiffs  ,0x300000 ,0x100000
+app         ,app  ,factory ,0x10000  ,0x3F0000

@@ -15,7 +15,6 @@
 #include "constants.h"
 #include "si4684.h"
 #include "mbedtls/base64.h"
-#include <LittleFS.h>
 
 extern bool ChannelListView;
 extern bool menu;

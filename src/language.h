@@ -24,7 +24,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Theme",                      // 14
     "Auto slideshow",             // 15
     "Signal unit",                // 16
-    "Buffer Slideshows",          // 17
+    "Radio mode",                 // 17
     "",		                      // 18
     "PRESS MODE TO RETURN",       // 19
     "CONFIGURATION",              // 20
@@ -109,7 +109,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Thema",                            // 14
     "Auto slideshow",                   // 15
     "Signaal eenheid",                  // 16
-    "Onthoud Slideshows",               // 17
+    "Radiomodus",                       // 17
     "",                                 // 18
     "DRUK MODE OM AF TE SLUITEN",       // 19
     "CONFIGURATIE",                     // 20
@@ -194,7 +194,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Θέμα",                                  // 14
     "Αυτόματη παρουσίαση",                   // 15
     "Μονάδες σήματος",                       // 16
-    "Buffer Slideshows",                     // 17
+    "Λειτουργία ραδιοφώνου",                 // 17
     "",                                      // 18
     "ΠΙΕΣΤΕ MODE ΓΙΑ ΕΠΙΣΤΡΟΦΗ",             // 19
     "ΡΥΘΜΙΣΕΙΣ",                             // 20
@@ -279,7 +279,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Thema",                            // 14
     "Automatische Slideshow",           // 15
     "Messeinheiten",                    // 16
-    "Buffer Slideshows",                // 17
+    "Radiomodus",                       // 17
     "",                                 // 18
     "MODE DRÜCKEN, UM ZURÜCKZUKEHREN",  // 19
     "KONFIGURATION",                    // 20
@@ -364,7 +364,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Theme",                        // 14
     "Auto Diapo",                   // 15
     "Unite de Signal ",             // 16
-    "Buffer Slideshows",            // 17
+    "Mode radio",                   // 17
     "",                             // 18
     "Appuyer pour retour",          // 19
     "CONFIGURATION",                //20
@@ -449,7 +449,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Tema",                          // 14
     "Diapositivas automáticas",      // 15
     "Unidad de señal",               // 16
-    "Búfer de diapositivas",         // 17
+    "Modo de radio",                 // 17
     "",                              // 18
     "Presionar para volver",         // 19
     "CONFIGURACIÓN",                 // 20
@@ -534,7 +534,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Motyw",                             // 14
     "Automatyczny pokaz slajdów",        // 15
     "Jednostka sygnału",                 // 16
-    "Buforuj pokazy slajdów",            // 17
+    "Tryb radia",                        // 17
     "",                                  // 18
     "NACIŚNIJ MODE ABY WYJŚĆ",           // 19
     "KONFIGURACJA",                      // 20
@@ -619,7 +619,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Tema",                       // 14
     "Derulare Imagini",           // 15
     "Masurare Semnal",            // 16
-    "Buffer Slideshows",          // 17
+    "Mod radio",                  // 17
     "",		                      // 18
     "APASA MODE PENTRU IESIRE",   // 19
     "CONFIGURARE",                // 20
@@ -685,6 +685,32 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Grafica",		              // 80
     "Despre"                      // 81
   }
+};
+
+// FM-only labels that have no DAB counterpart in the legacy 82-string table.
+static const char* const fmMultipathText[8] PROGMEM = {
+  "Multipath", "Multipad", "Πολλαπλή διαδρομή", "Mehrweg", "Trajets multiples",
+  "Multitrayecto", "Wielodrogowość", "Propagare multiplă"
+};
+static const char* const fmStereoBlendText[8] PROGMEM = {
+  "Stereo blend", "Stereomix", "Μίξη στερεοφωνίας", "Stereomischung", "Mélange stéréo",
+  "Mezcla estéreo", "Miks stereo", "Mix stereo"
+};
+static const char* const radioModeValueText[2] PROGMEM = {"DAB", "FM"};
+static const char* const fmModeText[8] PROGMEM = {"FM", "FM", "FM", "FM", "FM", "FM", "FM", "FM"};
+static const char* const fmPiText[8] PROGMEM = {"PI", "PI", "PI", "PI", "PI", "PI", "PI", "PI"};
+static const char* const fmPsText[8] PROGMEM = {"PS", "PS", "PS", "PS", "PS", "PS", "PS", "PS"};
+static const char* const fmPtyText[8] PROGMEM = {"PTY", "PTY", "PTY", "PTY", "PTY", "PTY", "PTY", "PTY"};
+static const char* const fmRdsText[8] PROGMEM = {"RDS", "RDS", "RDS", "RDS", "RDS", "RDS", "RDS", "RDS"};
+static const char* const fmSnrText[8] PROGMEM = {"SNR", "SNR", "SNR", "SNR", "SNR", "SNR", "SNR", "SNR"};
+static const char* const fmMultipathShortText[8] PROGMEM = {"MP", "MP", "MP", "MP", "MP", "MP", "MP", "MP"};
+static const char* const fmBlendShortText[8] PROGMEM = {"BL", "BL", "BL", "BL", "BL", "BL", "BL", "BL"};
+static const char* const fmAfcRailText[8] PROGMEM = {"AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL"};
+static const char* const fmMonoText[8] PROGMEM = {
+  "Mono", "Mono", "Μονοφωνικό", "Mono", "Mono", "Mono", "Mono", "Mono"
+};
+static const char* const fmStereoText[8] PROGMEM = {
+  "Stereo", "Stereo", "Στερεοφωνικό", "Stereo", "Stéréo", "Estéreo", "Stereo", "Stereo"
 };
 #endif
 

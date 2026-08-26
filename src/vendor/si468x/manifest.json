@@ -1,0 +1,66 @@
+{
+  "format": "Si468xFirmwarePack-1",
+  "warning": "Firmware revisions are newer than AN649 Rev.1.9. Select images according to the target part, licensed feature set and firmware release notes. No blanket cross-part compatibility is asserted.",
+  "nvspi_layout": {
+    "customer_area": "0x00000000",
+    "full_patch_primary": "0x00002000",
+    "full_patch_backup": "0x00004000",
+    "fmhd": "0x00006000",
+    "dab": "0x00092000",
+    "amhd": "0x0011E000",
+    "image_slot_size": "0x0008C000",
+    "minimum_flash_size": "0x00200000"
+  },
+  "images": [
+    {
+      "key": "ROM0_MINI_003",
+      "source_name": "rom00_patch_mini.003.bin",
+      "array": "si468x_rom0_mini_003",
+      "kind": "Bootloader MiniPatch",
+      "version": "ROM0.MINI.003",
+      "size": 940,
+      "crc32": "8944B5AE",
+      "sha256": "84ae1a5b82f984b671e785f4ccb281e414998ce02c9fc897ab9484ef500ee0eb"
+    },
+    {
+      "key": "ROM0_FULL_016",
+      "source_name": "rom00_patch.016.bin",
+      "array": "si468x_rom0_full_016",
+      "kind": "Bootloader FullPatch",
+      "version": "ROM0.016",
+      "size": 5796,
+      "crc32": "A93227B5",
+      "sha256": "15c5196132b921755ed5c3b00b875494c73e39a2013771a594957cebe04221f2"
+    },
+    {
+      "key": "FMHD_5_3_3",
+      "source_name": "fmhd_radio_5_3_3.bin",
+      "array": "si468x_fmhd_5_3_3",
+      "kind": "FM/FMHD firmware",
+      "version": "5.3.3",
+      "size": 530856,
+      "crc32": "A174D4AB",
+      "sha256": "807b93a5693f8ac63698ecbac51f72a3f17aaa930e74f08fdaedf226cef22be9"
+    },
+    {
+      "key": "DAB_6_0_9",
+      "source_name": "dab_radio_6_0_9.bin",
+      "array": "si468x_dab_6_0_9",
+      "kind": "DAB/DAB+ firmware",
+      "version": "6.0.9",
+      "size": 499516,
+      "crc32": "4BB3271D",
+      "sha256": "48692a0c3c2430c5c49cfb35a3d06c1853246b752293715f38c1027281c98fa6"
+    },
+    {
+      "key": "AMHD_3_0_6",
+      "source_name": "amhd_radio_3_0_6.bin",
+      "array": "si468x_amhd_3_0_6",
+      "kind": "AM/AMHD firmware",
+      "version": "3.0.6",
+      "size": 533164,
+      "crc32": "2168E5C7",
+      "sha256": "9906d7cc5556f0eddb74faa1abb039fb07056af7e1d5f70ad791925addfdf2a1"
+    }
+  ]
+}

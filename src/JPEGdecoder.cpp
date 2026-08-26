@@ -1,5 +1,24 @@
 #include "JPEGdecoder.h"
 
+class MemoryFile {
+ public:
+  MemoryFile(const uint8_t* data, size_t size) : data_(data), size_(size), position_(0) {}
+  explicit operator bool() const { return data_ != nullptr && size_ != 0; }
+  int read() { return position_ < size_ ? data_[position_++] : -1; }
+  bool seek(size_t position) {
+    if (position > size_) return false;
+    position_ = position;
+    return true;
+  }
+  size_t position() const { return position_; }
+  void close() {}
+
+ private:
+  const uint8_t* data_;
+  size_t size_;
+  size_t position_;
+};
+
 // ============================================================================
 // JPEG decoder for ESP32 (no PSRAM)
 //
@@ -135,13 +154,13 @@ struct PJComponent {
 
 // --- Bit reader ---
 struct PJBitReader {
-  File* file;
+  MemoryFile* file;
   uint32_t buf;
   int bits;
   bool hitMarker;
   uint8_t markerVal;
 
-  void init(File* f) {
+  void init(MemoryFile* f) {
     file = f; buf = 0; bits = 0;
     hitMarker = false; markerVal = 0;
   }
@@ -259,21 +278,21 @@ static inline int pjGlobalBlockIdx(PJDecoder* d, int ci, int blockCol, int block
 }
 
 // --- Marker reading helpers ---
-static int pjRead8(File& f) { return f.read(); }
+static int pjRead8(MemoryFile& f) { return f.read(); }
 
-static int pjRead16(File& f) {
+static int pjRead16(MemoryFile& f) {
   int hi = f.read();
   int lo = f.read();
   return (hi << 8) | lo;
 }
 
-static void pjSkip(File& f, int n) {
+static void pjSkip(MemoryFile& f, int n) {
   while (n-- > 0) f.read();
 }
 
 // --- Parse DQT ---
 // DQT (Define Quantization Table) parser - up to 4 tables, 8 or 16 bit each.
-static bool pjParseDQT(File& f, PJDecoder* d) {
+static bool pjParseDQT(MemoryFile& f, PJDecoder* d) {
   int len = pjRead16(f) - 2;
   while (len > 0) {
     int info = pjRead8(f); len--;
@@ -295,7 +314,7 @@ static bool pjParseDQT(File& f, PJDecoder* d) {
 
 // --- Parse DHT ---
 // DHT (Define Huffman Table) parser - stores DC/AC tables for each component.
-static bool pjParseDHT(File& f, PJDecoder* d) {
+static bool pjParseDHT(MemoryFile& f, PJDecoder* d) {
   int len = pjRead16(f) - 2;
   while (len > 0) {
     int info = pjRead8(f); len--;
@@ -318,7 +337,7 @@ static bool pjParseDHT(File& f, PJDecoder* d) {
 
 // --- Parse SOF2 ---
 // SOF (Start Of Frame) parser - extracts image dimensions and subsampling info.
-static bool pjParseSOF(File& f, PJDecoder* d) {
+static bool pjParseSOF(MemoryFile& f, PJDecoder* d) {
   pjRead16(f); // length
   if (pjRead8(f) != 8) return false; // precision must be 8
   d->height = pjRead16(f);
@@ -354,7 +373,7 @@ static bool pjParseSOF(File& f, PJDecoder* d) {
 // --- Parse SOS ---
 // SOS (Start Of Scan) parser - reads component selectors and the band/Ah/Al
 // fields that drive progressive-mode pass dispatch.
-static bool pjParseSOS(File& f, PJDecoder* d) {
+static bool pjParseSOS(MemoryFile& f, PJDecoder* d) {
   pjRead16(f); // length
   d->scanNComp = pjRead8(f);
   if (d->scanNComp > PJ_MAX_COMPONENTS) return false;
@@ -378,7 +397,7 @@ static bool pjParseSOS(File& f, PJDecoder* d) {
 }
 
 // --- Parse DRI ---
-static void pjParseDRI(File& f, PJDecoder* d) {
+static void pjParseDRI(MemoryFile& f, PJDecoder* d) {
   pjRead16(f);
   d->restartInterval = pjRead16(f);
 }
@@ -835,7 +854,7 @@ static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
 }
 
 // --- Skip to next marker ---
-static int pjSkipToMarker(File& f) {
+static int pjSkipToMarker(MemoryFile& f) {
   int c;
   do { c = f.read(); if (c < 0) return -1; } while (c != 0xFF);
   do { c = f.read(); if (c < 0) return -1; } while (c == 0xFF);
@@ -843,7 +862,7 @@ static int pjSkipToMarker(File& f) {
 }
 
 // --- Skip entropy data to next marker ---
-static int pjSkipEntropy(File& f) {
+static int pjSkipEntropy(MemoryFile& f) {
   while (true) {
     int c = f.read();
     if (c < 0) return -1;
@@ -858,7 +877,7 @@ static int pjSkipEntropy(File& f) {
 // --- Process entire file for one MCU row ---
 // One pass over the file for the progressive decoder: replays every scan,
 // only retaining coefficients that belong to the target MCU row.
-static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
+static bool pjProcessFileForRow(MemoryFile& f, PJDecoder* d, int16_t* rowCoefs,
                                 int targetRow, uint8_t* nzBitmap) {
   f.seek(0);
   if (pjRead8(f) != 0xFF || pjRead8(f) != M_SOI) return false;
@@ -919,7 +938,7 @@ static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
 // --- Baseline single-pass decode ---
 // Single-pass baseline decoder: walks the file once, decoding and rendering
 // each MCU row on the fly. Used for SOF0 images where no multi-pass needed.
-static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
+static bool pjDecodeBaselinePass(MemoryFile& f, PJDecoder* d, TFT_eSPI& tft,
                                   int offsetX, int offsetY) {
   f.seek(0);
   if (pjRead8(f) != 0xFF || pjRead8(f) != M_SOI) return false;
@@ -1012,9 +1031,9 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
 // Public entry point: opens the file, parses headers, then dispatches to
 // either the single-pass baseline decoder (SOF0) or the multi-pass
 // progressive decoder (SOF2). Returns true on success.
-bool JPEGdecoder(const char* filename, TFT_eSPI& tft,
+bool JPEGdecoder(const uint8_t* data, size_t size, TFT_eSPI& tft,
                  int displayWidth, int displayHeight) {
-  File f = LittleFS.open(filename, "rb");
+  MemoryFile f(data, size);
   if (!f) return false;
 
   PJDecoder* d = (PJDecoder*)calloc(1, sizeof(PJDecoder));

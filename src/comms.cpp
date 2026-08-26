@@ -80,7 +80,10 @@ void Communication(void) {
 
             case 'T':
               if (command.equals("TUNE")) {
-                if (intValue < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
+                if (radio.isFm()) {
+                  // The established TUNE command is a DAB channel-table index.
+                  DataPrint("#1\n");
+                } else if (intValue < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
                   radio.ServiceStart = false;
                   radio.ServiceIndex = 0;
                   radio.clearData();
@@ -105,7 +108,9 @@ void Communication(void) {
               break;
             case 'S':
               if (command.equals("SERVICE")) {
-                if (intValue < radio.numberofservices) {
+                if (radio.isFm()) {
+                  DataPrint("#1\n");
+                } else if (intValue < radio.numberofservices) {
                   radio.ServiceIndex = intValue;
                   radio.setService(radio.ServiceIndex);
                   radio.ServiceStart = true;
@@ -270,78 +275,44 @@ static void doEnableConnection(void) {
   if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true; else DataPrint("$M=SLIDESHOW=0\n");
 }
 
-// When a new slideshow is ready, stream the file to the host as base64
+// When a new slideshow is ready, stream its RAM buffer to the host as base64
 // in a single "$M=SLIDESHOW=..." line so a client can preview it.
 static void doMOTShow(void) {
   if (radio.SlideShowAvailable && radio.SlideShowUpdate2) {
     DataPrint("$M=SLIDESHOW=");
 
-    fs::File file = LittleFS.open("/slideshow.img", "r");
-
-    if (!file) {
+    const uint8_t* image = radio.slideshowData();
+    const size_t size = radio.slideshowSize();
+    if (!image || size < 8) {
       DataPrint("3\n");
       radio.SlideShowUpdate2 = false;
       return;
     }
 
-    size_t size = file.size();
-    uint8_t* image = (uint8_t*)malloc(size);
-
-    if (image == nullptr) {
-      DataPrint("3\n");
-      file.close();
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    file.read(image, size);
-    file.close();
-
-    size_t buffer_size_needed = (size + 2 - ((size + 2) % 3)) / 3 * 4 + 1;
-    uint8_t *buffer = (uint8_t*)calloc(buffer_size_needed, sizeof(char));
-
-    if (buffer == nullptr) {
-      DataPrint("3\n");
-      free(image);
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    size_t buff_size = 0;
-    int ret = mbedtls_base64_encode(buffer, buffer_size_needed, &buff_size, image, size);
-
-    if (ret != 0) {
-      DataPrint("3\n");
-      free(image);
-      free(buffer);
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    buffer[buff_size] = '\0';
-
-    file = LittleFS.open("/slideshow.img", "r");
-    uint8_t header[8];
-    size_t bytesRead = file.read(header, sizeof(header));
-    file.close();
-
-    if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
+    if (image[0] == 0x89 && image[1] == 0x50 && image[2] == 0x4E && image[3] == 0x47 && image[4] == 0x0D && image[5] == 0x0A && image[6] == 0x1A && image[7] == 0x0A) {
       DataPrint("2,");
-    } else if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
+    } else if (image[0] == 0xFF && image[1] == 0xD8 && image[2] == 0xFF) {
       DataPrint("1,");
     } else {
       DataPrint("3\n");
-      free(image);
-      free(buffer);
       radio.SlideShowUpdate2 = false;
       return;
     }
 
     DataPrint("BASE64=");
-    DataPrint((char*)buffer);
-
-    free(image);
-    free(buffer);
+    uint8_t encoded[769];
+    for (size_t offset = 0; offset < size; offset += 576) {
+      const size_t count = (size - offset) < 576 ? (size - offset) : 576;
+      size_t encodedSize = 0;
+      if (mbedtls_base64_encode(encoded, sizeof(encoded) - 1, &encodedSize,
+                                image + offset, count) != 0) {
+        DataPrint("\n");
+        radio.SlideShowUpdate2 = false;
+        return;
+      }
+      encoded[encodedSize] = '\0';
+      DataPrint(reinterpret_cast<char*>(encoded));
+    }
 
     DataPrint("\n");
     radio.SlideShowUpdate2 = false;

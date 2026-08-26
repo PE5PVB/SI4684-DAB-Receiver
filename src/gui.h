@@ -53,6 +53,9 @@ extern byte tot;
 extern byte tunemode;
 extern byte unit;
 extern byte volume;
+extern RadioMode radioMode;
+extern RadioMode requestedRadioMode;
+extern uint16_t fmfreq;
 extern char _serviceName[17];
 extern int ActiveColor;
 extern int ActiveColorSmooth;
@@ -148,5 +151,6 @@ extern void tftReplace(int8_t offset, const String & textold, const String & tex
 extern void ShowMemoryPos(void);
 extern void loadFonts(bool option);
 extern bool IsStationEmpty(void);
+extern void MarkEepromDirty(void);
 
 #endif

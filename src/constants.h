@@ -37,16 +37,17 @@
 // ---------- EEPROM layout ----------
 #define EE_PRESETS_CNT              99   // number of memory presets supported
 #define EE_PRESETS_FREQUENCY        255  // sentinel marking an empty preset slot
-#define EE_CHECKBYTE_VALUE          2    // bump to invalidate prior EEPROM layouts (forces DefaultSettings)
+#define EE_CHECKBYTE_VALUE          3
+#define EE_CHECKBYTE_DAB_ONLY       2    // migrates in place and preserves DAB presets
 
-#define EE_TOTAL_CNT                2614 // total bytes claimed via EEPROM.begin()
+#define EE_TOTAL_CNT                4096
 #define EE_BYTE_CHECKBYTE           0
 #define EE_BYTE_LANGUAGE            1
 #define EE_BYTE_CONTRASTSET         2
 #define EE_BYTE_DISPLAYFLIP         3
 #define EE_BYTE_ROTARYMODE          4
 #define EE_BYTE_TUNEMODE            5
-#define EE_BYTE_BUFFERSLIDESHOW     6
+#define EE_BYTE_RADIO_MODE          6
 #define EE_BYTE_UNIT                7
 #define EE_BYTE_DABFREQ             8
 #define EE_BYTE_VOLUME              9
@@ -59,6 +60,15 @@
 #define EE_PRESETS_FREQ_START       39   // 1 byte * EE_PRESETS_CNT: per-preset channel index
 #define EE_PRESETS_SERVICEID_START  138  // 8 bytes * EE_PRESETS_CNT: per-preset 64-bit service ID
 #define EE_PRESETS_NAME_START       930  // 17 bytes * EE_PRESETS_CNT: per-preset label
+
+// Bytes 18..21 were unused by schema 2. FM presets fill the former free tail:
+// 99 one-byte frequency indices + 99 PI codes + 99 eight-char PS names.
+#define EE_UINT16_FM_FREQUENCY      18
+#define EE_FM_PRESETS_FREQ_START    2614
+#define EE_FM_PRESETS_PI_START      2713
+#define EE_FM_PRESETS_NAME_START    3109
+#define EE_FM_PRESET_NAME_LENGTH    9
+#define EEPROM_COMMIT_DELAY_MS       3000UL
 
 // ---------- UI strings + enums ----------
 static const char* const unitString[] = {"dBμV", "dBf", "dBm"};
