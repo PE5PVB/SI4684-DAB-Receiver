@@ -25,10 +25,6 @@ extern void SlideshowReceptionState(bool active);
 unsigned char SPIbuffer[4096];      // shared SPI tx/rx buffer (commands and replies)
 bool once = false;
 
-// Second fixed slideshow buffer: incoming MOT assembly.
-// The class member slideshowSegBuf remains the last complete image.
-static uint8_t* slideshowIncomingBuf = nullptr;
-static constexpr size_t SLS_INCOMING_BYTES = 80U * 512U;
 static uint32_t slideshowFirstSegmentMs = 0;
 
 unsigned long DataUpdate = 0;       // millis() of last EnsembleInfo/ServiceInfo refresh (500 ms throttle)
@@ -40,6 +36,7 @@ static si468x::Si468x chip;
 // DRAM available for the 40 KiB MOT buffer. Firmware upload is simply chunked.
 static uint8_t chipWorkspace[512];
 static volatile uint8_t lastStatus0;
+static uint8_t legacyLastCommand = 0;
 
 // Boot diagnostics. HOST_LOAD is intentionally not logged chunk-by-chunk;
 // progress is reported roughly every 64 KiB to keep the UART readable.
@@ -173,6 +170,7 @@ void DAB::vol(uint8_t vol) {
 // from the stable driver.  This is intentionally separate from the Si468x
 // HostInterface used for POWER_UP/HOST_LOAD/BOOT and identity queries.
 static void SPIwrite(unsigned char* data, uint32_t length) {
+  if (data && length > 0 && data[0] != 0) legacyLastCommand = data[0];
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
   digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(data, length);
@@ -215,7 +213,8 @@ static void cts(void) {
   }
 
   if (SPIbuffer[1] & 0x40) {
-    Serial.printf("[V7.1/LEGACY] CTS ERR status=0x%02X\n", SPIbuffer[1]);
+    Serial.printf("[V7.1/LEGACY] CTS ERR status=0x%02X after cmd=0x%02X\n",
+                  SPIbuffer[1], legacyLastCommand);
     memset(SPIbuffer, 0, 5);
   }
 
@@ -232,23 +231,11 @@ static void cts(void) {
 //   4. Configure DAB-specific properties (sample rate, audio output, FIC etc.)
 // Returns true once the chip reports the DAB image is running.
 bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
-  // Allocate the second slideshow buffer once for the entire runtime.
-  // Keeping this out of .bss avoids the ESP32 static-DRAM linker limit.
-  // The block is never freed or resized, so slideshow operation cannot
-  // fragment the heap.
-  if (!slideshowIncomingBuf) {
-    slideshowIncomingBuf = static_cast<uint8_t*>(
-        heap_caps_malloc(SLS_INCOMING_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    Serial.printf("[RAM/SLS] incoming fixed-lifetime buffer=%p size=%u free=%u largest=%u\n",
-                  slideshowIncomingBuf,
-                  (unsigned)SLS_INCOMING_BYTES,
-                  ESP.getFreeHeap(),
-                  heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-    if (!slideshowIncomingBuf) {
-      Serial.println("[RAM/SLS] ERROR: cannot allocate incoming slideshow buffer");
-      return false;
-    }
-  }
+  if (slideshowSlotSize == 0) slideshowSlotSize = SLS_BASE_SEG_SIZE;
+  Serial.printf("[RAM/SLS] single MOT buffer=%u address=%p free=%u largest=%u\n",
+                (unsigned)sizeof(slideshowSegBuf), slideshowSegBuf,
+                ESP.getFreeHeap(),
+                heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
 
   Serial.println();
   Serial.println("[RADIO] ================================================");
@@ -700,8 +687,8 @@ void DAB::getServiceData(void) {
           if (newLength > 0) {
             if (SlideShowLength == 0) {
               // First header - set length and lock onto this image
+              beginSlideshowReception();
               SlideShowLength = newLength;
-              SlideshowReceptionState(true);
 
               // If segments were collected with a different TID, discard them
               if (SlideShowTransportID != 0 && transportID != SlideShowTransportID) {
@@ -713,6 +700,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                 SlideShowInit = false;
               }
 
+              SlideshowReceptionState(true);
               SlideShowTransportID = transportID;
               SlideShowInit = true;
               if (SlideShowDebug) Serial.printf("[SLS] Header received, length=%u, bytes so far=%u, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
@@ -735,7 +723,9 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
             } else {
               // A new carousel object replaced an incomplete one.
               if (SlideShowDebug) Serial.printf("[SLS] New header length=%u replaces %u, TID=%u\n", newLength, SlideShowLength, transportID);
+              beginSlideshowReception();
               clearSegmentBuffer();
+              SlideshowReceptionState(true);
               SlideShowLength = newLength;
               SlideShowTransportID = transportID;
               SlideShowByteCounter = 0;
@@ -755,6 +745,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
           // Check Transport ID
           if (SlideShowTransportID == 0) {
             clearSegmentBuffer();
+            beginSlideshowReception();
             SlideShowTransportID = transportID;
             if (SlideShowDebug) Serial.printf("[SLS] Transport ID set to %u\n", transportID);
           } else if (transportID != SlideShowTransportID) {
@@ -768,18 +759,25 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
 
             // Check if we already have this segment
             if (!(SlideShowSegmentBitmap[byteIndex] & (1 << bitIndex))) {
-              uint16_t dataLen = byte_count - 11;
+              const uint16_t dataLen = byte_count > 11U
+                                           ? static_cast<uint16_t>(byte_count - 11U)
+                                           : 0U;
+              const bool slotReady = ensureSlideshowSlotSize(dataLen);
+              const uint8_t slotCapacity = static_cast<uint8_t>(
+                  sizeof(slideshowSegBuf) / slideshowSlotSize);
 
-              // Bounds-check: discard segments that don't fit our RAM buffer
-              if (segmentNumber < SLS_MAX_SEGMENTS && dataLen <= SLS_MAX_SEG_SIZE) {
-                if (!slideshowIncomingBuf) return;
-                memcpy(&slideshowIncomingBuf[segmentNumber * SLS_MAX_SEG_SIZE], &SPIbuffer[34], dataLen);
+              // Bounds-check against the active 512/1024-byte slot layout.
+              if (dataLen > 0 && slotReady && segmentNumber < slotCapacity) {
+                if (SlideShowByteCounter == 0) {
+                  beginSlideshowReception();
+                  slideshowFirstSegmentMs = millis();
+                }
+                memcpy(&slideshowSegBuf[segmentNumber * slideshowSlotSize],
+                       &SPIbuffer[34], dataLen);
                 slideshowSegLen[segmentNumber] = dataLen;
 
                 // Mark segment as received and update highest seen
                 SlideShowSegmentBitmap[byteIndex] |= (1 << bitIndex);
-                if (SlideShowByteCounter == 0) slideshowFirstSegmentMs = millis();
-                if (SlideShowByteCounter == 0) SlideshowReceptionState(true);
                 SlideShowByteCounter += dataLen;
                 if (segmentNumber > SlideShowHighestSegment) {
                   SlideShowHighestSegment = segmentNumber;
@@ -795,7 +793,11 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                   assembleSlideshow();
                 }
               } else {
-                if (SlideShowDebug) Serial.printf("[SLS] Drop seg %u (dataLen=%u out of buffer bounds)\n", segmentNumber, dataLen);
+                if (SlideShowDebug) {
+                  Serial.printf("[SLS] Drop seg %u (dataLen=%u slot=%u capacity=%u)\n",
+                                segmentNumber, dataLen, slideshowSlotSize,
+                                slotCapacity);
+                }
               }
             } else if (segmentNumber == 0 && SlideShowLength == 0 && SlideShowHighestSegment > 0) {
               // Segment 0 received again (duplicate) - a full broadcast cycle has completed
@@ -813,14 +815,50 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
   }
 }
 
-// Forget every buffered slideshow segment. Used on TID switch, duplicate-image
-// detection, assembly completion, and timeouts. Clearing the lengths array is
-// enough — the data bytes in slideshowSegBuf only get read for indices where
-// the corresponding length is non-zero.
+// The only MOT buffer stops representing a complete image as soon as a new
+// object starts. The previous picture, if currently visible, remains untouched
+// in the TFT controller's GRAM until a new complete image is decoded.
+void DAB::beginSlideshowReception(void) {
+  SlideShowAvailable = false;
+  SlideShowUpdate = false;
+  SlideShowUpdate2 = false;
+  slideshowRamSize = 0;
+  SlideshowReceptionState(true);
+}
+
+// Select 512- or 1024-byte fixed slots without changing the 40960-byte RAM
+// reservation. If a large block arrives after smaller out-of-order blocks,
+// move the existing slots backwards before storing it.
+bool DAB::ensureSlideshowSlotSize(uint16_t dataLength) {
+  if (slideshowSlotSize == 0) slideshowSlotSize = SLS_BASE_SEG_SIZE;
+  if (dataLength <= slideshowSlotSize) return true;
+  if (dataLength > SLS_MAX_SEG_SIZE) return false;
+
+  const uint16_t newSlotSize = SLS_MAX_SEG_SIZE;
+  const uint8_t newCapacity = static_cast<uint8_t>(
+      sizeof(slideshowSegBuf) / newSlotSize);
+  if (SlideShowHighestSegment >= newCapacity) return false;
+
+  for (int16_t i = SlideShowHighestSegment; i >= 0; --i) {
+    if (slideshowSegLen[i] == 0) continue;
+    memmove(slideshowSegBuf + static_cast<size_t>(i) * newSlotSize,
+            slideshowSegBuf + static_cast<size_t>(i) * slideshowSlotSize,
+            slideshowSegLen[i]);
+  }
+
+  Serial.printf("[SLS] slot layout %u -> %u bytes, capacity=%u segments\n",
+                slideshowSlotSize, newSlotSize, newCapacity);
+  slideshowSlotSize = newSlotSize;
+  return true;
+}
+
+// Forget every buffered slideshow segment. Clearing the metadata is enough;
+// fixed slots in slideshowSegBuf are overwritten by the next received object.
 void DAB::clearSegmentBuffer(void) {
   SlideshowReceptionState(false);
   memset(slideshowSegLen, 0, sizeof(slideshowSegLen));
   memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+  slideshowSlotSize = SLS_BASE_SEG_SIZE;
 }
 
 // Check if we have every segment from 0..N where N is either:
@@ -855,26 +893,15 @@ void DAB::assembleSlideshow(void) {
                   SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
   }
 
-  if (!slideshowIncomingBuf) {
-    Serial.println("[SLS] ERROR: incoming buffer not allocated");
-    clearSegmentBuffer();
-    SlideShowInit = false;
-    SlideShowTransportID = 0;
-    SlideShowLength = 0;
-    return;
-  }
-
-  // Incoming MOT segments live in fixed 512-byte slots. Compact those slots
-  // IN THE INCOMING BUFFER before validating/copying the finished image.
-  // V16.6.1 accidentally compacted slideshowSegBuf (the previous display
-  // image) and then copied the still-gapped incoming buffer, which produced
-  // a valid JPEG/PNG signature followed by 512-byte-slot holes -> black image.
+  // MOT segments live in adaptive 512- or 1024-byte slots in the one buffer.
+  // Compact them towards the beginning in place. memmove is required because
+  // later source slots can overlap the growing contiguous destination.
   uint32_t actualSize = 0;
   for (uint8_t i = 0; i < SlideShowTotalSegments && i < SLS_MAX_SEGMENTS; i++) {
     if (slideshowSegLen[i] > 0) {
-      const size_t src = static_cast<size_t>(i) * SLS_MAX_SEG_SIZE;
-      memmove(slideshowIncomingBuf + actualSize,
-              slideshowIncomingBuf + src,
+      const size_t src = static_cast<size_t>(i) * slideshowSlotSize;
+      memmove(slideshowSegBuf + actualSize,
+              slideshowSegBuf + src,
               slideshowSegLen[i]);
       actualSize += slideshowSegLen[i];
     } else if (SlideShowDebug) {
@@ -884,47 +911,43 @@ void DAB::assembleSlideshow(void) {
 
   const bool sizeValid =
       actualSize > 8 &&
-      actualSize <= (SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE) &&
+      actualSize <= sizeof(slideshowSegBuf) &&
       (SlideShowLength == 0 || actualSize == SlideShowLength);
 
   const bool validJPEG =
       sizeValid &&
-      slideshowIncomingBuf[0] == 0xFF &&
-      slideshowIncomingBuf[1] == 0xD8 &&
-      slideshowIncomingBuf[2] == 0xFF;
+      slideshowSegBuf[0] == 0xFF &&
+      slideshowSegBuf[1] == 0xD8 &&
+      slideshowSegBuf[2] == 0xFF &&
+      slideshowSegBuf[actualSize - 2] == 0xFF &&
+      slideshowSegBuf[actualSize - 1] == 0xD9;
 
   const bool validPNG =
       sizeValid &&
-      slideshowIncomingBuf[0] == 0x89 &&
-      slideshowIncomingBuf[1] == 0x50 &&
-      slideshowIncomingBuf[2] == 0x4E &&
-      slideshowIncomingBuf[3] == 0x47 &&
-      slideshowIncomingBuf[4] == 0x0D &&
-      slideshowIncomingBuf[5] == 0x0A &&
-      slideshowIncomingBuf[6] == 0x1A &&
-      slideshowIncomingBuf[7] == 0x0A;
+      slideshowSegBuf[0] == 0x89 &&
+      slideshowSegBuf[1] == 0x50 &&
+      slideshowSegBuf[2] == 0x4E &&
+      slideshowSegBuf[3] == 0x47 &&
+      slideshowSegBuf[4] == 0x0D &&
+      slideshowSegBuf[5] == 0x0A &&
+      slideshowSegBuf[6] == 0x1A &&
+      slideshowSegBuf[7] == 0x0A;
 
   if (!validJPEG && !validPNG) {
-    // Important: reject ONLY the new incoming object. Do not destroy the
-    // previous valid slideshow stored in slideshowSegBuf.
     if (SlideShowDebug) {
       Serial.printf("[SLS] REJECTED new image: size=%u expected=%u hdr=%02X %02X %02X %02X\n",
                     actualSize, SlideShowLength,
-                    actualSize > 0 ? slideshowIncomingBuf[0] : 0,
-                    actualSize > 1 ? slideshowIncomingBuf[1] : 0,
-                    actualSize > 2 ? slideshowIncomingBuf[2] : 0,
-                    actualSize > 3 ? slideshowIncomingBuf[3] : 0);
+                    actualSize > 0 ? slideshowSegBuf[0] : 0,
+                    actualSize > 1 ? slideshowSegBuf[1] : 0,
+                    actualSize > 2 ? slideshowSegBuf[2] : 0,
+                    actualSize > 3 ? slideshowSegBuf[3] : 0);
     }
   } else {
-    // Atomic user-visible replacement: only after the incoming object is
-    // complete and validated do we overwrite the last-display buffer.
     uint32_t incomingHash = 2166136261u;
     for (uint32_t n = 0; n < actualSize; ++n) {
-      incomingHash ^= slideshowIncomingBuf[n];
+      incomingHash ^= slideshowSegBuf[n];
       incomingHash *= 16777619u;
     }
-
-    memcpy(slideshowSegBuf, slideshowIncomingBuf, actualSize);
 
     uint32_t displayHash = 2166136261u;
     for (uint32_t n = 0; n < actualSize; ++n) {
@@ -932,7 +955,7 @@ void DAB::assembleSlideshow(void) {
       displayHash *= 16777619u;
     }
 
-    Serial.printf("[SLS/COPY] size=%u inHash=%08X outHash=%08X hdr=%02X %02X %02X %02X tail=%02X %02X\n",
+    Serial.printf("[SLS/INPLACE] size=%u inHash=%08X outHash=%08X hdr=%02X %02X %02X %02X tail=%02X %02X\n",
                   actualSize,
                   incomingHash,
                   displayHash,
@@ -952,13 +975,12 @@ void DAB::assembleSlideshow(void) {
     Serial.printf("[SLS/UI] READY: icon/button enabled, %u bytes\n", actualSize);
     SlideshowReceptionState(false);
     Serial.printf("[SLS/TIME] first-segment-to-ready=%u ms\n", slideshowFirstSegmentMs ? (millis() - slideshowFirstSegmentMs) : 0U);
-    Serial.printf("[RAM/SLS] incoming=%u last=%u total=%u image=%u\n",
-                  80U * 512U, 80U * 512U, 2U * 80U * 512U, actualSize);
+    Serial.printf("[RAM/SLS] single MOT buffer=%u image=%u\n",
+                  (unsigned)sizeof(slideshowSegBuf), actualSize);
   }
 
-  // Reset only the incoming-object state. The completed display buffer and
-  // SlideShowAvailable remain untouched until a valid newer image replaces it
-  // or the user changes service/frequency.
+  // Reset collection metadata. On success the same buffer now contains the
+  // complete image; on failure it remains unavailable until the next object.
   SlideShowInit = false;
   SlideShowTransportID = 0;
   SlideShowByteCounter = 0;
@@ -1156,12 +1178,11 @@ void DAB::clearFmData(void) {
   fmPty = 0;
   fmPsMask = 0;
   fmRtMask = 0;
+  fmRtSeenMask = 0;
   fmRtAb = false;
+  fmRtVersionB = false;
+  fmRtVersionKnown = false;
   memset(fmPs, 0, sizeof(fmPs));
-  // GUI historically falls back to showing the frequency when fmPs is empty.
-  // Use an explicit placeholder until RDS PS is confirmed, so the frequency
-  // remains only in the frequency field and is not mistaken for station name.
-  strncpy(fmPs, "---", sizeof(fmPs) - 1);
   memset(fmRadioText, 0, sizeof(fmRadioText));
   memset(fmPsWork, ' ', 8); fmPsWork[8] = '\0';
   memset(fmPsCandidate, 0, sizeof(fmPsCandidate));
@@ -1212,6 +1233,8 @@ void DAB::processFmRds(void) {
   if (group.fifoLost) {
     fmPsMask = 0;
     fmRtMask = 0;
+    fmRtSeenMask = 0;
+    fmRtVersionKnown = false;
     memset(fmPsCandidate, 0, sizeof(fmPsCandidate));
     memset(fmPsWork, ' ', 8); fmPsWork[8] = '\0';
     memset(fmRtWork, ' ', 64); fmRtWork[64] = '\0';
@@ -1224,13 +1247,15 @@ void DAB::processFmRds(void) {
     fmPty = group.pty;
     pty = fmPty;
   }
-  if (!group.blockUsable(1)) return;
+  // BLE 0 and 1 are clean or corrected by at most two bits. Do not use BLE 2
+  // for text: a 3-5 bit correction can otherwise become a visible character.
+  if (group.ble[1] > 1U) return;
 
   const uint16_t blockB = group.block[1];
   const uint8_t groupType = static_cast<uint8_t>((blockB >> 12) & 0x0F);
   const bool versionB = (blockB & 0x0800U) != 0;
 
-  if (groupType == 0 && group.blockUsable(3)) {
+  if (groupType == 0 && group.ble[3] <= 1U) {
     const uint8_t segment = blockB & 0x03U;
     fmPsWork[segment * 2] = static_cast<char>(group.block[3] >> 8);
     fmPsWork[segment * 2 + 1] = static_cast<char>(group.block[3] & 0xFF);
@@ -1250,32 +1275,59 @@ void DAB::processFmRds(void) {
     }
   } else if (groupType == 2) {
     const bool ab = (blockB & 0x0010U) != 0;
-    if (ab != fmRtAb) {
+    if (!fmRtVersionKnown || versionB != fmRtVersionB || ab != fmRtAb) {
       fmRtAb = ab;
+      fmRtVersionB = versionB;
+      fmRtVersionKnown = true;
       fmRtMask = 0;
+      fmRtSeenMask = 0;
       memset(fmRtWork, ' ', 64); fmRtWork[64] = '\0';
     }
+
     const uint8_t segment = blockB & 0x0FU;
-    if (!versionB && group.blockUsable(2) && group.blockUsable(3)) {
-      const uint8_t pos = segment * 4;
-      fmRtWork[pos] = static_cast<char>(group.block[2] >> 8);
-      fmRtWork[pos + 1] = static_cast<char>(group.block[2] & 0xFF);
-      fmRtWork[pos + 2] = static_cast<char>(group.block[3] >> 8);
-      fmRtWork[pos + 3] = static_cast<char>(group.block[3] & 0xFF);
-    } else if (versionB && group.blockUsable(3)) {
-      const uint8_t pos = segment * 2;
-      fmRtWork[pos] = static_cast<char>(group.block[3] >> 8);
-      fmRtWork[pos + 1] = static_cast<char>(group.block[3] & 0xFF);
+    const uint8_t charsPerSegment = versionB ? 2U : 4U;
+    const uint8_t pos = segment * charsPerSegment;
+    char segmentData[4];
+
+    if (!versionB && group.ble[2] <= 1U && group.ble[3] <= 1U) {
+      segmentData[0] = static_cast<char>(group.block[2] >> 8);
+      segmentData[1] = static_cast<char>(group.block[2] & 0xFF);
+      segmentData[2] = static_cast<char>(group.block[3] >> 8);
+      segmentData[3] = static_cast<char>(group.block[3] & 0xFF);
+    } else if (versionB && group.ble[3] <= 1U) {
+      segmentData[0] = static_cast<char>(group.block[3] >> 8);
+      segmentData[1] = static_cast<char>(group.block[3] & 0xFF);
     } else {
       return;
     }
-    fmRtMask |= static_cast<uint16_t>(1U << segment);
 
-    // Publish RadioText only when every segment from zero through the segment
-    // containing the RDS end marker (0x0D) has arrived. If no end marker is
-    // present, wait for all 16 segments. This prevents the UI from displaying
-    // a partially assembled string with apparent "missing characters".
-    const uint8_t charsPerSegment = versionB ? 2U : 4U;
+    // RDS RadioText uses 0x0D as its end marker. Other C0 control bytes are
+    // not displayable text and indicate that this segment must be reacquired.
+    for (uint8_t i = 0; i < charsPerSegment; ++i) {
+      const uint8_t c = static_cast<uint8_t>(segmentData[i]);
+      if (c < 0x20U && c != 0x0DU && c != 0x0AU) return;
+    }
+
+    const uint16_t segmentBit = static_cast<uint16_t>(1U << segment);
+    if ((fmRtSeenMask & segmentBit) == 0) {
+      memcpy(fmRtWork + pos, segmentData, charsPerSegment);
+      fmRtSeenMask |= segmentBit;
+      fmRtMask &= static_cast<uint16_t>(~segmentBit);
+    } else if (memcmp(fmRtWork + pos, segmentData, charsPerSegment) == 0) {
+      // A segment becomes publishable only after an identical repeat.
+      fmRtMask |= segmentBit;
+    } else {
+      // A changed segment without an A/B toggle can be a marginal reception
+      // or a non-conforming dynamic update. Reacquire the whole message so old
+      // and new segments cannot be combined on screen.
+      memset(fmRtWork, ' ', 64); fmRtWork[64] = '\0';
+      memcpy(fmRtWork + pos, segmentData, charsPerSegment);
+      fmRtSeenMask = segmentBit;
+      fmRtMask = 0;
+    }
+
+    // Publish only after every required segment has been seen identically at
+    // least twice. If no end marker is present, all 16 segments are required.
     const uint8_t maxChars = versionB ? 32U : 64U;
     int16_t endPos = -1;
     for (uint8_t i = 0; i < maxChars; ++i) {
@@ -1456,9 +1508,8 @@ void DAB::Update(void) {
     SlideShowHighestSegment = 0;
     SlideShowTotalSegments = 0;
     SlideShowLength = 0;
-    // Dual-buffer design: timeout applies only to the NEW incoming object.
-    // Keep slideshowRamSize/SlideShowAvailable so the previous complete image
-    // and its ready icon remain usable.
+    // The buffer contains an incomplete object and therefore remains
+    // unavailable. A picture already decoded to TFT GRAM is not erased here.
     SlideShowInit = false;
     SlideShowLastActivity = 0;
   }
@@ -1503,28 +1554,31 @@ String DAB::ASCII(const char* input, uint8_t charset) {
   String result;
   if (charset != 0) return String(input);
 
-  bool looksLikeUTF8 = false;
-  for (size_t i = 0; input[i] != '\0'; i++) {
-    uint8_t c = (uint8_t)input[i];
+  // FM RDS text is always the single-byte EBU repertoire. Applying the DAB
+  // UTF-8 heuristic to it can mistake two adjacent extended RDS characters for
+  // a UTF-8 sequence and pass invalid bytes directly to the TFT.
+  if (!isFm()) {
+    bool looksLikeUTF8 = false;
+    for (size_t i = 0; input[i] != '\0'; i++) {
+      uint8_t c = (uint8_t)input[i];
 
-    if ((c & 0xE0) == 0xC0) {
-      uint8_t c2 = (uint8_t)input[i + 1];
-      if ((c2 & 0xC0) == 0x80) {
-        looksLikeUTF8 = true;
-        break;
-      }
-    } else if ((c & 0xF0) == 0xE0) {
-      uint8_t c2 = (uint8_t)input[i + 1];
-      uint8_t c3 = (uint8_t)input[i + 2];
-      if ((c2 & 0xC0) == 0x80 && (c3 & 0xC0) == 0x80) {
-        looksLikeUTF8 = true;
-        break;
+      if ((c & 0xE0) == 0xC0) {
+        uint8_t c2 = (uint8_t)input[i + 1];
+        if ((c2 & 0xC0) == 0x80) {
+          looksLikeUTF8 = true;
+          break;
+        }
+      } else if ((c & 0xF0) == 0xE0) {
+        uint8_t c2 = (uint8_t)input[i + 1];
+        uint8_t c3 = (uint8_t)input[i + 2];
+        if ((c2 & 0xC0) == 0x80 && (c3 & 0xC0) == 0x80) {
+          looksLikeUTF8 = true;
+          break;
+        }
       }
     }
-  }
 
-  if (looksLikeUTF8) {
-    return String(input);
+    if (looksLikeUTF8) return String(input);
   }
 
   wchar_t temp[128];

@@ -253,7 +253,7 @@ static bool baselineDecoderPreflight(const uint8_t* data, uint32_t size) {
   return false;
 }
 
-void ShowSlideShow(void) {
+bool ShowSlideShow(void) {
   Serial.println("[SLS] ShowSlideShow() called");
 
   const uint8_t* image = radio.slideshowData();
@@ -263,7 +263,7 @@ void ShowSlideShow(void) {
 
   if (!image || fileSize < 8) {
     Serial.println("[SLS] display aborted: no complete image");
-    return;
+    return false;
   }
 
   bool isJPG = image[0] == 0xFF && image[1] == 0xD8 && image[2] == 0xFF;
@@ -284,46 +284,21 @@ void ShowSlideShow(void) {
                   structureOK ? "OK" : "FAIL",
                   progressive ? "progressive" : "baseline/non-progressive",
                   jpegW, jpegH);
+    Serial.printf("[RAM/SLS] pre-JPEG free=%u maxAlloc=%u image=%u type=%s dimensions=%ux%u\n",
+                  ESP.getFreeHeap(), ESP.getMaxAllocHeap(), fileSize,
+                  progressive ? "progressive" : "baseline", jpegW, jpegH);
+
+    if (!progressive) baselineDecoderPreflight(image, fileSize);
 
     fadeDown();
     tft.fillScreen(TFT_BLACK);
-
-    // The original RAM decoder is reliable when its output coordinates stay
-    // non-negative. For images taller than the TFT (e.g. DAB 320x320),
-    // its default centering would calculate offsetY=-40. Some TFT_eSPI paths
-    // then produce a black frame. Keep the original decoder unchanged and
-    // center-crop only the oversized dimension by shifting the TFT origin.
-    //
-    // This is intentionally a conservative V17.1 step: no alternate JPEG
-    // decoder, no colour conversion changes and no scaling callback.
-    int32_t originX = 0;
-    int32_t originY = 0;
-    int decoderW = 320;
-    int decoderH = 240;
-
-    if (jpegW > 320) {
-      originX = -(int32_t)(jpegW - 320) / 2;
-      decoderW = jpegW;
-    }
-    if (jpegH > 240) {
-      originY = -(int32_t)(jpegH - 240) / 2;
-      decoderH = jpegH;
-    }
-
-    Serial.printf("[SLS/JPEG] original decoder canvas=%dx%d origin=%ld,%ld mode=%s\n",
-                  decoderW, decoderH, (long)originX, (long)originY,
-                  (jpegW > 320 || jpegH > 240) ? "CENTER-CROP" : "1:1");
-
-    tft.setOrigin(originX, originY);
-    if (!progressive) baselineDecoderPreflight(image, fileSize);
     tft.startWrite();
-    bool ok = JPEGdecoder(image, fileSize, tft, decoderW, decoderH);
+    bool ok = JPEGdecoder(image, fileSize, tft);
     tft.endWrite();
-    tft.setOrigin(0, 0);
 
     Serial.printf("[SLS/JPEG] JPEGdecoder result=%s\n", ok ? "OK" : "FAIL");
     fadeUp();
-    return;
+    return ok;
   }
 
   if (isPNG) {
@@ -343,7 +318,7 @@ void ShowSlideShow(void) {
     Serial.printf("[SLS/PNG] openRAM rc=%d\n", rc);
     if (rc != PNG_SUCCESS) {
       fadeUp();
-      return;
+      return false;
     }
 
     Serial.printf("[SLS/PNG] dimensions=%dx%d alpha=%u\n",
@@ -355,8 +330,9 @@ void ShowSlideShow(void) {
     Serial.printf("[SLS/PNG] decode rc=%d\n", rc);
     png.close();
     fadeUp();
-    return;
+    return rc == PNG_SUCCESS;
   }
 
   Serial.println("[SLS] unsupported/invalid image signature");
+  return false;
 }

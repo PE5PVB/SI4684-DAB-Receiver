@@ -167,7 +167,7 @@ void ShowServiceInfo(void) {
     for (uint8_t i = 0; i < 9; ++i) tftPrint(-1, labels[i], 8, 36 + i * 20, ActiveColor, ActiveColorSmooth, 16);
 
     String pi = String(radio.fmPi, HEX); pi.toUpperCase(); while (pi.length() < 4) pi = "0" + pi;
-    String ps = String(radio.fmPs); ps.trim(); if (ps.length() == 0) ps = "-";
+    String ps = String(radio.fmPs); ps.trim(); if (ps.length() == 0) ps = "--------";
     tftPrint(-1, String(fmfreq / 100) + "." + String((fmfreq % 100) / 10) + " MHz", 166, 36, PrimaryColor, PrimaryColorSmooth, 16);
     tftPrint(-1, String(radio.fmRssi) + "/" + String(radio.fmSnr) + " dB" + (radio.fmAfcRail ? " " + String(fmAfcRailText[language]) : ""), 166, 56, PrimaryColor, PrimaryColorSmooth, 16);
     tftPrint(-1, ps, 166, 76, PrimaryColor, PrimaryColorSmooth, 16);
@@ -836,8 +836,9 @@ void ShowPS(void) {
   if (radio.isFm()) {
     String value = String(radio.fmPs);
     value.trim();
-    if (value.length() == 0 && tunemode == TUNE_MEM) value = String(_serviceName);
-    if (value.length() == 0 && !tuning && !seek) value = String(fmfreq / 100) + "." + String((fmfreq % 100) / 10) + " MHz";
+    // The station-name field has only two visible states: placeholder while
+    // PS is unknown/acquiring, then the decoder-confirmed eight-character PS.
+    if (value.length() == 0) value = "--------";
     if (value != PSold || displayreset) {
       OneBigLineSprite.pushImage(-44, -185, 320, 240, Background);
       OneBigLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);

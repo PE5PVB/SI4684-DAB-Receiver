@@ -211,8 +211,12 @@ void SlideshowReceptionState(bool active);
 
 
 static bool slsReceiving = false;
+static bool slsWaitingView = false;
 static uint32_t slsBlinkTimer = 0;
 static bool slsBlinkPhase = false;
+static bool slsDisplayedFingerprintValid = false;
+static uint32_t slsDisplayedHash = 0;
+static uint32_t slsDisplayedSize = 0;
 
 void SlideshowReceptionState(bool active) {
   if (slsReceiving == active) return;
@@ -242,12 +246,10 @@ static uint16_t tint565PreserveShade(uint16_t src, uint16_t tint, uint8_t maxLum
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
-static void ShowSlideshowReceiveIndicator(void) {
-  if (radioMode != RADIO_MODE_DAB || radio.SlideShowAvailable || !slsReceiving) return;
-
+static void DrawSlideshowLoadingIcon(int16_t x, int16_t y, bool flatBackground) {
   // Same slideshow "received" icon geometry and shading; only hue is changed.
-  // Use the current theme's SignificantColor instead of raw TFT_YELLOW so the
-  // loading icon matches the yellow/accent tone used by GUI text.
+  // Reception in progress is deliberately red so it cannot be confused with
+  // the normal slideshow-available icon.
   uint16_t loadingIcon[30 * 22];
 
   uint8_t maxLum = 1;
@@ -262,16 +264,39 @@ static void ShowSlideshowReceiveIndicator(void) {
     }
   }
 
-  const uint16_t tint = (uint16_t)SignificantColor;
+  const uint16_t tint = TFT_RED;
   for (uint16_t i = 0; i < 30U * 22U; ++i) {
     if (slideshowon[i] != slideshowoff[i]) {
       loadingIcon[i] = tint565PreserveShade(slideshowon[i], tint, maxLum);
     } else {
-      loadingIcon[i] = slideshowoff[i];
+      loadingIcon[i] = flatBackground ? BackgroundColor : slideshowoff[i];
     }
   }
 
-  tft.pushImage(10, 187, 30, 22, loadingIcon);
+  tft.pushImage(x, y, 30, 22, loadingIcon);
+}
+
+static void ShowSlideshowReceiveIndicator(void) {
+  if (radioMode != RADIO_MODE_DAB || radio.SlideShowAvailable || !slsReceiving) return;
+  DrawSlideshowLoadingIcon(10, 187, false);
+}
+
+static void ShowSlideshowLoadingScreen(void) {
+  tft.fillScreen(BackgroundColor);
+  DrawSlideshowLoadingIcon(145, 82, true);
+  tftPrint(0, "Loading slideshow...", 155, 120,
+           PrimaryColor, PrimaryColorSmooth, 28);
+  tftPrint(0, "MOT reception in progress", 155, 158,
+           SecondaryColor, SecondaryColorSmooth, 16);
+}
+
+static uint32_t SlideshowFingerprint(const uint8_t* data, uint32_t size) {
+  uint32_t hash = 2166136261u;
+  for (uint32_t i = 0; data && i < size; ++i) {
+    hash ^= data[i];
+    hash *= 16777619u;
+  }
+  return hash;
 }
 
 void LogRamUsage(const char* tag) {
@@ -296,11 +321,8 @@ void LogRamUsage(const char* tag) {
                 ESP.getPsramSize() - ESP.getFreePsram());
 #endif
 
-  Serial.printf("[RAM] %s slideshow reserved: incoming=%u(last-lifetime heap) last=%u(static) total=%u bytes\n",
-                tag ? tag : "-",
-                80U * 512U,
-                80U * 512U,
-                2U * 80U * 512U);
+  Serial.printf("[RAM] %s slideshow single MOT buffer=%u bytes\n",
+                tag ? tag : "-", 80U * 512U);
 }
 
 void MarkEepromDirty(void) {
@@ -915,10 +937,45 @@ void ProcessDAB(void) {
     }
   } else {
     if (radio.SlideShowAvailable && radio.SlideShowUpdate && !menu) {
-      ShowSlideShow();
-      Serial.println("[SLS/UI] slideshow displayed; last image remains available");
+      const uint8_t* image = radio.slideshowData();
+      const uint32_t imageSize = radio.slideshowSize();
+      const uint32_t imageHash = SlideshowFingerprint(image, imageSize);
+      const bool duplicate = slsDisplayedFingerprintValid &&
+                             imageSize == slsDisplayedSize &&
+                             imageHash == slsDisplayedHash;
+
+      if (duplicate) {
+        Serial.printf("[SLS/UI] duplicate image skipped size=%u hash=%08X\n",
+                      imageSize, imageHash);
+      } else {
+        const bool displayed = ShowSlideShow();
+        Serial.printf("[SLS/UI] slideshow render=%s size=%u hash=%08X\n",
+                      displayed ? "OK" : "FAIL", imageSize, imageHash);
+        if (displayed) {
+          slsDisplayedFingerprintValid = true;
+          slsDisplayedHash = imageHash;
+          slsDisplayedSize = imageSize;
+        } else {
+          // A failed decoder may have left a partially cleared frame. Return
+          // to a usable UI instead of keeping an empty slideshow view armed.
+          SlideShowView = false;
+          slsDisplayedFingerprintValid = false;
+          BuildDisplay();
+        }
+      }
       radio.SlideShowUpdate = false;
+      slsWaitingView = false;
       LogRamUsage("after slideshow display");
+    } else if (slsWaitingView && slsReceiving && !menu) {
+      // The dedicated waiting screen was drawn when the view was entered.
+      // Leave it untouched until a complete MOT image is ready.
+    } else if (slsWaitingView && !slsReceiving) {
+      // Reception ended without producing a valid image (for example timeout).
+      // Do not leave the UI stuck in an empty armed slideshow view.
+      slsWaitingView = false;
+      SlideShowView = false;
+      slsDisplayedFingerprintValid = false;
+      BuildDisplay();
     }
   }
 }
@@ -1138,27 +1195,39 @@ void Button2Press(void) {
   }
 }
 
-// SL button: enter the full-screen slideshow view if a slideshow is currently
-// available; otherwise toggle back to the normal radio display.
+// SL button: enter immediately when a complete slideshow is available, or arm
+// slideshow view while a MOT is being received so it opens on completion.
 // Also called from ProcessDAB() when autoslideshow is enabled and from KeyUp()
 // to leave slideshow view via the rotary.
 void SlideShowButtonPress(void) {
   if (radioMode == RADIO_MODE_FM) return;
-  Serial.printf("[SLS/UI] button available=%u update=%u view=%u\n",
+  Serial.printf("[SLS/UI] button available=%u update=%u receiving=%u view=%u\n",
                 radio.SlideShowAvailable ? 1U : 0U,
                 radio.SlideShowUpdate ? 1U : 0U,
+                slsReceiving ? 1U : 0U,
                 SlideShowView ? 1U : 0U);
   setvolume = false;
   memorystore = false;
   memoryposstatus = MEM_NORMAL;
-  if (!SlideShowView && radio.SlideShowAvailable) {
-    tft.fillScreen(TFT_BLACK);
-    radio.SlideShowUpdate = true;
+  if (!SlideShowView && (radio.SlideShowAvailable || slsReceiving)) {
+    // The normal UI or loading screen is currently in TFT GRAM, so the first
+    // complete image shown after entering this view must always be rendered.
+    slsDisplayedFingerprintValid = false;
+    if (radio.SlideShowAvailable) {
+      slsWaitingView = false;
+      radio.SlideShowUpdate = true;
+    } else {
+      slsWaitingView = true;
+      Serial.println("[SLS/UI] manual view armed; waiting for complete MOT");
+      ShowSlideshowLoadingScreen();
+    }
     SlideShowView = true;
     ShowServiceInformation = false;
   } else {
     if (SlideShowView) BuildDisplay();
     SlideShowView = false;
+    slsWaitingView = false;
+    slsDisplayedFingerprintValid = false;
   }
 }
 

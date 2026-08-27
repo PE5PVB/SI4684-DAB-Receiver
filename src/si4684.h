@@ -181,7 +181,10 @@ class DAB {
     int16_t dabRssi10;
     uint8_t fmPsMask;
     uint16_t fmRtMask;
+    uint16_t fmRtSeenMask;
     bool fmRtAb;
+    bool fmRtVersionB;
+    bool fmRtVersionKnown;
     char fmPsWork[9];
     char fmPsCandidate[9];
     char fmRtWork[65];
@@ -201,13 +204,18 @@ class DAB {
     uint16_t SlideShowTransportID;        // Current transport ID
     uint32_t SlideShowLastActivity;       // millis() of last new segment received
 
-    // RAM-based segment buffer (replaces /seg_N.bin files for speed).
-    // 80 segments * 512 bytes = 40 KB. Practical DAB MOT segments are 501 bytes.
-    // Sized to leave a few KB of DRAM headroom for future Arduino-core upgrades.
-    static const uint8_t  SLS_MAX_SEGMENTS  = 80;
-    static const uint16_t SLS_MAX_SEG_SIZE  = 512;
-    uint8_t  slideshowSegBuf[SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE];
+    // One 40 KB MOT buffer with adaptive fixed slots. Most services use up to
+    // 512-byte DSRV blocks (80 slots), while others use 1024-byte blocks
+    // (40 slots). The total reserved RAM remains exactly 40960 bytes.
+    static const uint8_t  SLS_MAX_SEGMENTS   = 80;
+    static const uint16_t SLS_BASE_SEG_SIZE  = 512;
+    static const uint16_t SLS_MAX_SEG_SIZE   = 1024;
+    static const size_t   SLS_BUFFER_BYTES   = 80U * 512U;
+    uint8_t  slideshowSegBuf[SLS_BUFFER_BYTES];
     uint16_t slideshowSegLen[SLS_MAX_SEGMENTS];
+    uint16_t slideshowSlotSize;
+    void beginSlideshowReception(void);
+    bool ensureSlideshowSlotSize(uint16_t dataLength);
     void clearSegmentBuffer(void);
 
     void assembleSlideshow(void);

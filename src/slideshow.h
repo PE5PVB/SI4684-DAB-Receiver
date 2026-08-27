@@ -19,6 +19,6 @@ extern DAB radio;
 
 // Decode and display the current RAM image; called from the main loop when
 // radio.SlideShowAvailable && radio.SlideShowUpdate are set.
-void ShowSlideShow(void);
+bool ShowSlideShow(void);
 
 #endif
