@@ -204,12 +204,12 @@ class DAB {
     uint16_t SlideShowTransportID;        // Current transport ID
     uint32_t SlideShowLastActivity;       // millis() of last new segment received
 
-    // One 40 KB MOT buffer with adaptive fixed slots. Most services use up to
-    // 512-byte DSRV blocks (80 slots), while others use 1024-byte blocks
-    // (40 slots). The total reserved RAM remains exactly 40960 bytes.
+    // One 40 KB MOT buffer with adaptive fixed slots. Services seen in the
+    // field use 512-, 1024- or 2000-byte DSRV blocks. Large slots use the
+    // actual block size (up to 2048 B), preserving all 40960 reserved bytes.
     static const uint8_t  SLS_MAX_SEGMENTS   = 80;
     static const uint16_t SLS_BASE_SEG_SIZE  = 512;
-    static const uint16_t SLS_MAX_SEG_SIZE   = 1024;
+    static const uint16_t SLS_MAX_SEG_SIZE   = 2048;
     static const size_t   SLS_BUFFER_BYTES   = 80U * 512U;
     uint8_t  slideshowSegBuf[SLS_BUFFER_BYTES];
     uint16_t slideshowSegLen[SLS_MAX_SEGMENTS];

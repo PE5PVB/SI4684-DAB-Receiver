@@ -1,7 +1,7 @@
 #ifndef LANGUAGE_H
 #define LANGUAGE_H
 
-#define VERSION "v1.20 beta"
+#define VERSION "v1.0"
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
@@ -79,7 +79,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "",                           // 69
     "",                           // 70
     "",                           // 71
-    "DAB Receiver",               // 72
+    "FM/DAB Receiver",               // 72
     "Waiting for list",           // 73
     "Select service",             // 74
     "Tuning...",                  // 75
@@ -711,6 +711,59 @@ static const char* const fmMonoText[8] PROGMEM = {
 };
 static const char* const fmStereoText[8] PROGMEM = {
   "Stereo", "Stereo", "Στερεοφωνικό", "Stereo", "Stéréo", "Estéreo", "Stereo", "Stereo"
+};
+
+// Slideshow waiting screen. Kept separate from the legacy 82-string table so
+// the indexes used by the existing menu and status screens remain unchanged.
+static const char* const slideshowLoadingText[8] PROGMEM = {
+  "Loading slideshow...",
+  "Slideshow laden...",
+  "Φόρτωση παρουσίασης...",
+  "Slideshow laden...",
+  "Chargement diapo...",
+  "Cargando diapositiva...",
+  "Ładowanie slajdu...",
+  "Se încarcă imaginea..."
+};
+static const char* const slideshowReceivingText[8] PROGMEM = {
+  "MOT reception in progress",
+  "MOT-ontvangst actief",
+  "Λήψη MOT σε εξέλιξη",
+  "MOT-Empfang läuft",
+  "Réception MOT en cours",
+  "Recepción MOT en curso",
+  "Trwa odbiór MOT",
+  "Recepție MOT în curs"
+};
+static const char* const switchingToFmText[8] PROGMEM = {
+  "Switching to FM...",
+  "Overschakelen naar FM...",
+  "Μετάβαση σε FM...",
+  "Wechsel zu FM...",
+  "Passage en FM...",
+  "Cambiando a FM...",
+  "Przełączanie na FM...",
+  "Comutare la FM..."
+};
+static const char* const switchingToDabText[8] PROGMEM = {
+  "Switching to DAB...",
+  "Overschakelen naar DAB...",
+  "Μετάβαση σε DAB...",
+  "Wechsel zu DAB...",
+  "Passage en DAB...",
+  "Cambiando a DAB...",
+  "Przełączanie na DAB...",
+  "Comutare la DAB..."
+};
+static const char* const radioErrorText[8] PROGMEM = {
+  "RADIO ERROR",
+  "RADIOFOUT",
+  "ΣΦΑΛΜΑ ΡΑΔΙΟΦΩΝΟΥ",
+  "RADIOFEHLER",
+  "ERREUR RADIO",
+  "ERROR DE RADIO",
+  "BŁĄD RADIA",
+  "EROARE RADIO"
 };
 #endif
 

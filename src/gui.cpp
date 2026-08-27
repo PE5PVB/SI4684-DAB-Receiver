@@ -672,7 +672,7 @@ void DoMenu(void) {
 
       case ITEM9:
         tftPrint(0, myLanguage[language][79], 155, 40, ActiveColor, ActiveColorSmooth, 28);
-        tftPrint(0, "PE5PVB", 155, 72, PrimaryColor, PrimaryColorSmooth, 28);
+        tftPrint(0, "PE5PVB, bales", 155, 72, PrimaryColor, PrimaryColorSmooth, 28);
         tftPrint(0, myLanguage[language][80], 155, 108, ActiveColor, ActiveColorSmooth, 28);
         tftPrint(0, "mcelliotg", 155, 138, PrimaryColor, PrimaryColorSmooth, 28);
         tftPrint(0, "github.com/PE5PVB/SI4684-DAB-Receiver", 155, 175, SecondaryColor, SecondaryColorSmooth, 16);

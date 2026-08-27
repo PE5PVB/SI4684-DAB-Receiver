@@ -686,8 +686,8 @@ void DAB::getServiceData(void) {
 
           if (newLength > 0) {
             if (SlideShowLength == 0) {
-              // First header - set length and lock onto this image
-              beginSlideshowReception();
+              // A header identifies the object but carries no image payload.
+              // Keep the UI idle until the first valid data segment is stored.
               SlideShowLength = newLength;
 
               // If segments were collected with a different TID, discard them
@@ -700,9 +700,9 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                 SlideShowInit = false;
               }
 
-              SlideshowReceptionState(true);
               SlideShowTransportID = transportID;
               SlideShowInit = true;
+              SlideShowLastActivity = millis();
               if (SlideShowDebug) Serial.printf("[SLS] Header received, length=%u, bytes so far=%u, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
 
               if (SlideShowByteCounter >= SlideShowLength && allSegmentsReceived()) {
@@ -723,15 +723,14 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
             } else {
               // A new carousel object replaced an incomplete one.
               if (SlideShowDebug) Serial.printf("[SLS] New header length=%u replaces %u, TID=%u\n", newLength, SlideShowLength, transportID);
-              beginSlideshowReception();
               clearSegmentBuffer();
-              SlideshowReceptionState(true);
               SlideShowLength = newLength;
               SlideShowTransportID = transportID;
               SlideShowByteCounter = 0;
               SlideShowHighestSegment = 0;
               SlideShowTotalSegments = 0;
               SlideShowInit = true;
+              SlideShowLastActivity = millis();
             }
           }
 
@@ -745,7 +744,6 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
           // Check Transport ID
           if (SlideShowTransportID == 0) {
             clearSegmentBuffer();
-            beginSlideshowReception();
             SlideShowTransportID = transportID;
             if (SlideShowDebug) Serial.printf("[SLS] Transport ID set to %u\n", transportID);
           } else if (transportID != SlideShowTransportID) {
@@ -763,16 +761,26 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                                            ? static_cast<uint16_t>(byte_count - 11U)
                                            : 0U;
               const bool slotReady = ensureSlideshowSlotSize(dataLen);
-              const uint8_t slotCapacity = static_cast<uint8_t>(
-                  sizeof(slideshowSegBuf) / slideshowSlotSize);
+              const uint16_t slotCapacity = static_cast<uint16_t>(
+                  (sizeof(slideshowSegBuf) + slideshowSlotSize - 1U) /
+                  slideshowSlotSize);
+              const size_t slotOffset =
+                  static_cast<size_t>(segmentNumber) * slideshowSlotSize;
+              const bool segmentFits = slotReady &&
+                                       slotOffset < sizeof(slideshowSegBuf) &&
+                                       dataLen <= sizeof(slideshowSegBuf) - slotOffset;
 
-              // Bounds-check against the active 512/1024-byte slot layout.
-              if (dataLen > 0 && slotReady && segmentNumber < slotCapacity) {
+              // Check the exact range as the last slot may be shorter than the
+              // active stride while still fitting inside the 40960-byte buffer.
+              if (dataLen > 0 && segmentFits) {
                 if (SlideShowByteCounter == 0) {
+                  // A Transport ID alone is not enough to claim active MOT
+                  // reception. Publish IN PROGRESS only after the first
+                  // segment has passed its length and buffer-range checks.
                   beginSlideshowReception();
                   slideshowFirstSegmentMs = millis();
                 }
-                memcpy(&slideshowSegBuf[segmentNumber * slideshowSlotSize],
+                memcpy(&slideshowSegBuf[slotOffset],
                        &SPIbuffer[34], dataLen);
                 slideshowSegLen[segmentNumber] = dataLen;
 
@@ -826,18 +834,26 @@ void DAB::beginSlideshowReception(void) {
   SlideshowReceptionState(true);
 }
 
-// Select 512- or 1024-byte fixed slots without changing the 40960-byte RAM
-// reservation. If a large block arrives after smaller out-of-order blocks,
-// move the existing slots backwards before storing it.
+// Select an adaptive fixed stride without changing the 40960-byte reservation.
+// Common small blocks use 512 or 1024 bytes; larger blocks use their exact size
+// up to 2048 bytes. Existing out-of-order slots are moved backwards as needed.
 bool DAB::ensureSlideshowSlotSize(uint16_t dataLength) {
   if (slideshowSlotSize == 0) slideshowSlotSize = SLS_BASE_SEG_SIZE;
   if (dataLength <= slideshowSlotSize) return true;
   if (dataLength > SLS_MAX_SEG_SIZE) return false;
 
-  const uint16_t newSlotSize = SLS_MAX_SEG_SIZE;
-  const uint8_t newCapacity = static_cast<uint8_t>(
-      sizeof(slideshowSegBuf) / newSlotSize);
-  if (SlideShowHighestSegment >= newCapacity) return false;
+  const uint16_t newSlotSize = dataLength <= 1024U ? 1024U : dataLength;
+  const uint16_t newCapacity = static_cast<uint16_t>(
+      (sizeof(slideshowSegBuf) + newSlotSize - 1U) / newSlotSize);
+
+  for (uint8_t i = 0; i <= SlideShowHighestSegment; ++i) {
+    if (slideshowSegLen[i] == 0) continue;
+    const size_t newOffset = static_cast<size_t>(i) * newSlotSize;
+    if (newOffset >= sizeof(slideshowSegBuf) ||
+        slideshowSegLen[i] > sizeof(slideshowSegBuf) - newOffset) {
+      return false;
+    }
+  }
 
   for (int16_t i = SlideShowHighestSegment; i >= 0; --i) {
     if (slideshowSegLen[i] == 0) continue;
@@ -893,7 +909,7 @@ void DAB::assembleSlideshow(void) {
                   SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
   }
 
-  // MOT segments live in adaptive 512- or 1024-byte slots in the one buffer.
+  // MOT segments live in adaptive fixed-stride slots in the one buffer.
   // Compact them towards the beginning in place. memmove is required because
   // later source slots can overlap the growing contiguous destination.
   uint32_t actualSize = 0;

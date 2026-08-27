@@ -212,8 +212,6 @@ void SlideshowReceptionState(bool active);
 
 static bool slsReceiving = false;
 static bool slsWaitingView = false;
-static uint32_t slsBlinkTimer = 0;
-static bool slsBlinkPhase = false;
 static bool slsDisplayedFingerprintValid = false;
 static uint32_t slsDisplayedHash = 0;
 static uint32_t slsDisplayedSize = 0;
@@ -221,8 +219,14 @@ static uint32_t slsDisplayedSize = 0;
 void SlideshowReceptionState(bool active) {
   if (slsReceiving == active) return;
   slsReceiving = active;
-  slsBlinkTimer = millis();
-  slsBlinkPhase = true;
+
+  if (!active) {
+    // The red loading bitmap is drawn directly over the normal icon. Force
+    // ShowSlideShowIcon() to repaint that region after a tune/service change,
+    // timeout, or completed MOT even when availability stayed false.
+    SlideShowAvailableOld = !radio.SlideShowAvailable;
+  }
+
   Serial.printf("[SLS/UI] reception=%s\n", active ? "IN PROGRESS" : "IDLE");
 }
 
@@ -284,9 +288,9 @@ static void ShowSlideshowReceiveIndicator(void) {
 static void ShowSlideshowLoadingScreen(void) {
   tft.fillScreen(BackgroundColor);
   DrawSlideshowLoadingIcon(145, 82, true);
-  tftPrint(0, "Loading slideshow...", 155, 120,
+  tftPrint(0, slideshowLoadingText[language], 155, 120,
            PrimaryColor, PrimaryColorSmooth, 28);
-  tftPrint(0, "MOT reception in progress", 155, 158,
+  tftPrint(0, slideshowReceivingText[language], 155, 158,
            SecondaryColor, SecondaryColorSmooth, 16);
 }
 
@@ -297,6 +301,28 @@ static uint32_t SlideshowFingerprint(const uint8_t* data, uint32_t size) {
     hash *= 16777619u;
   }
   return hash;
+}
+
+static void RestoreMainDisplayAfterSlideshow(void) {
+  BuildDisplay();
+
+  // BuildDisplay draws the static background. When it is called from inside
+  // ProcessDAB, loop() clears displayreset before the next ProcessDAB pass, so
+  // redraw every dynamic field now instead of leaving cached text invisible.
+  ShowSignalLevel();
+  ShowRT();
+  ShowBitrate();
+  ShowEID();
+  ShowSID();
+  ShowPTY();
+  ShowProtectionlevel();
+  ShowPS();
+  ShowEN();
+  ShowAudioMode();
+  ShowClock();
+  ShowSlideShowIcon();
+  ShowSlideshowReceiveIndicator();
+  ShowECC();
 }
 
 void LogRamUsage(const char* tag) {
@@ -420,7 +446,8 @@ bool SwitchRadioMode(RadioMode newMode, bool force) {
   // then fade the backlight completely off for firmware upload/boot.
   const int switchBrightness = ContrastSet * 2 + 27;
   tft.fillScreen(BackgroundColor);
-  tftPrint(0, newMode == RADIO_MODE_FM ? "Switching to FM..." : "Switching to DAB...",
+  tftPrint(0, newMode == RADIO_MODE_FM ? switchingToFmText[language]
+                                      : switchingToDabText[language],
            160, 96, ActiveColor, ActiveColorSmooth, 28);
   delay(450);
   Serial.println("[SWITCH] fading TFT backlight to 0 before shared reset");
@@ -765,7 +792,7 @@ void setup(void) {
   Serial.printf("[V16] radio.begin returned=%u\n", radioBeginOk ? 1U : 0U);
   if (!radioBeginOk) {
     Serial.println("[V16] radio.begin FAILED");
-    tftPrint(0, "RADIO ERROR", 160, 210,
+    tftPrint(0, radioErrorText[language], 160, 210,
              TFT_RED, TFT_DARKGREY, 16);
     for (;;) delay(1000);
   }
@@ -960,7 +987,7 @@ void ProcessDAB(void) {
           // to a usable UI instead of keeping an empty slideshow view armed.
           SlideShowView = false;
           slsDisplayedFingerprintValid = false;
-          BuildDisplay();
+          RestoreMainDisplayAfterSlideshow();
         }
       }
       radio.SlideShowUpdate = false;
@@ -975,7 +1002,7 @@ void ProcessDAB(void) {
       slsWaitingView = false;
       SlideShowView = false;
       slsDisplayedFingerprintValid = false;
-      BuildDisplay();
+      RestoreMainDisplayAfterSlideshow();
     }
   }
 }
