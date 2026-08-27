@@ -1082,6 +1082,10 @@ void DABSelectService(bool dir) {
 //   DAB = original MAN / AUTO / MEM
 //   FM  = AUTO / MEM only. Manual +/-100 kHz is always on rotary 2.
 void ShowTuneModeCurrent(void) {
+  // This sprite contains a cut-out of the main-screen background. Never push
+  // it over a full-screen overlay such as Service Information.
+  if (menu || SlideShowView || ChannelListView || ShowServiceInformation) return;
+
   // Exactly one tune mode is highlighted:
   // selected = ActiveColor, inactive = GreyoutColor.
   // MEM uses SignificantColor only during actual preset-store mode.
@@ -1579,7 +1583,7 @@ void KeyDown(void) {
 }
 
 // Rotary 2 up:
-// - DAB normal view: select next service.
+// - DAB normal view (MAN/AUTO/MEM): select next service.
 // - FM normal view: +100 kHz.
 // - After pressing rotary 2: volume mode; rotation adjusts volume.
 void KeyUp2(void) {
@@ -1599,11 +1603,9 @@ void KeyUp2(void) {
     for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
     ShowFreq();
     Serial.printf("[FM/UI] rotary2 UP -> +100 kHz, %.1f MHz\n", fmfreq / 100.0f);
-  } else if (tunemode == TUNE_MEM || SlideShowView ||
-             ShowServiceInformation || ChannelListView) {
-    setvolume = true;
-    if (volume < 62) volume += 2;
-    ShowVolume();
+  } else if (SlideShowView || ShowServiceInformation || ChannelListView) {
+    // Full-screen overlays do not assign an implicit rotary-2 action. Volume
+    // remains available only after explicitly pressing the rotary-2 button.
   } else {
     if (radio.numberofservices > 0) DABSelectService(1);
     TuningTimer = millis();
@@ -1612,7 +1614,7 @@ void KeyUp2(void) {
 }
 
 // Rotary 2 down:
-// - DAB normal view: previous service.
+// - DAB normal view (MAN/AUTO/MEM): previous service.
 // - FM normal view: -100 kHz.
 // - After pressing rotary 2: volume mode; rotation adjusts volume.
 void KeyDown2(void) {
@@ -1634,11 +1636,8 @@ void KeyDown2(void) {
     for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
     ShowFreq();
     Serial.printf("[FM/UI] rotary2 DOWN -> -100 kHz, %.1f MHz\n", fmfreq / 100.0f);
-  } else if (tunemode == TUNE_MEM || SlideShowView ||
-             ShowServiceInformation || ChannelListView) {
-    setvolume = true;
-    if (volume > 0) volume -= 2;
-    ShowVolume();
+  } else if (SlideShowView || ShowServiceInformation || ChannelListView) {
+    // See KeyUp2(): do not enter volume mode from rotation alone.
   } else {
     if (radio.numberofservices > 0) DABSelectService(0);
     TuningTimer = millis();
