@@ -26,6 +26,10 @@
 #include "dab_scheduler_policy.h"
 #include "fm_af_policy.h"
 #include "dab_service_switch_policy.h"
+#include "dab_spi_discovery.h"
+#include "dab_spi_probe.h"
+#include "dab_diagnostics.h"
+#include "i2s_audio.h"
 
 struct DABFrequencyLabel_DAB {
   uint32_t frequency;
@@ -85,7 +89,7 @@ static const char* const ServiceTypeText[] {
 
 // One row of the in-memory service table populated by ServiceInfo().
 // Only one CompID per service is stored; secondary components (e.g. data
-// streams in the same service) are intentionally ignored.
+// streams in the same service) remain in the separate component inventory.
 typedef struct _Services {
   uint32_t  ServiceID;
   uint32_t  CompID;
@@ -224,8 +228,19 @@ class DAB {
     bool isDabAudioInfoValid(void) const {
       return !isFm() && dabAudioInfoValid;
     }
+    // Separate from audio/SLS ownership. No automatic SPI endpoint START.
+    const dab_spi::Result& spiDiscovery(void) const { return dabSpiDiscovery; }
+    // Advertised SPI presence in this multiplex, not decoded programme data.
+    bool spiPresent(void) const { return dabSpiPresent; }
+    // Configure the next Si4684 application boot; never reconfigure live audio.
+    void setI2sAudioMode(I2sAudioMode mode);
+    bool requestSpiProbe(void);
+    void stopSpiProbe(void);
     bool isDabServiceMetadataReady(void) const;
     bool isDabServiceStartPending(void) const;
+    bool isDabServiceLabelCurrent(void) const {
+      return !isFm() && ServiceStart && dabServiceLabelValid;
+    }
     const uint8_t* slideshowData(void) const { return slideshowSegBuf; }
     uint32_t slideshowSize(void) const { return SlideShowAvailable ? slideshowRamSize : 0; }
     size_t slideshowCapacity(void) const { return SLS_BUFFER_BYTES; }
@@ -254,6 +269,9 @@ class DAB {
       AudioInfo,
       CurrentSubchannelInfo,
       CurrentServiceInfo,
+      ComponentInfo,
+      SpiProbeStart,
+      SpiProbeStop,
       StopDataService,
       StopService,
       StartService,
@@ -367,6 +385,71 @@ class DAB {
     bool dabCurrentSubchannelRefreshPending = false;
     bool dabCurrentServiceRefreshPending = false;
     uint8_t dabServiceTypeScanIndex = 0;
+    // Separate diagnostic inventory: the public station table keeps only the
+    // first component. 32 services x at most 14 components (AN649 NUM_COMP).
+    struct UaService {
+      uint32_t sid;
+      uint16_t first;
+      uint8_t count;
+      uint8_t info1; // P/D + PTY/linking, occupies the former structure padding
+    };
+    static_assert(sizeof(UaService) == 8U, "compact retained service inventory");
+    UaService dabUaServices[32] = {};
+    uint32_t dabUaComponents[32U * 14U] = {};
+    dab_spi::Identity dabSpiIdentities[32U * 14U] = {};
+    dab_spi::Result dabSpiDiscovery;
+    bool dabSpiDiscoveryDirty = true;
+    dab_probe::Probe dabSpiProbe;
+    uint32_t dabSpiProbeLastRouteMs[4] = {};
+    uint32_t dabSpiProbeLastSummaryMs = 0;
+    uint32_t dabSpiProbeSuppressedRoutes = 0;
+    uint32_t dabSpiProbeCtsStart = 0;
+    uint32_t dabSpiProbeOverflowStart = 0;
+    uint32_t dabSpiProbeUartDropStart = 0;
+    void logSpiProbeSummary(const char* phase);
+    uint16_t dabUaCommandIndex = 0;
+    dab_spi::Scan dabUaScan;
+    dab_spi::RefreshCycle dabUaRefresh;
+    bool dabSpiPresent = false;
+    bool dabServiceLabelValid = false;
+    uint32_t dabSpiDiscoveryGeneration = 0;
+    uint8_t dabUaSummaryStage = 3;
+    dab_diag::XpadReadback dabXpad;
+    dab_diag::RawLog dabRawUaLog;
+    void configureDabXpad(void);
+    bool dabXpadLogPending = false;
+    uint8_t dabUaListLogService = 0;
+    uint8_t dabUaListLogComponent = 0;
+    bool dabUaListHeaderPending = true;
+    bool dabUaListLogPending = false;
+    void resetDabSpiDiscovery(bool preservePresence = false, bool logInventory = true);
+    void refreshDabSpiDiscovery(void);
+    uint16_t dabUaComponentCount = 0;
+    uint8_t dabUaServiceCount = 0;
+    uint16_t dabUaListVersion = 0;
+    bool dabUaInventoryValid = false;
+    bool dabUaPacketLogPending = false;
+    void invalidateDabInventory(void);
+    uint16_t dabUaScanIndex = 0;
+    bool dabUaDebugWasEnabled = false;
+    uint32_t dabUaNextQueryMs = 0;
+    uint32_t dabUaNextLogMs = 0;
+    uint32_t dabUaCommandListGeneration = 0;
+    // Copy only the small UA reply while SPIbuffer remains free for DSRV.
+    uint8_t dabUaRaw[255] = {};
+    char dabUaLabel[17] = {};
+    uint8_t dabUaLanguage = 0;
+    uint8_t dabUaCount = 0;
+    uint8_t dabUaBytes = 0;
+    uint16_t dabUaOffset = 0;
+    uint16_t dabUaDataOffset = 0;
+    uint16_t dabUaRemaining = 0;
+    uint32_t dabUaReplySid = 0;
+    uint32_t dabUaReplyCid = 0;
+    bool dabUaLogPending = false;
+    bool dabUaHeaderPending = false;
+    bool dabUaEntryPending = false;
+    void logDabUserApplications(uint32_t now);
     uint32_t dabSignalNextDueMs = 0;
     uint32_t dabEnsembleNextDueMs = 0;
     uint32_t dabTimeNextDueMs = 0;

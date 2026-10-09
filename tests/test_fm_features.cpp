@@ -139,6 +139,15 @@ int main() {
   assert(fm_features::shouldShowPendingDabTarget(false, true, false, true));
   assert(!fm_features::shouldShowPendingDabTarget(false, false, false, true));
   assert(!fm_features::shouldShowPendingDabTarget(true, false, false, false));
+  // The selected name survives debounce -> driver start -> metadata arrival.
+  // Exercise both UI selection routes (local/rotary1 and global/rotary2).
+  for (unsigned route = 0; route < 2; ++route) {
+    assert(fm_features::shouldShowPendingDabTarget(true, route != 0, false, true, true));
+    assert(fm_features::shouldShowPendingDabTarget(false, false, true, true, false));
+    assert(fm_features::shouldShowPendingDabTarget(false, false, false, true, false));
+    assert(!fm_features::shouldShowPendingDabTarget(false, false, false, true, true));
+    assert(!fm_features::shouldShowPendingDabTarget(false, false, false, false, false));
+  }
 
   assert(fm_af::weakSignal(true, 10, 8, 18, 4));
   assert(!fm_af::weakSignal(true, 20, 8, 18, 4));

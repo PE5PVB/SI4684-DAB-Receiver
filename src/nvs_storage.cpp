@@ -73,6 +73,9 @@ bool NvsStorage::begin() {
   setMissingPresetDefaults();
   if (!preferences_.begin("si4684", false)) return false;
   opened_ = true;
+  const uint8_t storedI2s = preferences_.getUChar("i2s_audio", I2S_AUDIO_48K);
+  i2sAudioMode_ = sanitizeI2sAudioMode(storedI2s);
+  i2sAudioDirty_ = storedI2s != i2sAudioMode_;
   if (loadRecords()) {
     // Missing optional records were replaced with safe defaults above.
     return commit();
@@ -82,6 +85,14 @@ bool NvsStorage::begin() {
   image_[EE_BYTE_CHECKBYTE] = 0xFF;
   configDirty_ = dabDirty_ = fmDirty_ = irDirty_ = true;
   return true;
+}
+
+void NvsStorage::setI2sAudioMode(uint8_t value) {
+  const uint8_t mode = sanitizeI2sAudioMode(value);
+  if (mode != i2sAudioMode_ || !opened_ || !preferences_.isKey("i2s_audio")) {
+    i2sAudioMode_ = mode;
+    i2sAudioDirty_ = true;
+  }
 }
 
 uint8_t NvsStorage::readByte(int address) const {
@@ -149,8 +160,11 @@ bool NvsStorage::commit() {
   if (dabDirty_) ok = saveDabPresets() && ok;
   if (fmDirty_) ok = saveFmPresets() && ok;
   if (irDirty_) ok = saveIrProfile() && ok;
+  if (i2sAudioDirty_)
+    ok = (preferences_.putUChar("i2s_audio", i2sAudioMode_) == sizeof(uint8_t)) && ok;
   if (ok) {
     configDirty_ = dabDirty_ = fmDirty_ = irDirty_ = false;
+    i2sAudioDirty_ = false;
   }
   return ok;
 }

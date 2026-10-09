@@ -26,7 +26,6 @@ extern void DabDynamicLabelTextToBuffer(const char* input, char* output, size_t 
 
 byte menuitem;                    // logical item index in Settings
 static byte menuFirstItem = 0;      // first logical item shown in 9-row window
-static constexpr byte MENU_ITEM_COUNT = 13;
 static constexpr byte MENU_VISIBLE_ROWS = 9;
 
 // Apply the user-selected colour theme to the global PrimaryColor/etc. used
@@ -184,18 +183,52 @@ static constexpr int16_t SYSTEM_INFO_VALUE_X = 166;
 static constexpr int16_t SYSTEM_INFO_VALUE_W = 146;
 static constexpr int16_t SYSTEM_INFO_ROW_H = 20;
 
-// Background[] is a full-screen bitmap with a fixed 320-pixel row stride.
-// TFT_eSPI's cropped pushImage() treats the source as tightly packed, so every
-// partial restore must be sent one scanline at a time. Besides avoiding stray
-// pixels from neighbouring rows, this keeps the original rounded borders and
-// gradients intact.
+// Coalesce main-widget writes into one final overlay repaint. No clipping
+// geometry or dependency on the signal-meter timer; unchanged widgets do not
+// request a repaint. Overlay rendering itself does not mark this flag.
+static bool mainDisplayChanged = false;
+
+bool TakeMainDisplayChanges(void) {
+  const bool changed = mainDisplayChanged;
+  mainDisplayChanged = false;
+  return changed;
+}
+
+template <typename Draw>
+static void DrawMainAndMarkChanged(const Draw& draw) {
+  draw();
+  mainDisplayChanged = true;
+}
+
+static void PushMainSprite(TFT_eSprite& sprite, int16_t x, int16_t y,
+                           int16_t width, int16_t height) {
+  DrawMainAndMarkChanged([&]() { sprite.pushSprite(x, y, 0, 0, width, height); });
+}
+
+static void PrintMainText(int8_t offset, const char* text, int16_t x, int16_t y,
+                           int color, int smoothcolor, uint8_t fontsize) {
+  DrawMainAndMarkChanged([&]() { tftPrint(offset, text, x, y, color, smoothcolor, fontsize); });
+}
+
+static void ReplaceMainText(int8_t offset, const char* previous, const char* text,
+                             int16_t x, int16_t y, int color, int smoothcolor,
+                             int background, uint8_t fontsize) {
+  DrawMainAndMarkChanged([&]() {
+    tftReplaceFixed(offset, previous, text, x, y, color, smoothcolor, background, fontsize);
+  });
+}
+
+// Background[] has a fixed 320-pixel row stride. Restore one scanline at a
+// time so the partial copy retains the correct source stride and gradients.
 static void RestoreMainBackgroundRegion(int16_t x, int16_t y,
                                         int16_t width, int16_t height) {
-  for (int16_t row = 0; row < height; ++row) {
-    const uint32_t offset =
-        static_cast<uint32_t>(y + row) * 320U + static_cast<uint32_t>(x);
-    tft.pushImage(x, y + row, width, 1, Background + offset);
-  }
+  DrawMainAndMarkChanged([&]() {
+    for (int16_t row = 0; row < height; ++row) {
+      const uint32_t offset =
+          static_cast<uint32_t>(y + row) * 320U + static_cast<uint32_t>(x);
+      tft.pushImage(x, y + row, width, 1, Background + offset);
+    }
+  });
 }
 
 static void RestoreSystemInfoValueRow(uint8_t row) {
@@ -663,14 +696,14 @@ void ShowOneLine(byte position, byte item, bool selected) {
     FullLineSprite.setTextDatum(TL_DATUM);
     FullLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
     switch (item) {
-      case 0:
+      case MENU_LANGUAGE:
         FullLineSprite.drawString(myLanguage[language][12], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.drawString(myLanguage[language][0], 300, 3);
         break;
 
-      case 1:
+      case MENU_BRIGHTNESS:
         FullLineSprite.drawString(myLanguage[language][13], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.drawString("%", 300, 3);
@@ -679,28 +712,28 @@ void ShowOneLine(byte position, byte item, bool selected) {
         FullLineSprite.drawString(value, 270, 3);
         break;
 
-      case 2:
+      case MENU_THEME:
         FullLineSprite.drawString(myLanguage[language][14], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.drawString(Theme[CurrentTheme], 300, 3);
         break;
 
-      case 3:
+      case MENU_AUTO_SLIDESHOW:
         FullLineSprite.drawString(myLanguage[language][15], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.drawString((autoslideshow ? myLanguage[language][23] : myLanguage[language][24]), 300, 3);
         break;
 
-      case 4:
+      case MENU_SIGNAL_UNIT:
         FullLineSprite.drawString(myLanguage[language][16], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.drawString(unitString[unit], 300, 3);
         break;
 
-      case 5:
+      case MENU_SLEEP_TIMER:
         FullLineSprite.drawString(myLanguage[language][25], 6, 3);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.setTextDatum(TR_DATUM);
@@ -712,14 +745,14 @@ void ShowOneLine(byte position, byte item, bool selected) {
         FullLineSprite.drawString((tot != 0 ? myLanguage[language][26] : myLanguage[language][24]), 300, 3);
         break;
 
-      case 6:
+      case MENU_RADIO_MODE:
         FullLineSprite.drawString(myLanguage[language][17], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
         FullLineSprite.drawString(radioModeValueText[requestedRadioMode], 300, 3);
         break;
 
-      case 7:
+      case MENU_FM_REGION:
         FullLineSprite.drawString(fmRegionMenuText[language], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -728,7 +761,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
             300, 3);
         break;
 
-      case 8:
+      case MENU_GPIO12:
         FullLineSprite.drawString("GPIO12", 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -736,7 +769,14 @@ void ShowOneLine(byte position, byte item, bool selected) {
             Gpio12ModeText[sanitizeGpio12Mode(requestedGpio12Mode)], 300, 3);
         break;
 
-      case 9:
+      case MENU_I2S_AUDIO:
+        FullLineSprite.drawString(i2sAudioMenuText[language], 6, 3);
+        FullLineSprite.setTextDatum(TR_DATUM);
+        FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
+        FullLineSprite.drawString(i2sAudioModeText(requestedI2sAudioMode), 300, 3);
+        break;
+
+      case MENU_IR_REMOTE:
         FullLineSprite.drawString(irRemoteText[language], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -748,7 +788,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
         FullLineSprite.drawString(value, 300, 3);
         break;
 
-      case 10:
+      case MENU_FM_SEEK:
         FullLineSprite.drawString(fmSeekMenuText[language], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -756,7 +796,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
             fmSeekValueText[language][fmSeekSensitivity], 300, 3);
         break;
 
-      case 11:
+      case MENU_FM_AF:
         FullLineSprite.drawString(fmAfMenuText[language], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -765,7 +805,7 @@ void ShowOneLine(byte position, byte item, bool selected) {
             300, 3);
         break;
 
-      case 12:
+      case MENU_ABOUT:
         FullLineSprite.drawString(myLanguage[language][81], 6, 3);
         FullLineSprite.setTextDatum(TR_DATUM);
         break;
@@ -808,7 +848,7 @@ void BuildMenu(void) {
   ChannelListView = false;
   DabGlobalListView = false;
 
-  if (menuitem >= MENU_ITEM_COUNT) menuitem = 0;
+  if (menuitem >= MENU_ITEM_COUNT) menuitem = MENU_LANGUAGE;
   if (menuitem < menuFirstItem) menuFirstItem = menuitem;
   if (menuitem >= menuFirstItem + MENU_VISIBLE_ROWS)
     menuFirstItem = menuitem - (MENU_VISIBLE_ROWS - 1);
@@ -879,7 +919,7 @@ void MenuUp(void) {
 
     menuitem++;
     if (menuitem >= MENU_ITEM_COUNT) {
-      menuitem = 0;
+      menuitem = MENU_LANGUAGE;
       menuFirstItem = 0;
     } else if (menuitem >= menuFirstItem + MENU_VISIBLE_ROWS) {
       menuFirstItem = menuitem - (MENU_VISIBLE_ROWS - 1);
@@ -896,11 +936,11 @@ void MenuUp(void) {
     return;
   }
 
-  if (menuitem == 9) {
+  if (menuitem == MENU_IR_REMOTE) {
     IrRemoteUiRotate(+1);
     return;
   }
-  if (menuitem == 12) return;  // About is read-only.
+  if (menuitem == MENU_ABOUT) return;  // About is read-only.
 
   OneBigLineSprite.pushImage(-11, -88, 292, 170, popupbackground);
   OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -908,14 +948,14 @@ void MenuUp(void) {
   char value[8];
 
   switch (menuitem) {
-    case 0:
+    case MENU_LANGUAGE:
       language ++;
       if (language == (sizeof (myLanguage) / sizeof (myLanguage[0]))) language = 0;
       OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 1:
+    case MENU_BRIGHTNESS:
       ContrastSet ++;
       if (ContrastSet > 100) ContrastSet = 1;
       OneBigLineSprite.setTextDatum(TL_DATUM);
@@ -929,7 +969,7 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 2:
+    case MENU_THEME:
       CurrentTheme ++;
       if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1) CurrentTheme = 0;
       doTheme();
@@ -940,7 +980,7 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 3:
+    case MENU_AUTO_SLIDESHOW:
       autoslideshow = !autoslideshow;
       OneBigLineSprite.drawString(
           autoslideshow ? myLanguage[language][23] : myLanguage[language][24],
@@ -948,14 +988,14 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 4:
+    case MENU_SIGNAL_UNIT:
       unit ++;
       if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1) unit = 0;
       OneBigLineSprite.drawString(unitString[unit], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 5:
+    case MENU_SLEEP_TIMER:
       switch (tot) {
         case 0: tot = 15; break;
         case 15: tot = 30; break;
@@ -976,14 +1016,14 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 6:
+    case MENU_RADIO_MODE:
       requestedRadioMode = requestedRadioMode == RADIO_MODE_DAB
                                ? RADIO_MODE_FM : RADIO_MODE_DAB;
       OneBigLineSprite.drawString(radioModeValueText[requestedRadioMode], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 7:
+    case MENU_FM_REGION:
       requestedFmRegion = static_cast<uint8_t>(
           (sanitizeFmRegion(requestedFmRegion) + 1U) % FM_REGION_COUNT);
       OneBigLineSprite.drawString(
@@ -991,7 +1031,7 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 8:
+    case MENU_GPIO12:
       requestedGpio12Mode = static_cast<uint8_t>(
           (sanitizeGpio12Mode(requestedGpio12Mode) + 1U) % 3U);
       OneBigLineSprite.drawString(
@@ -999,13 +1039,19 @@ void MenuUp(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 10:
+    case MENU_I2S_AUDIO:
+      requestedI2sAudioMode = cycleI2sAudioMode(requestedI2sAudioMode, true);
+      OneBigLineSprite.drawString(i2sAudioModeText(requestedI2sAudioMode), 135, 2);
+      OneBigLineSprite.pushSprite(24, 118);
+      break;
+
+    case MENU_FM_SEEK:
       fmSeekSensitivity = static_cast<uint8_t>((fmSeekSensitivity + 1U) % 3U);
       OneBigLineSprite.drawString(
           fmSeekValueText[language][fmSeekSensitivity], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
-    case 11:
+    case MENU_FM_AF:
       fmAfEnabled = !fmAfEnabled;
       OneBigLineSprite.drawString(
           fmAfEnabled ? myLanguage[language][23] : myLanguage[language][24],
@@ -1021,7 +1067,7 @@ void MenuDown(void) {
     const byte oldItem = menuitem;
     const byte oldFirstItem = menuFirstItem;
 
-    if (menuitem == 0) {
+    if (menuitem == MENU_LANGUAGE) {
       menuitem = MENU_ITEM_COUNT - 1;
       menuFirstItem = MENU_ITEM_COUNT - MENU_VISIBLE_ROWS;
     } else {
@@ -1038,11 +1084,11 @@ void MenuDown(void) {
     return;
   }
 
-  if (menuitem == 9) {
+  if (menuitem == MENU_IR_REMOTE) {
     IrRemoteUiRotate(-1);
     return;
   }
-  if (menuitem == 12) return;  // About is read-only.
+  if (menuitem == MENU_ABOUT) return;  // About is read-only.
 
   OneBigLineSprite.pushImage(-11, -88, 292, 170, popupbackground);
   OneBigLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
@@ -1050,7 +1096,7 @@ void MenuDown(void) {
   char value[8];
 
   switch (menuitem) {
-    case 0:
+    case MENU_LANGUAGE:
       language --;
       if (language > (sizeof (myLanguage) / sizeof (myLanguage[0])))
         language = (sizeof (myLanguage) / sizeof (myLanguage[0])) - 1;
@@ -1058,7 +1104,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 1:
+    case MENU_BRIGHTNESS:
       ContrastSet --;
       if (ContrastSet < 1) ContrastSet = 100;
       OneBigLineSprite.setTextDatum(TL_DATUM);
@@ -1072,7 +1118,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 2:
+    case MENU_THEME:
       CurrentTheme --;
       if (CurrentTheme > sizeof(Theme) / sizeof(Theme[0]) - 1)
         CurrentTheme = sizeof(Theme) / sizeof(Theme[0]) - 1;
@@ -1084,7 +1130,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 3:
+    case MENU_AUTO_SLIDESHOW:
       autoslideshow = !autoslideshow;
       OneBigLineSprite.drawString(
           autoslideshow ? myLanguage[language][23] : myLanguage[language][24],
@@ -1092,7 +1138,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 4:
+    case MENU_SIGNAL_UNIT:
       unit --;
       if (unit > sizeof(unitString) / sizeof(unitString[0]) - 1)
         unit = sizeof(unitString) / sizeof(unitString[0]) - 1;
@@ -1100,7 +1146,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 5:
+    case MENU_SLEEP_TIMER:
       switch (tot) {
         case 15: tot = 0; break;
         case 30: tot = 15; break;
@@ -1121,14 +1167,14 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 6:
+    case MENU_RADIO_MODE:
       requestedRadioMode = requestedRadioMode == RADIO_MODE_DAB
                                ? RADIO_MODE_FM : RADIO_MODE_DAB;
       OneBigLineSprite.drawString(radioModeValueText[requestedRadioMode], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 7:
+    case MENU_FM_REGION:
       requestedFmRegion = sanitizeFmRegion(requestedFmRegion) == 0
                               ? FM_REGION_COUNT - 1
                               : sanitizeFmRegion(requestedFmRegion) - 1;
@@ -1137,7 +1183,7 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 8:
+    case MENU_GPIO12:
       requestedGpio12Mode = sanitizeGpio12Mode(requestedGpio12Mode) == GPIO12_AUTO
                                 ? GPIO12_IR
                                 : requestedGpio12Mode - 1;
@@ -1146,14 +1192,20 @@ void MenuDown(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 10:
+    case MENU_I2S_AUDIO:
+      requestedI2sAudioMode = cycleI2sAudioMode(requestedI2sAudioMode, false);
+      OneBigLineSprite.drawString(i2sAudioModeText(requestedI2sAudioMode), 135, 2);
+      OneBigLineSprite.pushSprite(24, 118);
+      break;
+
+    case MENU_FM_SEEK:
       fmSeekSensitivity = fmSeekSensitivity == 0U
                               ? 2U : fmSeekSensitivity - 1U;
       OneBigLineSprite.drawString(
           fmSeekValueText[language][fmSeekSensitivity], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
-    case 11:
+    case MENU_FM_AF:
       fmAfEnabled = !fmAfEnabled;
       OneBigLineSprite.drawString(
           fmAfEnabled ? myLanguage[language][23] : myLanguage[language][24],
@@ -1167,7 +1219,7 @@ void MenuDown(void) {
 // menu, applies the current change, or commits the value to NVS.
 void DoMenu(void) {
   if (menuopen) {
-    if (menuitem == 9) {
+    if (menuitem == MENU_IR_REMOTE) {
       if (IrRemoteUiPress()) {
         menuopen = false;
         BuildMenu();
@@ -1179,7 +1231,7 @@ void DoMenu(void) {
     return;
   }
 
-  if (menuitem == 9) {
+  if (menuitem == MENU_IR_REMOTE) {
     menuopen = true;
     IrRemoteUiOpen();
     return;
@@ -1193,13 +1245,13 @@ void DoMenu(void) {
   char value[80];
 
   switch (menuitem) {
-    case 0:
+    case MENU_LANGUAGE:
       Infoboxprint(myLanguage[language][12]);
       OneBigLineSprite.drawString(myLanguage[language][0], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 1:
+    case MENU_BRIGHTNESS:
       Infoboxprint(myLanguage[language][13]);
       OneBigLineSprite.setTextDatum(TL_DATUM);
       OneBigLineSprite.setTextColor(ActiveColor, ActiveColorSmooth, false);
@@ -1211,13 +1263,13 @@ void DoMenu(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 2:
+    case MENU_THEME:
       Infoboxprint(myLanguage[language][14]);
       OneBigLineSprite.drawString(Theme[CurrentTheme], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 3:
+    case MENU_AUTO_SLIDESHOW:
       Infoboxprint(myLanguage[language][15]);
       OneBigLineSprite.drawString(
           autoslideshow ? myLanguage[language][23] : myLanguage[language][24],
@@ -1225,13 +1277,13 @@ void DoMenu(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 4:
+    case MENU_SIGNAL_UNIT:
       Infoboxprint(myLanguage[language][16]);
       OneBigLineSprite.drawString(unitString[unit], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 5:
+    case MENU_SLEEP_TIMER:
       Infoboxprint(myLanguage[language][25]);
       if (tot != 0) {
         OneBigLineSprite.setTextDatum(TR_DATUM);
@@ -1246,13 +1298,13 @@ void DoMenu(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 6:
+    case MENU_RADIO_MODE:
       Infoboxprint(myLanguage[language][17]);
       OneBigLineSprite.drawString(radioModeValueText[requestedRadioMode], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 7:
+    case MENU_FM_REGION:
       Infoboxprint(fmRegionMenuText[language]);
       OneBigLineSprite.drawString(
           fmRegionValueText[language][sanitizeFmRegion(requestedFmRegion)],
@@ -1260,21 +1312,27 @@ void DoMenu(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 8:
+    case MENU_GPIO12:
       Infoboxprint("GPIO12");
       OneBigLineSprite.drawString(
           Gpio12ModeText[sanitizeGpio12Mode(requestedGpio12Mode)], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 10:
+    case MENU_I2S_AUDIO:
+      Infoboxprint(i2sAudioMenuText[language]);
+      OneBigLineSprite.drawString(i2sAudioModeText(requestedI2sAudioMode), 135, 2);
+      OneBigLineSprite.pushSprite(24, 118);
+      break;
+
+    case MENU_FM_SEEK:
       Infoboxprint(fmSeekMenuText[language]);
       OneBigLineSprite.drawString(
           fmSeekValueText[language][fmSeekSensitivity], 135, 2);
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 11:
+    case MENU_FM_AF:
       Infoboxprint(fmAfMenuText[language]);
       OneBigLineSprite.drawString(
           fmAfEnabled ? myLanguage[language][23] : myLanguage[language][24],
@@ -1282,7 +1340,7 @@ void DoMenu(void) {
       OneBigLineSprite.pushSprite(24, 118);
       break;
 
-    case 12:
+    case MENU_ABOUT:
       tftPrintFixed(0, myLanguage[language][79], 155, 40,
                     ActiveColor, ActiveColorSmooth, 28);
       tftPrintFixed(0, "PE5PVB, bales", 155, 72,
@@ -1338,17 +1396,17 @@ void ShowFreq(void) {
     snprintf(value, sizeof(value), "%u.%u",
              static_cast<unsigned>(fmfreq / 100),
              static_cast<unsigned>((fmfreq % 100) / 10));
-    tftReplaceFixed(0, fmModeText[language], fmModeText[language],
+    ReplaceMainText(0, fmModeText[language], fmModeText[language],
                     145, 45, PrimaryColor, PrimaryColorSmooth,
                     BackgroundColor2, 28);
-    tftReplaceFixed(-1, dabfreqStringOld, value,
+    ReplaceMainText(-1, dabfreqStringOld, value,
                     184, 43, SecondaryColor, SecondaryColorSmooth,
                     BackgroundColor2, 52);
     snprintf(dabfreqStringOld, sizeof(dabfreqStringOld), "%s", value);
     return;
   }
 
-  tftReplaceFixed(0, radio.getChannel(dabfreqold), radio.getChannel(dabfreq),
+  ReplaceMainText(0, radio.getChannel(dabfreqold), radio.getChannel(dabfreq),
                   145, 45, PrimaryColor, PrimaryColorSmooth,
                   BackgroundColor2, 28);
 
@@ -1366,7 +1424,7 @@ void ShowFreq(void) {
              static_cast<unsigned long>(fraction));
   }
 
-  tftReplaceFixed(-1, dabfreqStringOld, value,
+  ReplaceMainText(-1, dabfreqStringOld, value,
                   184, 43, SecondaryColor, SecondaryColorSmooth,
                   BackgroundColor2, 52);
   snprintf(dabfreqStringOld, sizeof(dabfreqStringOld), "%s", value);
@@ -1525,13 +1583,13 @@ void ShowSID(void) {
   }
 
   if (strcmp(value, SIDold) != 0 || displayreset) {
-    // Give the smooth font one transparent row above its nominal y position.
-    // Drawing at sprite row zero clips the top antialiasing row on some glyphs.
+    // FONT16 hex glyphs occupy 14 rows. Leave a row above/below and room for
+    // four wide letters; the EID crop ends at y=119, before this SID region.
     FullLineSprite.pushImage(-38, -119, 320, 240, Background);
     FullLineSprite.setTextDatum(TL_DATUM);
     FullLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    FullLineSprite.drawString(value, 0, 1);
-    FullLineSprite.pushSprite(38, 119, 0, 0, 36, 18);
+    FullLineSprite.drawString(value, 1, 1);
+    FullLineSprite.pushSprite(38, 119, 0, 0, 40, 17);
     snprintf(SIDold, sizeof(SIDold), "%s", value);
   }
 }
@@ -1548,11 +1606,12 @@ void ShowEID(void) {
   }
 
   if (strcmp(value, EIDold) != 0 || displayreset) {
-    FullLineSprite.pushImage(-38, -105, 320, 240, Background);
+    // Keep the EID repaint strictly above SID, including its background.
+    FullLineSprite.pushImage(-38, -104, 320, 240, Background);
     FullLineSprite.setTextDatum(TL_DATUM);
     FullLineSprite.setTextColor(SecondaryColor, SecondaryColorSmooth, false);
-    FullLineSprite.drawString(value, 0, 1);
-    FullLineSprite.pushSprite(38, 105, 0, 0, 36, 18);
+    FullLineSprite.drawString(value, 1, 1);
+    FullLineSprite.pushSprite(38, 104, 0, 0, 40, 15);
     snprintf(EIDold, sizeof(EIDold), "%s", value);
   }
 }
@@ -1606,7 +1665,8 @@ void ShowPS(void) {
 
   const bool showPendingTarget = fm_features::shouldShowPendingDabTarget(
       dabServiceSelectionPending, trysetservice,
-      radio.isDabServiceStartPending(), _serviceName[0] != '\0');
+      radio.isDabServiceStartPending(), _serviceName[0] != '\0',
+      radio.isDabServiceLabelCurrent());
   if (showPendingTarget) {
     radio.ASCIIToBuffer(_serviceName, _serviceNameCharset,
                         value, sizeof(value));
@@ -1742,12 +1802,36 @@ void ShowProtectionlevel(void) {
     FullLineSprite.setTextDatum(TC_DATUM);
     FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
     FullLineSprite.drawString(value, 30, 0);
-    FullLineSprite.pushSprite(9, 90, 0, 0, 70, 16);
+    PushMainSprite(FullLineSprite, 9, 90, 70, 16);
     snprintf(PLold, sizeof(PLold), "%s", value);
   }
 }
 
+static void ShowEpgIcon(void) {
+  static bool visibleOld = false;
+  static bool presentOld = false;
+  const bool visible = !radio.isFm();
+  const bool present = visible && radio.spiPresent();
+  if (!displayreset && visible == visibleOld && present == presentOld) return;
+
+  // Use the same loaded FONT16 as the codec. E/P/G glyphs fit all their
+  // antialiasing rows in this 14-pixel crop, above the PR row at y=65.
+  RestoreMainBackgroundRegion(58, 50, 58, 14);
+  if (visible) {
+    // Use the cyan/grey foregrounds of slideshowon/slideshowoff artwork.
+    const uint16_t color = present ? 0x06DFU : 0x3A4AU;
+    FullLineSprite.pushImage(-58, -50, 320, 240, Background);
+    FullLineSprite.setTextDatum(TC_DATUM);
+    FullLineSprite.setTextColor(color, BackgroundColor2, false);
+    FullLineSprite.drawString("EPG", 29, 0);
+    PushMainSprite(FullLineSprite, 58, 50, 58, 14);
+  }
+  visibleOld = visible;
+  presentOld = present;
+}
+
 void ShowAudioMode(void) {
+  ShowEpgIcon();
   constexpr int16_t codecCellX = 58;
   constexpr int16_t codecCellY = 30;
   constexpr int16_t codecCellW = 58;
@@ -1760,7 +1844,7 @@ void ShowAudioMode(void) {
     if (displayreset || audiomodeold != radio.audiomode) {
       RestoreMainBackgroundRegion(codecCellX, codecCellY,
                                   codecCellW, codecCellH);
-      tftPrint(0, fmModeText[language], codecTextCenterX, 33,
+      PrintMainText(0, fmModeText[language], codecTextCenterX, 33,
                SecondaryColor, SecondaryColorSmooth, 16);
       tft.pushImage(10, 4, 28, 19, radio.fmPilot ? stereoon : mono);
       audiomodeold = radio.audiomode;
@@ -1791,14 +1875,14 @@ void ShowAudioMode(void) {
     RestoreMainBackgroundRegion(codecCellX, codecCellY,
                                 codecCellW, codecCellH);
     if (radio.ServiceStart && !audioInfoReady) {
-      tftPrint(0, "...", codecTextCenterX, 33,
+      PrintMainText(0, "...", codecTextCenterX, 33,
                GreyoutColor, BackgroundColor, 16);
     } else if (radio.servicetype == 4) {
-      tftPrint(0, codecPage == 0U ? "DAB+" : "HE-AAC",
+      PrintMainText(0, codecPage == 0U ? "DAB+" : "HE-AAC",
                codecTextCenterX, 33,
                SecondaryColor, SecondaryColorSmooth, 16);
     } else if (radio.servicetype == 0 || radio.servicetype == 5) {
-      tftPrint(0, codecPage == 0U ? "DAB" : "MP2",
+      PrintMainText(0, codecPage == 0U ? "DAB" : "MP2",
                codecTextCenterX, 33,
                SecondaryColor, SecondaryColorSmooth, 16);
     }
@@ -2023,7 +2107,7 @@ void ShowMemoryPos(void) {
            static_cast<unsigned>(memoryposold + 1U));
   snprintf(value, sizeof(value), "%u",
            static_cast<unsigned>(memorypos + 1U));
-  tftReplaceFixed(-1, oldValue, value, 93, 65,
+  ReplaceMainText(-1, oldValue, value, 93, 65,
                   memposcolor, memposcolorsmooth, BackgroundColor2, 16);
   memoryposold = memorypos;
 }
@@ -2157,7 +2241,7 @@ void ShowSignalLevel(void) {
       if (filledWidth < 139)
         QualityBarSprite.fillRect(filledWidth, 0, 139 - filledWidth, 10,
                                   BackgroundColor3);
-      QualityBarSprite.pushSprite(135, 91);
+      PushMainSprite(QualityBarSprite, 135, 91, 139, 10);
 
       char ficOldText[8];
       char qualityText[8];
@@ -2165,7 +2249,7 @@ void ShowSignalLevel(void) {
                static_cast<unsigned>(ficold));
       snprintf(qualityText, sizeof(qualityText), "%u%%",
                static_cast<unsigned>(qualityValue));
-      tftReplaceFixed(1, ficOldText, qualityText, 315, 90,
+      ReplaceMainText(1, ficOldText, qualityText, 315, 90,
                       PrimaryColor, PrimaryColorSmooth,
                       BackgroundColor3, 16);
       ficold = qualityValue;
@@ -2173,19 +2257,18 @@ void ShowSignalLevel(void) {
   } else {
     static char signalLevelOldText[16] = "";
 
-    if (((strcmp(signalText, signalLevelOldText) != 0) && !setvolume) ||
-        displayreset) {
-      tftReplaceFixed(1, signalLevelOldText, signalText, 191, 56,
+    if (strcmp(signalText, signalLevelOldText) != 0 || displayreset) {
+      ReplaceMainText(1, signalLevelOldText, signalText, 191, 56,
                       PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
       snprintf(signalLevelOldText, sizeof(signalLevelOldText), "%s", signalText);
     }
 
-    if (((CNRold != CNR) && !setvolume) || displayreset) {
+    if (CNRold != CNR || displayreset) {
       char cnrOldText[8];
       char cnrText[8];
       snprintf(cnrOldText, sizeof(cnrOldText), "%d", static_cast<int>(CNRold));
       snprintf(cnrText, sizeof(cnrText), "%d", static_cast<int>(CNR));
-      tftReplaceFixed(1, cnrOldText, cnrText, 284, 56,
+      ReplaceMainText(1, cnrOldText, cnrText, 284, 56,
                       PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
       CNRold = CNR;
     }
@@ -2346,5 +2429,5 @@ void ShowTuneMode(void) {
       ModeSprite.drawString("MEM", 23, 32);
       break;
   }
-  ModeSprite.pushSprite(6, 33);
+  PushMainSprite(ModeSprite, 6, 33, 46, 47);
 }

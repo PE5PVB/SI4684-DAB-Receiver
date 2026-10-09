@@ -16,6 +16,25 @@
 #include "graphics.h"
 #include <cstring>
 
+// Logical Settings items in display/navigation order.
+enum SettingsMenuItem : uint8_t {
+  MENU_LANGUAGE,
+  MENU_BRIGHTNESS,
+  MENU_THEME,
+  MENU_AUTO_SLIDESHOW,
+  MENU_SIGNAL_UNIT,
+  MENU_SLEEP_TIMER,
+  MENU_RADIO_MODE,
+  MENU_FM_REGION,
+  MENU_GPIO12,
+  MENU_I2S_AUDIO,
+  MENU_IR_REMOTE,
+  MENU_FM_SEEK,
+  MENU_FM_AF,
+  MENU_ABOUT,
+  MENU_ITEM_COUNT
+};
+
 extern bool autoslideshow;
 extern bool change;
 extern bool ChannelListView;
@@ -60,6 +79,8 @@ extern uint8_t fmSeekSensitivity;
 extern bool fmAfEnabled;
 extern uint8_t gpio12Mode;
 extern uint8_t requestedGpio12Mode;
+extern I2sAudioMode i2sAudioMode;
+extern I2sAudioMode requestedI2sAudioMode;
 extern uint16_t fmfreq;
 extern uint16_t fmPendingStationFrequency;
 extern char fmPendingStationPs[9];
@@ -152,6 +173,7 @@ void ShowBitrate(void);
 void ShowClock(void);
 void ShowSlideShowIcon(void);
 void ShowTuneMode(void);
+bool TakeMainDisplayChanges(void);
 void ShowRSSI(void);
 void ShowOneLine(byte position, byte item, bool selected);
 

@@ -256,9 +256,10 @@ struct ClockValidator {
 inline bool shouldShowPendingDabTarget(bool selectionDebounce,
                                        bool restorePending,
                                        bool driverStartPending,
-                                       bool labelAvailable) {
+                                       bool labelAvailable,
+                                       bool currentLabelReady = true) {
   return labelAvailable &&
-         (selectionDebounce || restorePending || driverStartPending);
+         (selectionDebounce || restorePending || driverStartPending || !currentLabelReady);
 }
 
 inline const char* ptyName(uint8_t pty, bool rbds) {

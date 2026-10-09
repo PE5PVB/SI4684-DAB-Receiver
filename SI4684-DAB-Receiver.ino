@@ -165,6 +165,8 @@ uint8_t fmSeekSensitivity = 1;
 bool fmAfEnabled = false;
 uint8_t gpio12Mode = GPIO12_AUTO;
 uint8_t requestedGpio12Mode = GPIO12_AUTO;
+I2sAudioMode i2sAudioMode = I2S_AUDIO_48K;
+I2sAudioMode requestedI2sAudioMode = I2S_AUDIO_48K;
 uint16_t fmfreq = 8750;
 uint16_t fmPendingStationFrequency = 0;
 char fmPendingStationPs[9] = "";
@@ -249,6 +251,7 @@ struct SettingsSnapshot {
   uint8_t fmSeekSensitivity;
   bool fmAfEnabled;
   uint8_t gpio12Mode;
+  I2sAudioMode i2sAudioMode;
 };
 
 static SettingsSnapshot settingsOriginal{};
@@ -343,8 +346,6 @@ bool slsWaitingOverlayVisible = false;
 static bool slsDisplayedFingerprintValid = false;
 static uint32_t slsDisplayedHash = 0;
 static uint32_t slsDisplayedSize = 0;
-static uint32_t slsWaitingOverlayRssiStamp = 0;
-static uint32_t volumeOverlayRssiStamp = 0;
 static bool standbyWakeReleaseGuard = false;
 static bool slsReceiveIndicatorDrawn = false;
 
@@ -534,9 +535,6 @@ static void ShowSlideshowWaitingOverlay(void) {
   DrawSlideshowLoadingIcon(39, 60, true);
   tftPrint(0, slideshowLoadingText[language], 180, 62,
            PrimaryColor, BackgroundColor3, 16);
-  // Remember which 10 Hz signal-meter frame is covered by this overlay. The
-  // main DAB renderer redraws the bubble only after a newer frame was painted.
-  slsWaitingOverlayRssiStamp = rssiTimer;
   slsWaitingOverlayVisible = true;
 }
 
@@ -849,6 +847,10 @@ bool SwitchRadioMode(RadioMode newMode, bool force) {
     return true;
   }
   const bool modeChanged = newMode != radioMode;
+  const bool restoreLiveDab = force && !modeChanged && radioMode == RADIO_MODE_DAB &&
+                              radio.ServiceIndex < radio.numberofservices;
+  const uint32_t liveSid = restoreLiveDab ? radio.service[radio.ServiceIndex].ServiceID : 0;
+  const uint32_t liveCid = restoreLiveDab ? radio.service[radio.ServiceIndex].CompID : 0;
   const char* switchText = newMode == RADIO_MODE_FM
                                ? switchingToFmText[language]
                                : switchingToDabText[language];
@@ -934,12 +936,14 @@ bool SwitchRadioMode(RadioMode newMode, bool force) {
     radio.setFmFrequency(fmfreq);
   } else {
     radio.setFreq(dabfreq);
-    Storage.get(EE_UINT32_SERVICEID, _serviceID);
+    if (restoreLiveDab) _serviceID = liveSid;
+    else Storage.get(EE_UINT32_SERVICEID, _serviceID);
     memset(_serviceName, 0, sizeof(_serviceName));
     _serviceNameCharset = 0;
     trysetservice = _serviceID != 0;
     trysetserviceFreq = trysetservice ? dabfreq : 0xFF;
-    trysetserviceComponentValid = false;
+    trysetserviceComponentValid = restoreLiveDab;
+    trysetserviceComponentId = liveCid;
   }
   BuildDisplay();
   DIAG_PRINTF("[RADIO/BOOT] total mode switch=%u ms mode=%s control=%s\n",
@@ -964,9 +968,11 @@ void CaptureSettingsSnapshot(void) {
   settingsOriginal.fmSeekSensitivity = fmSeekSensitivity;
   settingsOriginal.fmAfEnabled = fmAfEnabled;
   settingsOriginal.gpio12Mode = gpio12Mode;
+  settingsOriginal.i2sAudioMode = i2sAudioMode;
   requestedRadioMode = radioMode;
   requestedFmRegion = fmRegion;
   requestedGpio12Mode = gpio12Mode;
+  requestedI2sAudioMode = i2sAudioMode;
   settingsSnapshotValid = true;
 }
 
@@ -977,6 +983,8 @@ void ExitSettingsMenu(void) {
 
   const uint8_t selectedRegion = sanitizeFmRegion(requestedFmRegion);
   const uint8_t selectedGpio12 = sanitizeGpio12Mode(requestedGpio12Mode);
+  const I2sAudioMode selectedI2s = sanitizeI2sAudioMode(requestedI2sAudioMode);
+  const bool i2sChanged = selectedI2s != settingsOriginal.i2sAudioMode;
   const bool gpio12Changed = selectedGpio12 != settingsOriginal.gpio12Mode;
   const bool radioModeChanged = requestedRadioMode != settingsOriginal.radioMode;
   const bool fmRegionChanged = selectedRegion != settingsOriginal.fmRegion;
@@ -1022,10 +1030,26 @@ void ExitSettingsMenu(void) {
     settingsChanged = true;
   }
 
+  if (i2sChanged) {
+    Storage.setI2sAudioMode(selectedI2s);
+    settingsChanged = true;
+  }
   if (settingsChanged) MarkEepromDirty();
   menu = false;
   menuopen = false;
   settingsSnapshotValid = false;
+
+  if (i2sChanged && !FlushEeprom()) {
+    DIAG_PRINTLN("[NVS] I2S selection not committed; radio reload cancelled");
+    ShowStatusOverlay("NVS ERROR");
+    delay(1200);
+    BuildDisplay();
+    return;
+  }
+  if (i2sChanged) {
+    i2sAudioMode = selectedI2s;
+    radio.setI2sAudioMode(i2sAudioMode);
+  }
 
   if (gpio12Changed) {
     if (!FlushEeprom()) {
@@ -1065,8 +1089,8 @@ void ExitSettingsMenu(void) {
   }
   if (fmAfEnabledChanged) radio.setFmAfEnabled(fmAfEnabled);
 
-  if (requestedRadioMode != radioMode) {
-    if (!SwitchRadioMode(requestedRadioMode)) requestedRadioMode = radioMode;
+  if (requestedRadioMode != radioMode || i2sChanged) {
+    if (!SwitchRadioMode(requestedRadioMode, i2sChanged)) requestedRadioMode = radioMode;
   } else {
     BuildDisplay();
   }
@@ -1137,7 +1161,6 @@ void RemoteVolumeStep(int8_t delta) {
     MarkEepromDirty();
   }
   ShowVolume();
-  volumeOverlayRssiStamp = rssiTimer;
 }
 
 // IR TUNE +/- shares the normal application controls, with two deliberate
@@ -1221,8 +1244,6 @@ static void RedrawVolumeOverlay(void) {
   // after every content redraw so no dynamic widget can weaken its edge.
   tft.drawRoundRect(25, 46, 270, 50, 8, ActiveColor);
 
-  // Remember which 10 Hz signal-meter frame is covered by this composition.
-  volumeOverlayRssiStamp = rssiTimer;
 }
 
 
@@ -1340,6 +1361,11 @@ void setup(void) {
   const uint8_t storedGpio12Mode = Storage.readByte(EE_BYTE_GPIO12_MODE);
   gpio12Mode = sanitizeGpio12Mode(storedGpio12Mode);
   requestedGpio12Mode = gpio12Mode;
+  requestedI2sAudioMode = i2sAudioMode;
+  i2sAudioMode = sanitizeI2sAudioMode(Storage.getI2sAudioMode());
+  requestedI2sAudioMode = i2sAudioMode;
+  radio.setI2sAudioMode(i2sAudioMode);
+  DIAG_PRINTF("[I2S] stored selection=%s\n", i2sAudioModeText(i2sAudioMode));
   fmSeekSensitivity = Storage.readByte(EE_BYTE_FM_SEEK_SENSITIVITY);
   const uint8_t storedFmAfEnabled = Storage.readByte(EE_BYTE_FM_AF_ENABLED);
   fmAfEnabled = storedFmAfEnabled == 1U;
@@ -1996,18 +2022,9 @@ void ProcessDAB(void) {
   // The user can cancel the waiting view explicitly, or a complete image below
   // will replace the overlay.
 
-  bool volumeNeedsFinalComposite = false;
   if ((!SlideShowView || slsWaitingView) && !menu) {
     if (!ChannelListView) {
       ShowSignalLevel();
-      // The Q/M bar overlaps the lower edge of the volume panel. Repaint the
-      // volume panel immediately after that mode-specific bar update, matching the
-      // slideshow-loading timing instead of leaving the bar visible until the
-      // rest of the dynamic widgets have finished drawing.
-      if (setvolume && volumeOverlayRssiStamp != rssiTimer) {
-        volumeNeedsFinalComposite = true;
-        RedrawVolumeOverlay();
-      }
     }
     ShowRT();
     if (!ShowServiceInformation && !ChannelListView) {
@@ -2026,12 +2043,6 @@ void ProcessDAB(void) {
         ShowSlideShowIcon();
         ShowSlideshowReceiveIndicator();
         ShowECC();
-        // ShowSignalLevel() and the other dynamic fields are rendered first.
-        // Repaint the bubble in this same pass whenever the signal frame
-        // changed, so the quality bar can never remain over its lower edge.
-        if (slsWaitingView &&
-            slsWaitingOverlayRssiStamp != rssiTimer)
-          ShowSlideshowWaitingOverlay();
       }
 
       // In manual slideshow mode a newly completed image is cached for the
@@ -2088,15 +2099,17 @@ void ProcessDAB(void) {
     }
   }
 
-  // Final composition pass. When the signal/Q bar changed, the overlay was
-  // already restored immediately after ShowSignalLevel() above; draw it once
-  // more after all remaining dynamic widgets so fields such as protection
-  // level cannot cut into its lower edge. This follows the 2/4 Hz signal UI and keeps the
-  // overlay visually as solid as the slideshow-loading panel.
-  // Do not call ShowVolume() here: it would restart the 3-second close timer.
-  if (setvolume && !menu &&
-      (volumeNeedsFinalComposite || volumeOverlayRssiStamp != rssiTimer))
-    RedrawVolumeOverlay();
+  // All dynamic fields paint first. Coalesce their changes into one final
+  // overlay repaint, including changes between signal-meter ticks. Volume
+  // takes precedence if both panels are requested. Do not restart its timer.
+  const bool mainFieldsChanged = TakeMainDisplayChanges();
+  if (!menu && !ShowServiceInformation && !ChannelListView) {
+    if (setvolume && mainFieldsChanged)
+      RedrawVolumeOverlay();
+    else if (!setvolume && slsWaitingView &&
+             (mainFieldsChanged || !slsWaitingOverlayVisible))
+      ShowSlideshowWaitingOverlay();
+  }
 }
 
 // Leave the volume overlay and redraw whichever view was visible underneath.
@@ -2933,7 +2946,6 @@ void Button2Press(void) {
   } else {
     setvolume = true;
     ShowVolume();
-    volumeOverlayRssiStamp = rssiTimer;
   }
 }
 
@@ -3987,6 +3999,7 @@ bool DefaultSettings(void) {
   Storage.put(EE_UINT16_FM_FREQUENCY, static_cast<uint16_t>(8750));
   Storage.writeByte(EE_BYTE_FM_REGION, static_cast<uint8_t>(FmRegion::Europe));
   Storage.writeByte(EE_BYTE_GPIO12_MODE, GPIO12_AUTO);
+  Storage.setI2sAudioMode(I2S_AUDIO_48K);
   for (int y = 0; y < 17; y++) {
     Storage.writeByte(EE_CHAR17_SERVICENAME + y, '\0');
   }

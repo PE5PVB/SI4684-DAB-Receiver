@@ -1690,12 +1690,15 @@ struct DsrvHeader {
     uint8_t dscType;          // lower six bits of DATA_TYPE in DAB mode
     uint32_t serviceId;
     uint32_t componentId;
+    // DAB command table Rev.2.0: UATYPE; Rev.1.9 / common section 7.7: RFU.
+    // Firmware support unverified: diagnostic only, never a routing identity.
+    uint16_t rawUatypeOrRfu;
     uint16_t byteCount;
     uint16_t segmentNumber;
     uint16_t numberOfSegments;
 
     DsrvHeader() : interruptSource(0), buffersRemaining(0), serviceState(0), dataType(0),
-                   dataSource(0), dscType(0), serviceId(0), componentId(0), byteCount(0),
+                   dataSource(0), dscType(0), serviceId(0), componentId(0), rawUatypeOrRfu(0), byteCount(0),
                    segmentNumber(0), numberOfSegments(0) {}
 
     bool dataReady() const { return (interruptSource & 0x01u) != 0; }
@@ -3152,7 +3155,8 @@ public:
         parseStatus(r,n,o.status);
         o.interruptSource=r[4]; o.buffersRemaining=r[5]; o.serviceState=r[6]; o.dataType=r[7];
         o.dataSource=(uint8_t)(r[7]>>6); o.dscType=(uint8_t)(r[7]&0x3Fu);
-        o.serviceId=readLe32(r+8); o.componentId=readLe32(r+12); o.byteCount=readLe16(r+18);
+        o.serviceId=readLe32(r+8); o.componentId=readLe32(r+12); o.rawUatypeOrRfu=readLe16(r+16);
+        o.byteCount=readLe16(r+18);
         o.segmentNumber=readLe16(r+20); o.numberOfSegments=readLe16(r+22); return Result::Ok;
     }
 
@@ -3314,7 +3318,7 @@ private:
             c.rawComponentField=raw; c.transportModeId=(uint8_t)(raw>>14);
             c.dataGroupFlag=(c.transportModeId==3u)&&((raw&0x2000u)!=0);
             c.componentReference=(c.transportModeId==3u)?(uint16_t)(raw&0x0FFFu):(uint16_t)(raw&0x003Fu);
-            c.componentType=(uint8_t)(_buf[2]>>2); c.primary=(_buf[2]&0x02u)==0;
+            c.componentType=(uint8_t)(_buf[2]>>2); c.primary=(_buf[2]&0x02u)!=0;
             c.conditionalAccess=(_buf[2]&0x01u)!=0; c.userApplicationInfoValid=(_buf[3]&0x01u)!=0;
             if (_sink.onComponent) _sink.onComponent(_sink.context,c);
             ++_componentIndex; if (_componentsRemaining) --_componentsRemaining; _have=0;

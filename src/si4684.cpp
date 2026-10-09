@@ -10,6 +10,7 @@
 #include "si4684.h"
 #include "constants.h"
 #include "dab_scheduler_policy.h"
+#include "dab_user_application.h"
 #include "esp_heap_caps.h"
 
 extern void SlideshowReceptionState(bool active);
@@ -112,13 +113,40 @@ static bool dabStcPending = false;
 static bool dabDsrvPending = false;
 static bool dabDeviceEventPending = false;
 
-// AN649 PIN_CONFIG_ENABLE (0x0800) output-enable bits used by this board.
-// Keep both audio paths enabled; expose INTB only when GPIO12 was detected.
-static constexpr uint16_t RADIO_PIN_CONFIG_DACOUTEN = 1U << 0;
-static constexpr uint16_t RADIO_PIN_CONFIG_I2SOUTEN = 1U << 1;
-static constexpr uint16_t RADIO_PIN_CONFIG_INTBOUTEN = 1U << 15;
-static constexpr uint16_t RADIO_PIN_CONFIG_AUDIO =
-    RADIO_PIN_CONFIG_DACOUTEN | RADIO_PIN_CONFIG_I2SOUTEN;
+static I2sAudioMode radioI2sAudioMode = I2S_AUDIO_48K;
+static bool radioI2sOutputReady = false;
+
+static uint16_t audioPinConfig(bool intbEnabled) {
+  return i2sAudioPinConfig(radioI2sOutputReady ? radioI2sAudioMode : I2S_AUDIO_OFF,
+                           intbEnabled);
+}
+
+void DAB::setI2sAudioMode(I2sAudioMode mode) {
+  radioI2sAudioMode = sanitizeI2sAudioMode(mode);
+}
+
+static void configureI2sAudio(void) {
+  radioI2sOutputReady = false;
+  const uint16_t rate = i2sAudioSampleRate(radioI2sAudioMode);
+  DIAG_PRINTF("[I2S] mode=%s enabled=%u master=%u rate=%u\n",
+              i2sAudioModeText(radioI2sAudioMode), rate != 0U, rate != 0U, rate);
+  if (!rate) return;
+  const si468x::Property properties[] = {
+    si468x::Property::DIGITAL_IO_OUTPUT_SELECT,
+    si468x::Property::DIGITAL_IO_OUTPUT_SAMPLE_RATE
+  };
+  const uint16_t values[] = {I2S_AUDIO_MASTER, rate};
+  for (uint8_t i = 0; i < 2; ++i) {
+    const si468x::Result result = chip.setProperty(properties[i], values[i]);
+    DIAG_PRINTF("[I2S] property=0x%04X value=0x%04X result=%d\n",
+                static_cast<unsigned>(properties[i]), values[i], static_cast<int>(result));
+    if (result != si468x::Result::Ok) {
+      DIAG_PRINTLN("[I2S] configuration failed; digital pins disabled, analog DAC retained");
+      return; // saved selection is unchanged; existing transport handling owns recovery
+    }
+  }
+  radioI2sOutputReady = true;
+}
 
 // Keep INTB as the fast path for real events and retain short, bounded safety
 // polls so a disconnected or faulty application IRQ cannot stall the UI.
@@ -272,10 +300,11 @@ static void usePollingFallback(const char* reason) {
 // only after BOOT, when application properties are available.
 static void useRuntimePollingFallback(const char* reason) {
   usePollingFallback(reason);
+  const uint16_t pinConfig = audioPinConfig(false);
   const si468x::Result pinConfigResult = chip.setProperty(
-      si468x::Property::PIN_CONFIG_ENABLE, RADIO_PIN_CONFIG_AUDIO);
+      si468x::Property::PIN_CONFIG_ENABLE, pinConfig);
   DIAG_PRINTF("[RADIO/IRQ] runtime PIN_CONFIG=0x%04X fallback result=%d\n",
-                static_cast<unsigned>(RADIO_PIN_CONFIG_AUDIO),
+                static_cast<unsigned>(pinConfig),
                 static_cast<int>(pinConfigResult));
 }
 
@@ -594,6 +623,11 @@ bool DAB::prepareSpiBus(void) {
 //   4. Configure DAB-specific properties (sample rate, audio output, FIC etc.)
 // Returns true once the chip reports the requested application image is running.
 bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
+  // Invalidate before any early boot failure or firmware/mode change.
+  dabXpad = dab_diag::XpadReadback{};
+  dabXpadLogPending = false;
+  dabRawUaLog = dab_diag::RawLog{};
+  radioI2sOutputReady = false;
   const uint32_t radioBeginMs = millis();
   if (!radioMemoryPrepared || !slideshowSegBuf || !chipWorkspace) {
     DIAG_PRINTLN("[RADIO/BOOT] ERROR: persistent radio RAM was not prepared during setup");
@@ -627,7 +661,18 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   ServiceIndex = 0;
   numberofservices = 0;
   dabServiceListReady = false;
+  dabServiceLabelValid = false;
   dabServiceListGeneration = 0;
+  dabUaInventoryValid = false;
+  dabUaListVersion = 0;
+  dabUaServiceCount = 0;
+  dabUaComponentCount = 0;
+  dabUaScanIndex = 0;
+  dabUaLogPending = false;
+  dabUaDebugWasEnabled = false;
+  dabUaNextQueryMs = millis();
+  dabSpiProbe = dab_probe::Probe{};
+  resetDabSpiDiscovery();
   SlideShowAvailable = false;
   SlideShowUpdate = false;
   SlideShowUpdate2 = false;
@@ -965,8 +1010,6 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   // physical INTB output disabled, CTS/status bootstrap performed by polling.
   // The only intended difference is ownership of ESP32 GPIO12 itself.
   const bool intbOutputEnabled = runtimeIntbRequested;
-  const uint16_t pinConfig = RADIO_PIN_CONFIG_AUDIO |
-      (intbOutputEnabled ? RADIO_PIN_CONFIG_INTBOUTEN : 0U);
 
   // This block is reached in DETECT only if POWER_UP *and the entire
   // LOAD_INIT/HOST_LOAD/BOOT sequence* produced no transition. It is the final
@@ -1000,6 +1043,9 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   chip.setCtsPollIntervalUs(1000);
   chip.setIdleStatusPollIntervalUs(20000);
 
+  // Every application boot (DAB/FM/recovery): master -> fixed rate -> pins.
+  configureI2sAudio();
+  const uint16_t pinConfig = audioPinConfig(intbOutputEnabled);
   si468x::Result pinConfigResult = chip.setProperty(
       si468x::Property::PIN_CONFIG_ENABLE, pinConfig);
   DIAG_PRINTF("[RADIO/IRQ] runtime PIN_CONFIG=0x%04X result=%d\n",
@@ -1092,10 +1138,11 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
       DIAG_PRINTF("[RADIO/IRQTEST] application firmware produced no GPIO12 transition INTB=%d->%d\n",
                     appIntbBefore, appIntbAfter);
       usePollingFallback("no application INTB transition");
+      const uint16_t fallbackPins = audioPinConfig(false);
       pinConfigResult = chip.setProperty(
-          si468x::Property::PIN_CONFIG_ENABLE, RADIO_PIN_CONFIG_AUDIO);
+          si468x::Property::PIN_CONFIG_ENABLE, fallbackPins);
       DIAG_PRINTF("[RADIO/IRQ] runtime PIN_CONFIG=0x%04X after failed probe result=%d\n",
-                    static_cast<unsigned>(RADIO_PIN_CONFIG_AUDIO),
+                    static_cast<unsigned>(fallbackPins),
                     static_cast<int>(pinConfigResult));
       if (pinConfigResult != si468x::Result::Ok) return false;
     }
@@ -1182,7 +1229,6 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
 
   DIAG_PRINTLN("[RADIO] shared properties begin");
   // Shared audio/front-end setup retained from the proven DAB configuration.
-  Set_Property(0x0200, 0x8000);
   Set_Property(0x0202, 0x1600);
   Set_Property(0x1710, 0xFC4A);
   Set_Property(0x1711, 0x00F8);
@@ -1212,7 +1258,7 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
     Set_Property(static_cast<uint16_t>(si468x::Property::DAB_EVENT_MIN_SVRLIST_PERIOD), 0x0000);
     Set_Property(static_cast<uint16_t>(si468x::Property::DAB_EVENT_MIN_SVRLIST_PERIOD_RECONFIG), 0x0000);
     Set_Property(static_cast<uint16_t>(si468x::Property::DAB_EVENT_MIN_FREQINFO_PERIOD), 0x0000);
-    Set_Property(static_cast<uint16_t>(si468x::Property::DAB_XPAD_ENABLE), 0x0097);
+    configureDabXpad();
     Set_Property(static_cast<uint16_t>(si468x::Property::DAB_DRC_OPTION), 0x0002);
     Set_Property(static_cast<uint16_t>(si468x::Property::DAB_CTRL_DAB_MUTE_ENABLE), 0x0000);
     const uint16_t interruptSources =
@@ -1291,7 +1337,35 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   return true;
 }
 
+// Boot-only, after DAB image verification. The existing bounded executeCommand
+// API owns CTS/IRQ and finishes each transaction before the next is issued.
+// Never call this from Update()/the live command scheduler.
+void DAB::configureDabXpad(void) {
+  dabXpad = dab_diag::XpadReadback{};
+  const si468x::Result setResult = chip.setProperty(
+      si468x::Property::DAB_XPAD_ENABLE, dab_diag::XPAD_REQUESTED);
+  finishCommandDiagnostics(setResult);
+  dabXpad.setResult = static_cast<int8_t>(setResult);
+  if (setResult == si468x::Result::Ok) {
+    uint16_t value = 0;
+    const si468x::Result getResult = chip.getProperty(
+        si468x::Property::DAB_XPAD_ENABLE, value, 250000UL);
+    finishCommandDiagnostics(getResult);
+    dabXpad.getResult = static_cast<int8_t>(getResult);
+    if (getResult == si468x::Result::Ok) {
+      dabXpad.value = value;
+      dabXpad.valid = true;
+    }
+  }
+  dabXpadLogPending = true;
+}
+
 void DAB::onHardwareResetComplete(void) {
+  dabXpad = dab_diag::XpadReadback{};
+  dabXpadLogPending = false;
+  dabRawUaLog = dab_diag::RawLog{};
+  dabServiceLabelValid = false;
+  dabSpiProbe = dab_probe::Probe{};
   const si468x::Result aborted = chip.abortCommand();
   dabGeneration = dab_scheduler::nextGeneration(dabGeneration);
   dabCommandGeneration = dabGeneration;
@@ -1301,6 +1375,13 @@ void DAB::onHardwareResetComplete(void) {
   dabServiceRequestPending = false;
   dabActiveServiceValid = false;
   dabActiveDataServiceValid = false;
+  dabUaLogPending = false;
+  dabUaInventoryValid = false;
+  dabUaListVersion = 0;
+  dabUaServiceCount = 0;
+  dabUaComponentCount = 0;
+  dabUaScanIndex = 0;
+  resetDabSpiDiscovery();
   dabWaitingForStc = false;
   dabTuneBusyRetries = 0;
   dabTuneRetryNotBeforeMs = 0;
@@ -1406,13 +1487,16 @@ void DAB::EnsembleInfo(void) {
 }
 
 void DAB::parseDabServiceListReply(uint16_t replyLength) {
-  if (replyLength < 9U) return;
-  const uint16_t listSize = static_cast<uint16_t>(SPIbuffer[5]) |
-                            (static_cast<uint16_t>(SPIbuffer[6]) << 8);
-  if (static_cast<uint32_t>(listSize) + 6U > replyLength) return;
-
-  const uint8_t parsedServices = SPIbuffer[9];
-  if (parsedServices > sizeof(service) / sizeof(DABService)) return;
+  // SPIbuffer[0] is the legacy command prefix; reply/status starts at [1].
+  // The list SIZE is therefore [5], with the first service at [13].
+  dab_inventory::Header inventory;
+  if (replyLength < 4U || !dab_inventory::validate(
+          SPIbuffer + 5, replyLength - 4U, sizeof(service) / sizeof(service[0]),
+          sizeof(dabUaComponents) / sizeof(dabUaComponents[0]), inventory)) {
+    invalidateDabInventory();
+    return;
+  }
+  const uint8_t parsedServices = inventory.services;
 
   // Parse transactionally. A malformed/provisional reply must not erase the
   // last structurally valid list that the UI or full scan can still use.
@@ -1428,6 +1512,7 @@ void DAB::parseDabServiceListReply(uint16_t replyLength) {
                 (static_cast<uint32_t>(SPIbuffer[offset + 2]) << 16) |
                 (static_cast<uint32_t>(SPIbuffer[offset + 3]) << 24);
     const uint8_t numberOfComponents = SPIbuffer[offset + 5] & 0x0FU;
+    if (numberOfComponents >= 15U) return;  // reserved by AN649
     const uint8_t serviceCharset = SPIbuffer[offset + 6] & 0x0FU;
     memcpy(parsed[i].Label, &SPIbuffer[offset + 8], 16);
     parsed[i].Label[16] = '\0';
@@ -1475,6 +1560,46 @@ void DAB::parseDabServiceListReply(uint16_t replyLength) {
   }
 
   // Reaching this point means the complete list reply was structurally valid.
+  // Capture every component only after validation, without changing the audio
+  // station table or its ordering. The loops above proved all read bounds.
+  // Avoid restarting a dump when a periodic list reply has identical topology.
+  uint16_t uaOffset = 13U;
+  uint16_t uaComponent = 0U;
+  bool uaChanged = !dabServiceListReady || !dabUaScan.enumerated ||
+                   !dabUaInventoryValid || dabUaListVersion != inventory.version ||
+                   dabUaServiceCount != parsedServices;
+  for (uint8_t i = 0; i < parsedServices; ++i) {
+    const uint32_t sid = si468x::readLe32(SPIbuffer + uaOffset);
+    const uint8_t count = SPIbuffer[uaOffset + 5U] & 0x0FU;
+    uaChanged = uaChanged || dabUaServices[i].sid != sid ||
+                dabUaServices[i].count != count ||
+                dabUaServices[i].info1 != SPIbuffer[uaOffset + 4U];
+    dabUaServices[i].sid = sid;
+    dabUaServices[i].first = uaComponent;
+    dabUaServices[i].count = count;
+    dabUaServices[i].info1 = SPIbuffer[uaOffset + 4U];
+    uaOffset += 24U;
+    if (!dab_spi::retainComponents(dabUaComponents,
+            sizeof(dabUaComponents) / sizeof(dabUaComponents[0]), uaComponent,
+            SPIbuffer + uaOffset, replyLength + 1U - uaOffset, count, uaChanged)) {
+      invalidateDabInventory();
+      return;
+    }
+    uaComponent += count;
+    uaOffset += 4U * count;
+  }
+  uaChanged = uaChanged || dabUaComponentCount != uaComponent;
+  dabUaListVersion = inventory.version;
+  dabUaInventoryValid = true;
+  dabUaServiceCount = parsedServices;
+  dabUaComponentCount = uaComponent;
+  dabServiceListReady = true;
+  if (uaChanged) {
+    dabSpiProbe.stop(millis());
+    dabUaScanIndex = 0U;
+    dabUaLogPending = false;
+    resetDabSpiDiscovery();
+  }
   // A valid list may legitimately contain zero services; that still resolves
   // a pending startup/MEM restore attempt deterministically.
   numberofservices = parsedServices;
@@ -1983,7 +2108,15 @@ void DAB::ServiceInfo(void) {
 // Wipe every cached metadata field. Called when re-tuning so stale labels,
 // PTY etc. from the previous channel don't briefly show up on the display.
 void DAB::clearData(void) {
+  dabServiceLabelValid = false;
   dabServiceListReady = false;
+  dabUaInventoryValid = false;
+  dabUaListVersion = 0;
+  dabUaServiceCount = 0;
+  dabUaComponentCount = 0;
+  dabUaScanIndex = 0;
+  dabUaLogPending = false;
+  resetDabSpiDiscovery();
   for (byte x = 0; x < 32; x++) {
     service[x].ServiceID = 0;
     service[x].CompID = 0;
@@ -2014,6 +2147,7 @@ bool DAB::isDabServiceStartPending(void) const {
 // no multi-second polling loop here.
 void DAB::setFreq(uint8_t freq) {
   if (isFm()) return;
+  dabSpiProbe.stop(millis());
   numberofservices = 0;
   clearData();
 
@@ -2781,11 +2915,16 @@ void DAB::setService(uint8_t _index) {
     return;
   }
 
+  // Invalidate in-flight UA ownership as well as endpoint selection. Keep the
+  // last known ensemble presence while the new audio context becomes stable.
+  resetDabSpiDiscovery(true, false);
+  dabSpiProbe.stop(millis());
   pty = 36;
   invalidateDabAudioInfo();
   protectionlevel = 0;
   for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
   memset(PStext, 0, sizeof(PStext));
+  dabServiceLabelValid = false;
   slideshowRamSize = 0;
   SlideShowAvailable = false;
   SlideShowUpdate = false;
@@ -2859,6 +2998,7 @@ bool DAB::startDabCommand(DabCommand operation, uint8_t command,
   const uint32_t now = millis();
   const dab_scheduler::CtsTimeoutClass ctsClass =
       recordDabCtsResult(result == si468x::Result::Timeout);
+
   if (operation == DabCommand::StopDataService) {
     if (!dabSwitch.backoff(dab_switch::Resume::StopData,
                            dabSwitch.stopRetries,
@@ -2913,6 +3053,30 @@ void DAB::finishDabCommand(void) {
   // service gap is diagnostic host starvation, not evidence that CTS is lost.
   const dab_scheduler::CtsTimeoutClass ctsClass =
       recordDabCtsResult(result == si468x::Result::Timeout);
+
+  // Reconcile physical probe ownership even if a retune superseded its START.
+  // It is independent of the audio/SLS switch command and never updates their
+  // active SID/CID fields. An unanswered START is conservatively followed by STOP.
+  if (completed == DabCommand::SpiProbeStart || completed == DabCommand::SpiProbeStop) {
+    const uint32_t now = millis();
+    const bool stopAbsent = completed == DabCommand::SpiProbeStop &&
+        result == si468x::Result::DeviceError && chip.lastDeviceError() == 0x03U;
+    if (result != si468x::Result::Ok && !stopAbsent) ++diagDabCommandErrorCount;
+    if (completed == DabCommand::SpiProbeStart) {
+      dabSpiProbe.started(now, result == si468x::Result::Ok,
+                          result == si468x::Result::Timeout);
+      DIAG_PRINTF("[DAB/SPI/TEST] START result=%d reason=%02X; no SLS STOP issued\n",
+                  static_cast<int>(result), static_cast<unsigned>(chip.lastDeviceError()));
+    } else {
+      dabSpiProbe.stopped(now, result == si468x::Result::Ok || stopAbsent);
+      DIAG_PRINTF("[DAB/SPI/TEST] STOP result=%d reason=%02X attempt=%u\n",
+                  static_cast<int>(result), static_cast<unsigned>(chip.lastDeviceError()),
+                  static_cast<unsigned>(dabSpiProbe.stopAttempts));
+    }
+    if (!dabSpiProbe.running()) logSpiProbeSummary(
+        dabSpiProbe.state == dab_probe::State::CleanupFailed ? "cleanup uncertain" : "finished");
+    return;
+  }
 
   if (!dab_scheduler::generationMatches(completedGeneration, dabGeneration)) {
     // A superseded service command may still have changed tuner state before a
@@ -2971,6 +3135,21 @@ void DAB::finishDabCommand(void) {
     const uint32_t errorNow = millis();
     const bool notAvailable = result == si468x::Result::DeviceError &&
                               deviceReason == 0x03U;
+
+    if (completed == DabCommand::ServiceListHeader) invalidateDabInventory();
+    if (completed == DabCommand::ComponentInfo) {
+      if (dabUaCommandListGeneration == dabUaScan.generation &&
+          dabUaCommandIndex < dabUaComponentCount) {
+        dabSpiIdentities[dabUaCommandIndex] = dab_spi::Identity::Failed;
+        dabUaScan.commit(dabUaCommandListGeneration, false);
+        dabSpiDiscoveryDirty = true;
+      }
+      DIAG_PRINTF("[DAB/UA] SID=%08X CID=%08X query failed result=%d reason=0x%02X\n",
+                  static_cast<unsigned>(dabCommandServiceId),
+                  static_cast<unsigned>(dabCommandComponentId),
+                  static_cast<int>(result), static_cast<unsigned>(deviceReason));
+      return;  // each inventory entry is attempted once; no EPG recovery
+    }
 
     if (completed == DabCommand::Tune &&
         dabCommandRequestId == dabTuneRequestId &&
@@ -3156,6 +3335,58 @@ void DAB::finishDabCommand(void) {
   };
 
   switch (completed) {
+    case DabCommand::ComponentInfo: {
+      if (!dabServiceListReady || dabUaCommandIndex >= dabUaComponentCount ||
+          dabUaCommandListGeneration != dabUaScan.generation) break;
+      // Read LENUA first, then fetch exactly the retained reply. Reuse the
+      // vendor parser for all fixed fields and for the raw UA block view.
+      const uint16_t length = 28U + SPIbuffer[28];
+      const si468x::Result readResult = chip.readCurrentReply(SPIbuffer + 1, length);
+      si468x::DabComponentInfo info;
+      dabSpiIdentities[dabUaCommandIndex] = dab_spi::Identity::Failed;
+      dabSpiDiscoveryDirty = true;
+      if (readResult != si468x::Result::Ok ||
+          si468x::Si468x::parseDabComponentInfo(SPIbuffer + 1, length, info) !=
+              si468x::Result::Ok ||
+          !dab_ua::valid(info.userApplicationRaw, info.userApplicationBytes,
+                         info.numberOfUserApplications)) {
+        dabUaScan.commit(dabUaCommandListGeneration, false);
+        DIAG_PRINTF("[DAB/UA] SID=%08X CID=%08X malformed/unreadable list result=%d\n",
+                    static_cast<unsigned>(dabCommandServiceId),
+                    static_cast<unsigned>(dabCommandComponentId),
+                    static_cast<int>(readResult));
+        break;  // local diagnostic failure; no application or SLS reset
+      }
+      const dab_spi::Identity identity = dab_spi::identify(
+          info.userApplicationRaw, info.userApplicationBytes,
+          info.numberOfUserApplications);
+      dabSpiIdentities[dabUaCommandIndex] = identity;
+      dabUaScan.commit(dabUaCommandListGeneration, true);
+      // Discovery runs quietly without DEBUG. Detailed UA output is optional.
+      // Best effort single-slot dump: skip a newer diagnostic, never a query.
+      if (!diagnosticDebug || dabUaLogPending) break;
+      if (info.userApplicationBytes)
+        memcpy(dabUaRaw, info.userApplicationRaw, info.userApplicationBytes);
+      memcpy(dabUaLabel, info.label, sizeof(dabUaLabel));
+      // Prevent a broadcast label from injecting diagnostic lines/control bytes.
+      for (uint8_t i = 0; i < 16U; ++i)
+        if (static_cast<uint8_t>(dabUaLabel[i]) < 0x20U && dabUaLabel[i] != '\0')
+          dabUaLabel[i] = '?';
+      dabUaLanguage = info.language;
+      dabUaCount = info.numberOfUserApplications;
+      dabUaBytes = info.userApplicationBytes;
+      dabUaRemaining = dabUaCount;
+      dabUaOffset = 0;
+      dabUaDataOffset = 0;
+      dabUaReplySid = dabCommandServiceId;
+      dabUaReplyCid = dabCommandComponentId;
+      dabUaHeaderPending = true;
+      dabUaEntryPending = true;
+      dabUaLogPending = true;
+      dabUaNextLogMs = millis();
+      break;
+    }
+
     case DabCommand::Tune:
       if (dabCommandRequestId == dabTuneRequestId && !dabTuneRequestPending) {
         dabTuneBusyRetries = 0;
@@ -3189,6 +3420,7 @@ void DAB::finishDabCommand(void) {
           dabCommandRequestId == dabTuneRequestId) {
         dabWaitingForStc = false;
         tunePending = false;
+        dabSpiProbe = dab_probe::Probe{};  // new tuned ensemble, no old probe context
         setDabSwitchState(dab_switch::State::Idle);
         if (signallock) {
           dabServiceListRefreshPending = true;
@@ -3223,11 +3455,84 @@ void DAB::finishDabCommand(void) {
         break;
       }
       if (header.interruptSource & 0x02U) ++diagDabDsrvOverflowCount;
+      const dab_probe::Endpoint audio(dabActiveServiceId, dabActiveComponentId,
+                                      dabActiveServiceValid);
+      const dab_probe::Endpoint sls(dabActiveDataServiceId, dabActiveDataComponentId,
+                                    dabActiveDataServiceValid);
+      const dab_probe::Route target = dab_probe::route(
+          header.serviceId, header.componentId, header.dataSource,
+          audio, sls, dabSpiProbe.spi);
+      dabSpiProbe.observe(target, header.dataSource, header.serviceStopped(),
+                          header.byteCount > 0U);
+      const uint32_t routeNow = millis();
+      const uint8_t routeIndex = static_cast<uint8_t>(target);
+      const bool feedLegacy = dab_probe::feedLegacyDecoder(
+          target, dabSpiProbe.spi.valid,
+          dabActiveServiceValid && dab_switch::audioContextUsable(dabSwitch.state));
+      // Only diagnostic interpretation: raw UA never enters route() or the
+      // legacy decoder gate. Old generation samples cannot supply confirmation.
+      if (dabRawUaLog.ready(routeNow, dabUaScan.generation, diagnosticDebug,
+                            diagSerial.availableForWrite())) {
+        const bool usable = dabActiveServiceValid &&
+            dab_switch::audioContextUsable(dabSwitch.state);
+        const char* context = !usable ? "inactive" :
+            target == dab_probe::Route::Audio ? "audio" :
+            target == dab_probe::Route::Sls ? "sls" :
+            target == dab_probe::Route::Spi ? "spi" : "unmatched";
+        DIAG_PRINTF("[DSRV/UA] raw16_17=0x%04X meaning=%s src=%u source=%s sid=%08X cid=%08X context=%s gen=%u rev=unverified suppressed=%u\n",
+                    header.rawUatypeOrRfu,
+                    dab_diag::rawMeaning(header.dataSource, header.rawUatypeOrRfu),
+                    header.dataSource, dab_diag::sourceName(header.dataSource),
+                    static_cast<unsigned>(header.serviceId),
+                    static_cast<unsigned>(header.componentId), context,
+                    static_cast<unsigned>(dabUaScan.generation),
+                    static_cast<unsigned>(dabRawUaLog.suppressed));
+        dabRawUaLog.emitted();
+      }
+      // Capture identity mismatches even when SPI is absent and the probe
+      // cannot run. Never guess a CID mask or disable collector switch guards.
+      static uint32_t lastIdentityLogMs = 0;
+      static bool identityWasLogged = false;
+      static uint32_t suppressedIdentities = 0;
+      if (diagnosticDebug && target == dab_probe::Route::Ignored && header.byteCount > 0U) {
+        if ((!identityWasLogged ||
+             static_cast<uint32_t>(routeNow - lastIdentityLogMs) >= 5000U) &&
+            diagSerial.availableForWrite() >= 256) {
+          identityWasLogged = true;
+          lastIdentityLogMs = routeNow;
+          DIAG_PRINTF("[DSRV/IDENTITY] src=%u sid=%08X cid=%08X audio=%08X/%08X valid=%u sls=%08X/%08X valid=%u legacy=%u suppressed=%u\n",
+                      static_cast<unsigned>(header.dataSource),
+                      static_cast<unsigned>(header.serviceId),
+                      static_cast<unsigned>(header.componentId),
+                      static_cast<unsigned>(audio.sid), static_cast<unsigned>(audio.cid),
+                      static_cast<unsigned>(audio.valid),
+                      static_cast<unsigned>(sls.sid), static_cast<unsigned>(sls.cid),
+                      static_cast<unsigned>(sls.valid), static_cast<unsigned>(feedLegacy),
+                      static_cast<unsigned>(suppressedIdentities));
+          suppressedIdentities = 0;
+        } else dab_probe::increment(suppressedIdentities);
+      }
+      if (dabSpiProbe.running() && diagnosticDebug) {
+        if (static_cast<uint32_t>(routeNow - dabSpiProbeLastRouteMs[routeIndex]) >= 500U &&
+            diagSerial.availableForWrite() >= 256) {
+          dabSpiProbeLastRouteMs[routeIndex] = routeNow;
+          DIAG_PRINTF("[DSRV/ROUTE] route=%u src=%u sid=%08X cid=%08X dscty=%u bytes=%u remain=%u state=%u suppressed=%u\n",
+                      static_cast<unsigned>(routeIndex),
+                      static_cast<unsigned>(header.dataSource),
+                      static_cast<unsigned>(header.serviceId),
+                      static_cast<unsigned>(header.componentId),
+                      static_cast<unsigned>(header.dscType),
+                      static_cast<unsigned>(header.byteCount),
+                      static_cast<unsigned>(header.buffersRemaining),
+                      static_cast<unsigned>(header.serviceState),
+                      static_cast<unsigned>(dabSpiProbeSuppressedRoutes));
+          dabSpiProbeSuppressedRoutes = 0;
+        } else dab_probe::increment(dabSpiProbeSuppressedRoutes);
+      }
       if (header.byteCount > 0U) {
-        if (dabActiveServiceValid &&
-            dab_switch::audioContextUsable(dabSwitch.state)) {
+        if (feedLegacy) {
           getServiceData();
-        } else {
+        } else if (target != dab_probe::Route::Spi) {
           ++diagDabStaleMotCount;
         }
       }
@@ -3256,10 +3561,9 @@ void DAB::finishDabCommand(void) {
       const uint16_t listSize = static_cast<uint16_t>(SPIbuffer[5]) |
                                 (static_cast<uint16_t>(SPIbuffer[6]) << 8);
       const uint32_t fullLength = static_cast<uint32_t>(listSize) + 6U;
-      if (fullLength < 9U || fullLength > sizeof(SPIbuffer) - 1U) {
+      if (fullLength < 12U || fullLength > sizeof(SPIbuffer) - 1U) {
+        invalidateDabInventory();
         ++diagDabCommandErrorCount;
-        DIAG_PRINTF("[DAB/ASYNC] invalid service-list length=%u\n",
-                      static_cast<unsigned>(fullLength));
         break;
       }
       const si468x::Result readResult = chip.readCurrentReply(
@@ -3267,6 +3571,7 @@ void DAB::finishDabCommand(void) {
       finishCommandDiagnostics(readResult);
       if (readResult != si468x::Result::Ok) {
         ++diagDabCommandErrorCount;
+        invalidateDabInventory();
         break;
       }
       parseDabServiceListReply(static_cast<uint16_t>(fullLength));
@@ -3399,13 +3704,17 @@ void DAB::finishDabCommand(void) {
           SPIbuffer + 1, 26, info);
       if (!parseOk(parseResult)) {
         ++diagDabCommandErrorCount;
-      } else if (dabActiveServiceValid &&
-                 dabCommandServiceId == dabActiveServiceId) {
+      } else if (dab_switch::serviceMetadataCurrent(
+                     dabActiveServiceValid, dabServiceRequestPending,
+                     dabCommandServiceId, dabCommandComponentId,
+                     dabActiveServiceId, dabActiveComponentId,
+                     dabRequestedServiceId, dabRequestedComponentId)) {
         memcpy(PStext, info.label, 16);
         PStext[16] = '\0';
         for (int8_t i = 15; i >= 0 && PStext[i] == ' '; --i) PStext[i] = '\0';
         pty = info.pty;
         ServiceLabelCharset = info.charset;
+        dabServiceLabelValid = true;
         if (ecc == 0) {
           serviceHasOwnEcc = info.ecc != 0;
           ecc = serviceHasOwnEcc ? info.ecc : ensembleEcc;
@@ -3477,6 +3786,8 @@ void DAB::finishDabCommand(void) {
       break;
 
     case DabCommand::None:
+    case DabCommand::SpiProbeStart:  // handled before generation reconciliation
+    case DabCommand::SpiProbeStop:
       break;
   }
 }
@@ -3496,30 +3807,17 @@ void DAB::requestDabDataServiceEvaluation(void) {
 }
 
 bool DAB::resolveDabDataService(void) {
-  if (!dabActiveServiceValid ||
-      dabServiceTypeScanIndex < numberofservices) return false;
-
-  int16_t exact = -1;
-  int16_t fallback = -1;
-  uint8_t fallbackCount = 0U;
-  for (uint8_t i = 0; i < numberofservices; ++i) {
-    if (service[i].ServiceType != 3 ||
-        strstr(service[i].Label, "tpeg") != nullptr ||
-        strstr(service[i].Label, "TPEG") != nullptr)
-      continue;
-    if (service[i].ServiceID == dabActiveServiceId && exact < 0)
-      exact = i;
-    fallback = i;
-    if (fallbackCount != 0xFFU) ++fallbackCount;
+  if (!dabActiveServiceValid || !dabUaInventoryValid ||
+      !dabUaScan.functionalComplete(dabCommand == DabCommand::ComponentInfo)) return false;
+  dab_spi::SlideshowSelector selector(dabActiveServiceId, dabActiveComponentId);
+  for (uint8_t i = 0; i < dabUaServiceCount; ++i) {
+    const UaService& entry = dabUaServices[i];
+    for (uint16_t j = entry.first; j < entry.first + entry.count; ++j)
+      selector.consider(entry.sid, dabUaComponents[j], dabSpiIdentities[j]);
   }
-
-  // Prefer an explicit component belonging to the active audio service. The
-  // legacy ensemble-wide fallback is retained only when it is unambiguous.
-  const int16_t selected = exact >= 0 ? exact
-                                     : (fallbackCount == 1U ? fallback : -1);
-  if (selected < 0) return false;
-  dabDataServiceId = service[selected].ServiceID;
-  dabDataComponentId = service[selected].CompID;
+  if (!selector.selected()) return false;
+  dabDataServiceId = dabActiveServiceId;
+  dabDataComponentId = selector.componentId();
   return true;
 }
 
@@ -3666,12 +3964,36 @@ void DAB::scheduleNextDabCommand(void) {
     return;
 
   const uint32_t now = millis();
-  processDabSwitchState(now);
+  const bool sameProbeContext = diagnosticDebug &&
+      dabSpiProbe.requestId == dabSwitch.requestId && dabActiveServiceValid &&
+      dabSpiProbe.audio.matches(dabActiveServiceId, dabActiveComponentId) &&
+      dabSpiProbe.sls.valid == dabActiveDataServiceValid &&
+      (!dabActiveDataServiceValid ||
+       dabSpiProbe.sls.matches(dabActiveDataServiceId, dabActiveDataComponentId));
+  dabSpiProbe.advance(now, sameProbeContext);
+  const bool cleanupPending = dabSpiProbe.state == dab_probe::State::StopRequested;
+  if (cleanupPending && dab_probe::due(now, dabSpiProbe.nextActionMs)) {
+    uint8_t args[11] = {0};
+    si468x::writeLe32(args + 3, dabSpiProbe.spi.sid);
+    si468x::writeLe32(args + 7, dabSpiProbe.spi.cid);
+    dabSpiProbe.state = dab_probe::State::Stopping;
+    ++dabSpiProbe.stopAttempts;
+    if (!startDabCommand(DabCommand::SpiProbeStop,
+                         static_cast<uint8_t>(si468x::Command::STOP_DIGITAL_SERVICE),
+                         args, sizeof(args))) {
+      dabSpiProbe.stopped(now, false);
+      if (!dabSpiProbe.running()) logSpiProbeSummary("cleanup uncertain");
+    }
+    return;
+  }
+  // During bounded STOP backoff keep draining DSRV, but do not issue a tune or
+  // another service START/STOP before probe cleanup has had its three attempts.
+  if (!cleanupPending) processDabSwitchState(now);
   if (chip.busy() || dabCommand != DabCommand::None) return;
 
   const uint8_t zero = 0;
 
-  if (dabSwitch.state == dab_switch::State::Idle && dabTuneRequestPending) {
+  if (!cleanupPending && dabSwitch.state == dab_switch::State::Idle && dabTuneRequestPending) {
       if (!dab_scheduler::retryReady(now, dabTuneRetryNotBeforeMs)) return;
       const uint32_t requestId = dabTuneRequestId;
       dabStcPending = false;
@@ -3708,6 +4030,12 @@ void DAB::scheduleNextDabCommand(void) {
   const bool lowPriorityReady =
       static_cast<uint32_t>(now - dabLastLowPriorityCommandMs) >=
       dab_scheduler::DAB_LOW_PRIORITY_GAP_MS;
+  const bool uaQueryPending = !cleanupPending && dabServiceListReady &&
+      dabActiveServiceValid && signallock && dabUaScan.enumerated &&
+      (dabSwitch.state == dab_switch::State::Ready ||
+       dabSwitch.state == dab_switch::State::AudioOnly) &&
+      dabUaScanIndex < dabUaComponentCount &&
+      dab_scheduler::retryReady(now, dabUaNextQueryMs);
   const bool lowPriorityPending = lowPriorityReady &&
       (dabDeviceEventPending ||
        (dabServiceListRefreshPending && signallock) ||
@@ -3717,7 +4045,8 @@ void DAB::scheduleNextDabCommand(void) {
        (dabAudioRefreshPending && dabActiveServiceValid &&
         dab_scheduler::retryReady(now, dabAudioInfoNotBeforeMs)) ||
        (dabCurrentServiceRefreshPending && dabActiveServiceValid) ||
-       (dabCurrentSubchannelRefreshPending && dabActiveServiceValid));
+       (dabCurrentSubchannelRefreshPending && dabActiveServiceValid) ||
+       uaQueryPending || dabSpiProbe.state == dab_probe::State::StartRequested);
   const dab_scheduler::BackgroundWork work =
       dab_scheduler::chooseBackgroundWork(
           dabDsrvPending, dabDsrvBurstCount, dabSignalRefreshPending,
@@ -3766,6 +4095,8 @@ void DAB::scheduleNextDabCommand(void) {
                         &zero, 1, 8)) {
       dabServiceListRefreshPending = false;
       dabLastLowPriorityCommandMs = now;
+    } else {
+      invalidateDabInventory();
     }
     return;
   }
@@ -3844,6 +4175,333 @@ void DAB::scheduleNextDabCommand(void) {
     }
     return;
   }
+
+  if (dabSpiProbe.state == dab_probe::State::StartRequested) {
+    logSpiProbeSummary("baseline complete");
+    uint8_t args[11] = {0};
+    si468x::writeLe32(args + 3, dabSpiProbe.spi.sid);
+    si468x::writeLe32(args + 7, dabSpiProbe.spi.cid);
+    dabSpiProbe.state = dab_probe::State::Starting;
+    if (!startDabCommand(DabCommand::SpiProbeStart,
+                         static_cast<uint8_t>(si468x::Command::START_DIGITAL_SERVICE),
+                         args, sizeof(args))) {
+      dabSpiProbe.started(now, false, true);
+      DIAG_PRINTLN("[DAB/SPI/TEST] START submission failed; conservative STOP scheduled");
+    } else dabLastLowPriorityCommandMs = now;
+    return;
+  }
+
+  // UA discovery, last in the existing low-priority queue. One query per
+  // component per inventory/debug activation; failures do not retry forever.
+  if (uaQueryPending) {
+    const uint16_t index = dabUaScanIndex++;
+    for (uint8_t i = 0; i < dabUaServiceCount; ++i) {
+      const UaService& entry = dabUaServices[i];
+      if (index < entry.first || index >= entry.first + entry.count) continue;
+      uint8_t args[11] = {0};
+      dabCommandServiceId = entry.sid;
+      dabCommandComponentId = dabUaComponents[index];
+      dabUaCommandListGeneration = dabUaScan.generation;
+      dabUaCommandIndex = index;
+      if (!dabUaScan.issue()) return;
+      si468x::writeLe32(args + 3, dabCommandServiceId);
+      si468x::writeLe32(args + 7, dabCommandComponentId);
+      dabUaNextQueryMs = now + 500U;
+      if (startDabCommand(DabCommand::ComponentInfo,
+                          static_cast<uint8_t>(si468x::Command::DAB_GET_COMPONENT_INFO),
+                          args, sizeof(args), 28)) {
+        dabLastLowPriorityCommandMs = now;
+      } else {
+        dabSpiIdentities[index] = dab_spi::Identity::Failed;
+        dabUaScan.commit(dabUaCommandListGeneration, false);
+        dabSpiDiscoveryDirty = true;
+        DIAG_PRINTF("[DAB/UA] SID=%08X CID=%08X query not started\n",
+                    static_cast<unsigned>(dabCommandServiceId),
+                    static_cast<unsigned>(dabCommandComponentId));
+      }
+      return;
+    }
+  }
+}
+
+bool DAB::requestSpiProbe(void) {
+  if (isFm() || !dabSpiDiscovery.available() || !dabActiveServiceValid ||
+      !signallock || dabServiceRequestPending || dabTuneRequestPending ||
+      (dabSwitch.state != dab_switch::State::Ready &&
+       dabSwitch.state != dab_switch::State::AudioOnly)) return false;
+  const uint32_t now = millis();
+  if (!dabSpiProbe.request(
+          dab_probe::Endpoint(dabActiveServiceId, dabActiveComponentId),
+          dab_probe::Endpoint(dabActiveDataServiceId, dabActiveDataComponentId,
+                              dabActiveDataServiceValid),
+          dab_probe::Endpoint(dabSpiDiscovery.serviceId, dabSpiDiscovery.componentId),
+          dabSwitch.requestId, now)) return false;
+  dabSpiProbeLastSummaryMs = now;
+  dabSpiProbeSuppressedRoutes = 0;
+  for (auto& last : dabSpiProbeLastRouteMs) last = now - 500U;
+  dabSpiProbeCtsStart = diagDabCtsTimeoutCount;
+  dabSpiProbeOverflowStart = diagDabDsrvOverflowCount;
+  dabSpiProbeUartDropStart = diagSerial.droppedBytes();
+  DIAG_PRINTF("[DAB/SPI/TEST] baseline 5s then START SID=%08X CID=%08X; observe 30s; audio/SLS kept\n",
+              static_cast<unsigned>(dabSpiProbe.spi.sid),
+              static_cast<unsigned>(dabSpiProbe.spi.cid));
+  return true;
+}
+
+void DAB::stopSpiProbe(void) {
+  dabSpiProbe.stop(millis());
+  DIAG_PRINTLN("[DAB/SPI/TEST] stop requested");
+}
+
+void DAB::logSpiProbeSummary(const char* phase) {
+  if (!diagnosticDebug || diagSerial.availableForWrite() < 512) return;
+  const dab_probe::Counts& before = dabSpiProbe.before;
+  const dab_probe::Counts& after = dabSpiProbe.after;
+  DIAG_PRINTF("[DAB/SPI/TEST] %s before audio/pad/sls/spi=%u/%u/%u/%u after=%u/%u/%u/%u ignored=%u SLS_STOP=%u CTS+=%u overflow+=%u UARTdrop+=%u\n",
+              phase, static_cast<unsigned>(before.audio), static_cast<unsigned>(before.pad),
+              static_cast<unsigned>(before.sls), static_cast<unsigned>(before.spi),
+              static_cast<unsigned>(after.audio), static_cast<unsigned>(after.pad),
+              static_cast<unsigned>(after.sls), static_cast<unsigned>(after.spi),
+              static_cast<unsigned>(after.ignored), static_cast<unsigned>(after.slsStopped),
+              static_cast<unsigned>(diagDabCtsTimeoutCount - dabSpiProbeCtsStart),
+              static_cast<unsigned>(diagDabDsrvOverflowCount - dabSpiProbeOverflowStart),
+              static_cast<unsigned>(diagSerial.droppedBytes() - dabSpiProbeUartDropStart));
+  if (after.slsStopped)
+    DIAG_PRINTLN("[DAB/SPI/TEST] tuner reported SLS service stopped; verify on HW, no fallback enabled");
+  else if (after.spi && (dabSpiProbe.sls.valid ? after.sls : after.pad))
+    DIAG_PRINTLN("[DAB/SPI/TEST] distinct SPI and SLS/PAD traffic observed; verify audio and slideshow on HW");
+  else
+    DIAG_PRINTLN("[DAB/SPI/TEST] coexistence inconclusive; missing packets can be carousel timing");
+}
+
+void DAB::resetDabSpiDiscovery(bool preservePresence, bool logInventory) {
+  const uint16_t previousConfirmed = dabSpiDiscovery.confirmed;
+  for (auto& identity : dabSpiIdentities) identity = dab_spi::Identity::Unqueried;
+  dabUaRefresh.cancel();
+  if (!preservePresence) dabSpiPresent = false;
+  dabUaScan.begin(dabUaComponentCount, dabServiceListReady && dabUaInventoryValid);
+  dabUaScanIndex = 0;
+  dabUaLogPending = false;
+  dabUaSummaryStage = 3;
+  dabSpiDiscoveryGeneration = 0;
+  dabUaListLogService = 0;
+  dabUaListLogComponent = 0;
+  dabUaListHeaderPending = true;
+  dabUaPacketLogPending = false;
+  dabUaListLogPending = logInventory && diagnosticDebug && dabUaServiceCount != 0U;
+  dabSpiDiscovery = dab_spi::Result{};
+  if (preservePresence) dabSpiDiscovery.confirmed = previousConfirmed;
+  if (!dabUaInventoryValid && preservePresence) {
+    dabSpiDiscovery.status = dab_spi::Status::Incomplete;
+  }
+  dabSpiDiscoveryDirty = true;
+}
+
+void DAB::invalidateDabInventory(void) {
+  dabUaInventoryValid = false;
+  // Keep the last valid station/component inventory and last known presence,
+  // but invalidate all in-flight UA answers and any selected probe endpoint.
+  resetDabSpiDiscovery(true, false);
+  dabSpiDiscovery.status = dab_spi::Status::Incomplete;
+}
+
+void DAB::refreshDabSpiDiscovery(void) {
+  const bool invalidInventory = !dabUaInventoryValid &&
+      dabSpiDiscovery.status == dab_spi::Status::Incomplete;
+  if (!dabSpiDiscoveryDirty) return;
+  if (!invalidInventory && (!dabServiceListReady || !dabActiveServiceValid ||
+      dabServiceRequestPending ||
+      (dabSwitch.state != dab_switch::State::Ready &&
+       dabSwitch.state != dab_switch::State::AudioOnly))) return;
+  if (dabUaInventoryValid &&
+      !dabUaScan.functionalComplete(dabCommand == DabCommand::ComponentInfo)) return;
+  dab_spi::Selector selector(dabActiveServiceId);
+  for (uint8_t i = 0; i < dabUaServiceCount; ++i) {
+    const UaService& entry = dabUaServices[i];
+    for (uint16_t j = entry.first; j < entry.first + entry.count; ++j) {
+      const bool mot = dab_inventory::Component{dabUaComponents[j]}.packetMot();
+      selector.consider(entry.sid, dabUaComponents[j], dabSpiIdentities[j], mot);
+    }
+  }
+  dab_spi::Result result = selector.finish();
+  if (!dabUaInventoryValid) {
+    result.status = dab_spi::Status::Incomplete;
+    result.confirmed = dabSpiDiscovery.confirmed; // last valid evidence, no endpoint
+  }
+  dabSpiDiscovery = result;
+  dabSpiDiscoveryGeneration = dabUaScan.generation;
+  if (dabUaInventoryValid) dabSpiPresent = result.confirmedPresent();
+  dabSpiDiscoveryDirty = false;
+  // Invalid inventories require a new valid service list, never a UA-only pass.
+  if (dabUaInventoryValid) {
+    dabUaRefresh.completed(millis());
+    if (!dabActiveDataServiceValid && resolveDabDataService())
+      requestDabDataServiceEvaluation();
+  }
+  dabUaSummaryStage = diagnosticDebug ? 0U : 3U;
+}
+
+void DAB::logDabUserApplications(uint32_t now) {
+  if (!diagnosticDebug) {
+    dabUaDebugWasEnabled = false;
+    dabUaLogPending = false;
+    dabUaListLogPending = false;
+    dabUaSummaryStage = 3U;
+    dabXpadLogPending = false;
+    return;
+  }
+  if (!dabUaDebugWasEnabled) {
+    dabUaDebugWasEnabled = true;
+    // DEBUG affects only diagnostics: never restart an operational scan.
+    dabUaListLogService = dabUaListLogComponent = 0;
+    dabUaListHeaderPending = true;
+    dabUaPacketLogPending = false;
+    dabUaListLogPending = dabUaServiceCount != 0U;
+    dabUaSummaryStage = dabSpiDiscoveryDirty ? 3U : 0U;
+    dabXpadLogPending = true;
+  }
+  if (dabXpadLogPending) {
+    if (!dab_scheduler::retryReady(now, dabUaNextLogMs) ||
+        diagSerial.availableForWrite() < 256) return;
+    dabUaNextLogMs = now + 100U;
+    dabXpadLogPending = false;
+    if (dabXpad.valid) {
+      DIAG_PRINTF("[DAB/XPAD] requested=0x%04X setResult=%d readback=0x%04X getResult=%d match=%u fw=%s rev=unverified\n",
+                  dab_diag::XPAD_REQUESTED, static_cast<int>(dabXpad.setResult),
+                  dabXpad.value, static_cast<int>(dabXpad.getResult),
+                  dabXpad.matches() ? 1U : 0U, FirmwVersion);
+    } else if (dabXpad.getResult == dab_diag::NOT_ATTEMPTED) {
+      DIAG_PRINTF("[DAB/XPAD] requested=0x%04X setResult=%d readback=unavailable getResult=not-attempted fw=%s rev=unverified\n",
+                  dab_diag::XPAD_REQUESTED, static_cast<int>(dabXpad.setResult), FirmwVersion);
+    } else {
+      DIAG_PRINTF("[DAB/XPAD] requested=0x%04X setResult=%d readback=unavailable getResult=%d fw=%s rev=unverified\n",
+                  dab_diag::XPAD_REQUESTED, static_cast<int>(dabXpad.setResult),
+                  static_cast<int>(dabXpad.getResult), FirmwVersion);
+    }
+    return;
+  }
+  if (dabUaListLogPending) {
+    if (!dab_scheduler::retryReady(now, dabUaNextLogMs) ||
+        diagSerial.availableForWrite() < 256) return;
+    dabUaNextLogMs = now + 100U;
+    const UaService& entry = dabUaServices[dabUaListLogService];
+    const dab_inventory::Component component{
+        entry.count ? dabUaComponents[entry.first + dabUaListLogComponent] : 0U};
+    if (dabUaListHeaderPending) {
+      DIAG_PRINTF("[DAB/SVC] SID=%08X PD=%u components=%u version=%u\n",
+                  static_cast<unsigned>(entry.sid), entry.info1 & 1U,
+                  entry.count, dabUaListVersion);
+      dabUaListHeaderPending = false;
+    } else if (dabUaPacketLogPending) {
+      DIAG_PRINTF("[DAB/SPI] packet-MOT candidate SID=%08X CID=%08X identity=unverified\n",
+                  static_cast<unsigned>(entry.sid), static_cast<unsigned>(component.cid));
+      dabUaPacketLogPending = false;
+      ++dabUaListLogComponent;
+    } else {
+      DIAG_PRINTF("[DAB/COMP] SID=%08X i=%u CID=%08X TMID=%u %s=%u DG=%u PS=%s CA=%u UAvalid=%u\n",
+                  static_cast<unsigned>(entry.sid), dabUaListLogComponent,
+                  static_cast<unsigned>(component.cid), component.tmid(),
+                  component.tmid() == 0U ? "ASCTy" : "DSCTy", component.type(),
+                  component.dataGroups() ? 1U : 0U,
+                  component.primary() ? "primary" : "secondary",
+                  component.ca() ? 1U : 0U, component.uaValid() ? 1U : 0U);
+      if (component.packetMot()) dabUaPacketLogPending = true;
+      else ++dabUaListLogComponent;
+    }
+    if (!dabUaListHeaderPending && dabUaListLogComponent == entry.count) {
+      dabUaListLogComponent = 0;
+      dabUaListHeaderPending = true;
+      if (++dabUaListLogService == dabUaServiceCount) dabUaListLogPending = false;
+    }
+    return;
+  }
+  // The published result and inventory are immutable within this generation.
+  // Reset/tune discards the summary before any new inventory can be logged.
+  if (dabUaSummaryStage < 3U &&
+      (dabSpiDiscoveryDirty || dabSpiDiscoveryGeneration != dabUaScan.generation))
+    dabUaSummaryStage = 3U;
+  if (dabUaSummaryStage < 3U) {
+    if (!dab_scheduler::retryReady(now, dabUaNextLogMs) ||
+        diagSerial.availableForWrite() < 256) return;
+    dabUaNextLogMs = now + 100U;
+    if (dabUaSummaryStage == 0U) {
+      uint16_t packetMot = 0;
+      uint8_t dataServices = 0;
+      for (uint8_t i = 0; i < dabUaServiceCount; ++i)
+        if (dabUaServices[i].info1 & 1U) ++dataServices;
+      for (uint16_t i = 0; i < dabUaComponentCount; ++i)
+        if (dab_inventory::Component{dabUaComponents[i]}.packetMot()) ++packetMot;
+      DIAG_PRINTF("[DAB/INV] services=%u components=%u audio=%u data=%u packetMOT=%u invalid=%u version=%u\n",
+                  dabUaServiceCount, dabUaComponentCount,
+                  dabUaServiceCount - dataServices, dataServices, packetMot,
+                  dabUaInventoryValid ? 0U : 1U, dabUaListVersion);
+    } else if (dabUaSummaryStage == 1U) {
+      DIAG_PRINTF("[DAB/UA] scan %s services=%u components=%u processed=%u failed=%u\n",
+                  dabUaInventoryValid ? "complete" : "incomplete",
+                  dabUaServiceCount, dabUaScan.total, dabUaScan.processed, dabUaScan.failed);
+    } else {
+      const dab_spi::Result& result = dabSpiDiscovery;
+      DIAG_PRINTF("[DAB/SPI] confirmed=%u packetMOTUnverified=%u status=%s selected=%u SID=%08X CID=%08X profile=unknown\n",
+                  result.confirmed, result.packetMotUnverified,
+                  dab_spi::statusName(result.status), result.available() ? 1U : 0U,
+                  static_cast<unsigned>(result.serviceId),
+                  static_cast<unsigned>(result.componentId));
+    }
+    ++dabUaSummaryStage;
+    return;
+  }
+  if (!dabUaLogPending || !dab_scheduler::retryReady(now, dabUaNextLogMs)) return;
+  // Leave room for radio/protocol diagnostics. Do not drop half a UA line or
+  // wait for UART space. At most one short queued line every 100 ms.
+  if (diagSerial.availableForWrite() < 256) return;
+  dabUaNextLogMs = now + 100U;
+  if (dabUaHeaderPending) {
+    DIAG_PRINTF("[DAB/UA] SID=%08X CID=%08X label=\"%s\" lang=%u count=%u bytes=%u\n",
+                static_cast<unsigned>(dabUaReplySid),
+                static_cast<unsigned>(dabUaReplyCid), dabUaLabel,
+                static_cast<unsigned>(dabUaLanguage),
+                static_cast<unsigned>(dabUaCount),
+                static_cast<unsigned>(dabUaBytes));
+    dabUaHeaderPending = false;
+    if (dabUaRemaining == 0U) dabUaLogPending = false;
+    return;
+  }
+  // The entire copied block was validated before publication. Reader still
+  // checks the remaining slice so future parser changes cannot bypass bounds.
+  dab_ua::Reader reader(dabUaRaw + dabUaOffset, dabUaBytes - dabUaOffset,
+                        static_cast<uint8_t>(dabUaRemaining));
+  dab_ua::Application application;
+  if (!reader.next(application)) {
+    dabUaLogPending = false;
+    return;
+  }
+  if (dabUaEntryPending) {
+    DIAG_PRINTF("[DAB/UA]   type=0x%03X (%s) len=%u\n",
+                static_cast<unsigned>(application.type), dab_ua::name(application.type),
+                static_cast<unsigned>(application.length));
+    dabUaEntryPending = false;
+    if (application.length != 0U) return;
+  } else {
+    char hex[16U * 3U + 1U];
+    static const char digits[] = "0123456789ABCDEF";
+    const uint16_t left = application.length - dabUaDataOffset;
+    const uint16_t count = left > 16U ? 16U : left;
+    for (uint16_t i = 0; i < count; ++i) {
+      const uint8_t byte = application.data[dabUaDataOffset + i];
+      hex[i * 3U] = digits[byte >> 4];
+      hex[i * 3U + 1U] = digits[byte & 15U];
+      hex[i * 3U + 2U] = ' ';
+    }
+    hex[count * 3U] = '\0';
+    DIAG_PRINTF("[DAB/UA]     data[%u]=%s\n",
+                static_cast<unsigned>(dabUaDataOffset), hex);
+    dabUaDataOffset += count;
+    if (dabUaDataOffset < application.length) return;
+  }
+  dabUaOffset += 3U + application.length + ((application.length & 1U) ? 0U : 1U);
+  dabUaDataOffset = 0;
+  dabUaEntryPending = true;
+  if (--dabUaRemaining == 0U) dabUaLogPending = false;
 }
 
 // Periodic cooperative driver pump. No DAB command waits for CTS or STC here;
@@ -3891,6 +4549,25 @@ void DAB::Update(bool allowNewWork) {
                   static_cast<unsigned>(chip.lastDeadlineLatenessUs()),
                   static_cast<int>(serviceResult));
   if (dabCommand != DabCommand::None && !chip.busy()) finishDabCommand();
+
+  if (allowNewWork && !chip.busy()) {
+    const bool uaRefreshEligible = !isFm() && dabServiceListReady &&
+        dabActiveServiceValid && signallock && !dabServiceRequestPending &&
+        !dabTuneRequestPending && !dabSpiProbe.running() && !dabSpiProbe.spi.valid &&
+        (dabSwitch.state == dab_switch::State::Ready ||
+         dabSwitch.state == dab_switch::State::AudioOnly);
+    if (dabUaRefresh.ready(now, uaRefreshEligible)) {
+      resetDabSpiDiscovery(true, false);
+      dabUaNextQueryMs = now;
+    }
+    refreshDabSpiDiscovery();
+    logDabUserApplications(now);
+    if (dabSpiProbe.running() &&
+        static_cast<uint32_t>(now - dabSpiProbeLastSummaryMs) >= 5000U) {
+      dabSpiProbeLastSummaryMs = now;
+      logSpiProbeSummary("progress");
+    }
+  }
 
   if (allowNewWork) updateDabPeriodicRequests(now);
 

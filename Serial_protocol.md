@@ -84,7 +84,7 @@ $M=SLIDESHOW=0
 
 While the connection is disabled, `ENABLE` is the only regular protocol
 command that is processed. Other commands containing `=` are silently ignored.
-The service commands `DEBUG` and `DEBUG SLSV` remain available without an
+The service commands `DEBUG`, `DEBUG SLSV`, `DEBUG SPI` and `DEBUG SPI STOP` remain available without an
 active connection.
 
 ## Commands
@@ -202,6 +202,156 @@ or the corresponding `OFF` message.
 
 Diagnostics should normally be disabled while a machine-readable monitor is
 connected because diagnostic and protocol lines share the same UART.
+
+### DAB component discovery diagnostics
+
+Enabling `DEBUG` queues the current inventory and any completed summary; it
+does not restart or delay the UA discovery pass. `[DAB/SVC]` reports each
+SID, P/D, component count and list version; `[DAB/COMP]` reports each exact
+32-bit CID, TMID, ASCTy/DSCTy, DG, P/S, CA and UA-valid flags. Packet-mode
+MOT additionally produces an `identity=unverified` candidate line. Neither
+MOT transport nor UA-valid=0 proves the presence or absence of SPI.
+Identical periodic service lists do not repeat the inventory dump; changed
+version, P/D or CID topology invalidates the pass.
+
+The independently paced summary reports the published result, for example:
+
+```text
+[DAB/INV] services=10 components=10 audio=10 data=0 packetMOT=0 invalid=0 version=7
+[DAB/UA] scan complete services=10 components=10 processed=10 failed=0
+[DAB/SPI] confirmed=0 packetMOTUnverified=0 status=not signalled selected=0 SID=00000000 CID=00000000 profile=unknown
+```
+
+`audio` and `data` count programme/data **services by P/D**, not component
+transport modes. `processed` counts successfully parsed UA responses; `failed`
+counts failed commands/invalid responses. A completed pass satisfies
+`components == processed + failed`. Any failure yields `discovery incomplete`.
+`not signalled` means SPI was not found in the available signalling, after a
+complete error-free inventory/UA scan with no unverified packet-MOT component.
+A malformed service list retains the last good station table, reports
+`invalid=1` and `scan incomplete`, and blocks endpoint selection until a new
+valid list arrives. Counts in that invalid-inventory report refer to the retained
+last valid list; confirmed presence can also retain last valid evidence.
+
+`confirmed` counts validated 0x007 advertisements. `packetMOTUnverified` counts
+TMID=3/DSCTy=60 components without confirmed SPI identity. `selected=1` requires
+an unambiguous endpoint and complete successful discovery. Confirmed presence
+can therefore coexist with `selected=0` (ambiguous or incomplete). The final
+asynchronous reply must be committed before publication. UART output is
+independent: blocked logging never delays queries, presence or SLS evaluation.
+
+Discovery runs quietly with DEBUG disabled. Diagnostic lines share 100 ms pacing
+and a 256-byte UART headroom check. Detailed UA dumps use one best-effort slot;
+while it is pending, newer diagnostic copies are skipped, but every UA answer
+is processed. Retuning/reconfiguration discards stale dumps and summaries. Detection repeats throughout the DAB session:
+60 seconds after each completed UA pass, including failed UA passes, another
+low-priority pass is scheduled. Loss of lock, switching or a tracked SPI probe
+postpones it until eligible. Invalid service-list structure requires a new valid
+service list instead of a UA-only retry. Retuning, changed list/version and audio
+selection invalidate in-flight UA ownership. Routine refreshes keep the last
+confirmed icon color and do not repeat an unchanged inventory dump.
+
+The main display shows only `EPG` below the codec using the existing cyan/grey
+palette. Cyan means validated SPI signal was found, including cases where no
+unique endpoint can be selected. Unverified packet-MOT keeps the icon grey.
+The indicator retains the last known presence while rescanning or after an
+unreadable update, and clears on retuning or a valid topology/version change.
+It is hidden in FM and does not assert decoded programme data or schedule coverage.
+For details and reproducible tests see
+[the packet-component report](tests/DAB_SPI_packet_components_report.md).
+
+For P/S verification, `CID=01FE0002` must report `PS=primary` (ETSI EN 300 401
+section 6.3.1). CID and all other classification fields remain unchanged.
+A corresponding synthetic `CID=01FC0002` fixture reports `PS=secondary`.
+
+`DAB_XPAD_ENABLE` remains 0x0097. During DAB initialization only, a successful
+SET_PROPERTY is followed by one GET_PROPERTY (250 ms timeout) using the existing
+boot command API. DEBUG prints the cached result, not a new radio transaction:
+
+```text
+[DAB/XPAD] requested=0x0097 setResult=0 readback=0x0097 getResult=0 match=1 fw=6.0.9 rev=unverified
+```
+
+`setResult` and `getResult` are separate vendor Result codes; 0 means Ok, -4
+means timeout. `setResult=127` means no attempt was recorded. A failed write
+skips the read (`getResult=not-attempted`). Failed or absent reads print
+`readback=unavailable` without `match`. Successful unequal reads print `match=0`.
+Boot/recovery/hardware reset invalidates the cached result; FM never reads B400.
+DEBUG toggles may repeat the cached diagnostic line, never the GET_PROPERTY.
+
+`[DSRV/UA]` preserves the raw field and adds `meaning`, source name, routing
+context, scan generation and suppressed-sample count. Raw 2/7 at source 0/1
+prints SLS-candidate/SPI-candidate; source 2 prints DLS-raw regardless of raw UA,
+and source 3 prints reserved. `context` reports audio/sls/spi/unmatched/inactive
+using existing endpoint and audio-state rules. Raw interpretation does not
+supply endpoint confirmation or change routing.
+
+One line globally per five seconds within a scan generation is allowed, only
+with DEBUG and at least 256 bytes of UART headroom. Suppressed counts saturate;
+retune/new generation discards the old diagnostic window. No payload is retained
+for later logging. `rev=unverified` remains because the firmware UATYPE contract
+has not been established. See [the diagnostics report](tests/DAB_XPAD_UATYPE_diagnostics_report.md).
+
+### `DEBUG SPI`
+
+Enables diagnostics and requests one controlled SPI coexistence probe. Requires
+stable DAB audio, a complete unambiguous SPI discovery result, an idle probe,
+and SPI SID/CID distinct from both audio and the active standalone SLS context.
+Shared-component SPI is refused until application-level MOT routing exists.
+If discovery has not finished, wait for its result and send the command again;
+the request is not silently queued for a later station.
+
+The probe records 5 seconds of baseline DSRV traffic, then schedules a
+low-priority START for SPI **without STOP for audio or SLS**. It observes traffic
+for 30 seconds after successful START and schedules STOP for the probe's own
+SPI SID/CID. SPI payload is counted and discarded, never passed to the SLS
+collector. While the probe tracks a SPI context, audio/SLS/PAD packets use
+the existing decoder only after matching SID/CID and DATA_SRC; other contexts
+are drained/ignored. Outside the probe, the original SLS/DLS path is restored,
+including its existing audio-switch and collector stale-MOT protections. An
+unmatched diagnostic SID/CID alone does not discard normal SLS/DLS reception.
+Failed probe cleanup retains strict routing until retune/reset.
+
+With DEBUG enabled, `[DSRV/IDENTITY]` reports unmatched received SID/CID/source
+alongside expected audio/SLS identities and validity flags, even without SPI.
+`legacy=1` means the payload is forwarded to the original decoder (which still
+applies its own checks); `legacy=0` means it is withheld. Output is limited to
+one queued line per 5 seconds with a suppression count and UART-space check.
+Hardware captured audio SID `00002FD9` with service-list CID `01FE002A`, while
+both PAD (`src=1`) and DLS (`src=2`) report CID `0000002A`. For these two sources
+only, an audio TMId=0 endpoint accepts its zero-extended low 16-bit component
+field with the same SID. Full CID matches remain accepted. Nonzero mismatching
+upper halves, different SID/component fields and unknown sources are rejected
+by the router. Standalone SLS/SPI identities still require exact matching;
+their short-CID representation has not been verified. START/STOP and other
+component commands continue using the full original service-list CID.
+
+`[DSRV/ROUTE]` output contains route, source, SID/CID, DSCTy, byte count, remaining
+buffers and service state. Route values: 0 ignored, 1 audio/PAD, 2 standalone
+SLS path, 3 SPI. Each route logs at most twice a second; suppressed lines are
+counted. Summaries every 5 seconds compare baseline and observation packet
+counts, report tuner SLS STOP notifications and CTS/overflow/UART-drop deltas.
+Distinct packet traffic alone does not prove uninterrupted audio or decoded
+slideshows. Missing packets are inconclusive because of carousel timing.
+
+Changing station/multiplex, changing the component inventory or disabling DEBUG
+cancels the probe. A START still awaiting CTS is reconciled before cleanup,
+even after a new tune generation. Probe STOP takes priority over normal service
+teardown; up to three attempts use cooperative 500 ms retry gaps, with DSRV
+draining continuing between attempts. A NOT_AVAILABLE STOP response counts as
+already stopped. An unanswered START also triggers conservative STOP.
+
+If cleanup fails, the log says `cleanup uncertain`; the possible SPI context
+remains quarantined and another probe is refused until a retune/reset. Normal
+CTS recovery rules still apply. This probe does not restore a standalone SLS
+service replaced by firmware: note the evidence and retune/reselect the station
+after testing to restore normal service selection. No time-sharing fallback is
+enabled and simultaneous standalone SLS/SPI remains unverified on FW 6.0.9.
+
+### `DEBUG SPI STOP`
+
+Requests early cancellation and cleanup of the current probe. It does not stop
+audio or the SLS component. Like DEBUG SPI, it is available without ENABLE=1.
 
 ## Result codes
 

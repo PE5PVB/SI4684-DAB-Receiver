@@ -5,6 +5,7 @@
 #include <Preferences.h>
 #include <cstring>
 #include "constants.h"
+#include "i2s_audio.h"
 
 // Direct NVS persistence with a compatibility-shaped RAM view. The firmware
 // keeps its proven address-based call sites while flash is stored as compact
@@ -13,6 +14,8 @@ class NvsStorage {
  public:
   bool begin();
   bool commit();
+  uint8_t getI2sAudioMode() const { return i2sAudioMode_; }
+  void setI2sAudioMode(uint8_t value);
 
   uint8_t readByte(int address) const;
   void writeByte(int address, uint8_t value);
@@ -58,6 +61,8 @@ class NvsStorage {
   bool dabDirty_ = false;
   bool fmDirty_ = false;
   bool irDirty_ = false;
+  uint8_t i2sAudioMode_ = I2S_AUDIO_48K;
+  bool i2sAudioDirty_ = false;
 
   static bool validRange(int address, size_t length) {
     return address >= 0 && static_cast<size_t>(address) + length <= IMAGE_SIZE;

@@ -251,6 +251,13 @@ void processCommandLine(char* line) {
       radio.SlideShowDebug = diagnosticDebug;
       if (!diagnosticDebug) radio.SlideShowVerbose = false;
       diagSerial.printf("[DEBUG] diagnostics %s\n", diagnosticDebug ? "ON" : "OFF");
+    } else if (strcmp(input, "DEBUG SPI") == 0) {
+      diagnosticDebug = true;
+      radio.SlideShowDebug = true;
+      if (!radio.requestSpiProbe())
+        diagSerial.println("[DAB/SPI/TEST] refused: requires stable DAB, complete SPI discovery, distinct SID/CID and idle probe");
+    } else if (strcmp(input, "DEBUG SPI STOP") == 0) {
+      radio.stopSpiProbe();
     } else if (strcmp(input, "DEBUG VERBOSE") == 0 ||
                strcmp(input, "DEBUG SLSV") == 0) {
       diagnosticDebug = true;

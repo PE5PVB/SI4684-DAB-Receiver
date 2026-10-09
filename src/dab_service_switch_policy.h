@@ -5,6 +5,16 @@
 
 namespace dab_switch {
 
+// A reply for the previously active service may finish after a new selection
+// cleared PStext. It must not restore the old label during the switch.
+inline bool serviceMetadataCurrent(bool active, bool switchPending,
+                                   uint32_t replySid, uint32_t replyCid,
+                                   uint32_t activeSid, uint32_t activeCid,
+                                   uint32_t requestedSid, uint32_t requestedCid) {
+  return active && !switchPending && replySid == activeSid && replyCid == activeCid &&
+         replySid == requestedSid && replyCid == requestedCid;
+}
+
 static constexpr uint32_t STOP_SETTLE_MS = 200U;
 static constexpr uint32_t AUDIO_TO_DATA_SETTLE_MS = 200U;
 static constexpr uint32_t RETRY_BACKOFF_MS = 250U;

@@ -3,7 +3,7 @@
 
 #include "FmRegion.h"
 
-#define VERSION "v2.3"
+#define VERSION "v2.4"
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
@@ -969,6 +969,11 @@ static const char* const irMemoryErrorText[8] PROGMEM = {
 static const char* const restartingText[8] PROGMEM = {
   "Restarting...", "Herstarten...", "Επανεκκίνηση...", "Neustart...",
   "Redémarrage...", "Reiniciando...", "Restart...", "Repornire..."
+};
+
+static const char* const i2sAudioMenuText[8] PROGMEM = {
+  "I²S Audio", "I²S-audio", "Ήχος I²S", "I²S-Audio",
+  "Audio I²S", "Audio I²S", "Dźwięk I²S", "Audio I²S"
 };
 
 #endif

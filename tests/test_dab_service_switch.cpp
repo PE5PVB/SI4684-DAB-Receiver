@@ -6,6 +6,18 @@ using dab_switch::Resume;
 using dab_switch::State;
 
 int main() {
+  // Late metadata for A must not repopulate PStext after a B/C selection.
+  assert(dab_switch::serviceMetadataCurrent(true, false, 1, 11, 1, 11, 1, 11));
+  assert(!dab_switch::serviceMetadataCurrent(true, true, 1, 11, 1, 11, 2, 22));
+  assert(!dab_switch::serviceMetadataCurrent(true, true, 1, 11, 1, 11, 3, 33));
+  assert(!dab_switch::serviceMetadataCurrent(true, false, 1, 11, 3, 33, 3, 33));
+  assert(!dab_switch::serviceMetadataCurrent(true, false, 2, 22, 3, 33, 3, 33));
+  assert(dab_switch::serviceMetadataCurrent(true, false, 3, 33, 3, 33, 3, 33));
+  assert(!dab_switch::serviceMetadataCurrent(true, false, 3, 22, 3, 33, 3, 33));
+  assert(!dab_switch::serviceMetadataCurrent(true, false, 3, 33, 3, 33, 3, 22));
+  assert(!dab_switch::serviceMetadataCurrent(false, false, 3, 33, 3, 33, 3, 33));
+  // Returning to A while its old reply is still outstanding remains pending.
+  assert(!dab_switch::serviceMetadataCurrent(true, true, 1, 11, 1, 11, 1, 11));
   // Normal switch tears down data before audio; without data it starts at audio.
   assert(dab_switch::dispatchRequest(true, true, false, true) == State::StopData);
   assert(dab_switch::dispatchRequest(false, true, false, true) == State::StopAudio);
