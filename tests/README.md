@@ -1,5 +1,14 @@
 # Host regression tests
 
+The 2026-10-22 I2S framing/readback and packet-mode DSRV CID corrections
+are documented in [the I2S/SPI repair report](I2S_SPI_20261022_report.md).
+Run the I2S commands below and `test_dab_spi_probe.cpp` from the C++11 suite.
+The I2S harness now injects every write/read failure and mismatch, tests
+read-only running-image reuse, and retains analog/INTB pins on failure.
+The probe fixture covers the Polish MUX 11A short CID through the unchanged
+DSRV parser, source/TMID/SID bounds, exact command ownership and late-data quarantine.
+The report supersedes older short-packet-CID rejection and 0x1600 format descriptions.
+
 Current XPAD readback and bounded raw UATYPE diagnostics are documented in
 [the XPAD/UATYPE report](DAB_XPAD_UATYPE_diagnostics_report.md).
 

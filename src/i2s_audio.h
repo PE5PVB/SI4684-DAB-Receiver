@@ -32,6 +32,8 @@ inline I2sAudioMode cycleI2sAudioMode(I2sAudioMode value, bool forward) {
 // AN649: keep analog DAC (bit 0) enabled independently of digital I²S (bit 1)
 // and INTB (bit 15). MASTER is bit 15 of DIGITAL_IO_OUTPUT_SELECT, not PIN_CONFIG.
 static constexpr uint16_t I2S_AUDIO_MASTER = 0x8000U;
+// Philips I2S: 24-bit samples in 32-bit channel slots, BCK = 64 * Fs.
+static constexpr uint16_t I2S_AUDIO_FORMAT_STANDARD = 0x1870U;
 inline uint16_t i2sAudioPinConfig(I2sAudioMode mode, bool intb) {
   return 1U | (i2sAudioSampleRate(mode) != 0U ? 2U : 0U) | (intb ? 0x8000U : 0U);
 }

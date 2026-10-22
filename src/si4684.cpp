@@ -125,27 +125,46 @@ void DAB::setI2sAudioMode(I2sAudioMode mode) {
   radioI2sAudioMode = sanitizeI2sAudioMode(mode);
 }
 
-static void configureI2sAudio(void) {
+// Format is writable only before the first tune (AN649). A reused image may
+// already be tuned: verify its complete configuration without changing it.
+static void configureI2sAudio(bool reuseRunningImage) {
   radioI2sOutputReady = false;
   const uint16_t rate = i2sAudioSampleRate(radioI2sAudioMode);
-  DIAG_PRINTF("[I2S] mode=%s enabled=%u master=%u rate=%u\n",
-              i2sAudioModeText(radioI2sAudioMode), rate != 0U, rate != 0U, rate);
+  DIAG_PRINTF("[I2S] mode=%s requested=%u rate=%u format=0x%04X reuse=%u\n",
+              i2sAudioModeText(radioI2sAudioMode), rate != 0U, rate,
+              I2S_AUDIO_FORMAT_STANDARD, reuseRunningImage);
   if (!rate) return;
   const si468x::Property properties[] = {
     si468x::Property::DIGITAL_IO_OUTPUT_SELECT,
+    si468x::Property::DIGITAL_IO_OUTPUT_FORMAT,
     si468x::Property::DIGITAL_IO_OUTPUT_SAMPLE_RATE
   };
-  const uint16_t values[] = {I2S_AUDIO_MASTER, rate};
-  for (uint8_t i = 0; i < 2; ++i) {
-    const si468x::Result result = chip.setProperty(properties[i], values[i]);
-    DIAG_PRINTF("[I2S] property=0x%04X value=0x%04X result=%d\n",
-                static_cast<unsigned>(properties[i]), values[i], static_cast<int>(result));
-    if (result != si468x::Result::Ok) {
-      DIAG_PRINTLN("[I2S] configuration failed; digital pins disabled, analog DAC retained");
-      return; // saved selection is unchanged; existing transport handling owns recovery
+  const uint16_t values[] = {I2S_AUDIO_MASTER, I2S_AUDIO_FORMAT_STANDARD, rate};
+  if (!reuseRunningImage) {
+    for (uint8_t i = 0; i < 3; ++i) {
+      const si468x::Result result = chip.setProperty(properties[i], values[i]);
+      DIAG_PRINTF("[I2S] property=0x%04X value=0x%04X result=%d\n",
+                  static_cast<unsigned>(properties[i]), values[i], static_cast<int>(result));
+      if (result != si468x::Result::Ok) {
+        DIAG_PRINTLN("[I2S] configuration failed; digital pins disabled, analog DAC retained");
+        return;
+      }
+    }
+  }
+  // Check Result even if the output argument happens to contain the expected
+  // value. All three properties must agree before PIN_CONFIG enables I2S.
+  for (uint8_t i = 0; i < 3; ++i) {
+    uint16_t actual = 0;
+    const si468x::Result result = chip.getProperty(properties[i], actual, 250000UL);
+    DIAG_PRINTF("[I2S] readback property=0x%04X result=%d expected=0x%04X actual=0x%04X\n",
+                static_cast<unsigned>(properties[i]), static_cast<int>(result), values[i], actual);
+    if (result != si468x::Result::Ok || actual != values[i]) {
+      DIAG_PRINTLN("[I2S] verification failed; digital pins disabled, analog DAC retained");
+      return;
     }
   }
   radioI2sOutputReady = true;
+  DIAG_PRINTLN("[I2S] verified; digital output ready");
 }
 
 // Keep INTB as the fast path for real events and retain short, bounded safety
@@ -1043,8 +1062,9 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   chip.setCtsPollIntervalUs(1000);
   chip.setIdleStatusPollIntervalUs(20000);
 
-  // Every application boot (DAB/FM/recovery): master -> fixed rate -> pins.
-  configureI2sAudio();
+  // Cold DAB/FM boot: master -> format -> rate -> readback -> pins.
+  // Reused image: readback only; never rewrite format after a possible tune.
+  configureI2sAudio(reuseRunningImage);
   const uint16_t pinConfig = audioPinConfig(intbOutputEnabled);
   si468x::Result pinConfigResult = chip.setProperty(
       si468x::Property::PIN_CONFIG_ENABLE, pinConfig);
@@ -1229,7 +1249,6 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
 
   DIAG_PRINTLN("[RADIO] shared properties begin");
   // Shared audio/front-end setup retained from the proven DAB configuration.
-  Set_Property(0x0202, 0x1600);
   Set_Property(0x1710, 0xFC4A);
   Set_Property(0x1711, 0x00F8);
   DIAG_PRINTLN("[RADIO] shared properties done");

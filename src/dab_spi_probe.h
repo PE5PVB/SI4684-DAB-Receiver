@@ -28,16 +28,26 @@ inline bool matchesAudioPad(const Endpoint& audio, uint32_t sid, uint32_t cid) {
       (cid & 0xFFFF0000UL) == 0U && (audio.cid & 0xFFFFU) == cid;
 }
 
+// FW 6.0.9, Polish MUX 11A: list CID 01F2C00B, standard-data
+// DSRV CID 0000C00B. Accept only a zero-extended packet-mode component
+// with the exact SID. Command ownership retains Endpoint::matches().
+inline bool matchesPacketData(const Endpoint& data, uint32_t sid, uint32_t cid) {
+  return data.valid && data.sid == sid && (data.cid & 0xC000U) == 0xC000U &&
+      (cid & 0xFFFF0000UL) == 0U && (data.cid & 0xFFFFU) == cid;
+}
+
 // Source 0 = standard data, 1 = PAD, 2 = DLS. Application ownership comes
 // before any payload interpretation; unknown sources/contexts are drained.
 inline Route route(uint32_t sid, uint32_t cid, uint8_t source,
                    const Endpoint& audio, const Endpoint& sls, const Endpoint& spi) {
   if (source > 2U) return Route::Ignored;
-  if (spi.matches(sid, cid)) return source < 2U ? Route::Spi : Route::Ignored;
+  if (spi.matches(sid, cid) || (source == 0U && matchesPacketData(spi, sid, cid)))
+    return source < 2U ? Route::Spi : Route::Ignored;
   if (audio.matches(sid, cid) ||
       ((source == 1U || source == 2U) && matchesAudioPad(audio, sid, cid)))
     return Route::Audio;
-  if (sls.matches(sid, cid)) return source < 2U ? Route::Sls : Route::Ignored;
+  if (sls.matches(sid, cid) || (source == 0U && matchesPacketData(sls, sid, cid)))
+    return source < 2U ? Route::Sls : Route::Ignored;
   return Route::Ignored;
 }
 
