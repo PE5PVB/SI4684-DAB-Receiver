@@ -251,12 +251,15 @@ service list instead of a UA-only retry. Retuning, changed list/version and audi
 selection invalidate in-flight UA ownership. Routine refreshes keep the last
 confirmed icon color and do not repeat an unchanged inventory dump.
 
-The main display shows only `EPG` below the codec using the existing cyan/grey
-palette. Cyan means validated SPI signal was found, including cases where no
-unique endpoint can be selected. Unverified packet-MOT keeps the icon grey.
-The indicator retains the last known presence while rescanning or after an
-unreadable update, and clears on retuning or a valid topology/version change.
-It is hidden in FM and does not assert decoded programme data or schedule coverage.
+The main display shows only `EPG` below the codec. Grey means EPG has not
+been detected. Cyan means validated SPI presence was found, but the selected
+station/day has no fresh unambiguous cached programme. Green means that
+programme data for the selected station/day is cached and fresh (15 minutes).
+Green can remain during an RF outage while the cached programme is still valid.
+The detector retains known presence during routine rescans and clears on retune
+or a valid topology/version change. In UART replay, presence follows the
+validated test directory and readiness follows the test station/day cache.
+The indicator is hidden in FM. It does not promise complete schedule coverage.
 For details and reproducible tests see
 [the packet-component report](tests/DAB_SPI_packet_components_report.md).
 
@@ -568,3 +571,35 @@ The receiver should be in DAB mode when controlled through this protocol.
 - Do not expect Base64 image data after an `$M` message; this firmware does not
   transmit it.
 
+
+
+### EPG packet reception and UART replay
+
+The EPG service starts automatically after validated SPI discovery and stable
+DAB audio. Its payload uses an independent, bounded MOT/SPI parser; it never
+enters the PAD Slideshow decoder. `DEBUG SPI` retains its 5 s baseline and
+30 s observation test, after serializing cleanup of the production owner.
+`DEBUG SPI STOP` pauses automatic SPI until the next tune.
+
+`EPG TEST HELP`, `DEMO`, `START [SID FULLCID]`, `TIME ISO8601`, `STATION HEX`,
+`STATUS`, `STOP` and `CLEAR` are available without ENABLE=1. The UI marks all
+historical test data TEST. `START` returns a session token for acknowledged E1
+fragments, each at most 121 ASCII bytes including LF (32 payload bytes).
+The 128-byte line buffer and at-most-one-command-per-loop policy are retained.
+The replay tool owns the COM port and provides its own console/monitor.
+
+See [the EPG UART guide](docs/EPG_TEST_CZ.md) for exact commands, framing limits,
+Windows usage and the distinction between host PASS and HW NOT TESTED.
+
+
+EPG memory diagnostics: `EPG TEST STATUS` includes `EPG POOLS` with
+`free8/largest8` (INTERNAL|8BIT DRAM) and `free32/largest32`
+(INTERNAL|32BIT|EXEC IRAM). `EPG RAM arena` is their allocated total.
+`EPG ERROR MEMORY` reports `need8/free8/largest8/need32/free32/largest32`;
+aggregate INTERNAL free memory does not imply sufficient byte-addressable RAM.
+
+`EPG LOGO bytes=N interlace=0|1` reports the cached image. Adam7 rendering also
+emits bounded `[EPG/LOGO]` diagnostics: `validated`, `stage`, `detail`, dimensions,
+compressed/decompressed byte counts, pass/row and internal workspace alignment
+`pad`, followed by `draw=0|1`. The ESP32 test required `pad=4` and both real
+Adam7 logos reached `validated=1 stage=ok` and `draw=1`.

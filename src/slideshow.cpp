@@ -1,6 +1,8 @@
 // RAM-only slideshow renderer.
 
 #include "slideshow.h"
+#include "png_adam7.h"
+#include "serial_monitor.h"
 
 #include <esp_heap_caps.h>
 #include <new>
@@ -114,6 +116,22 @@ static void fadeUp(void) {
   }
 }
 
+
+struct Adam7DrawContext { int x,y; };
+static void pumpAdam7(void*) { radio.Update(false); yield(); }
+static bool adam7Pixels(void* user,unsigned x,unsigned y,unsigned step,const uint16_t* pixels,unsigned count) {
+  const Adam7DrawContext& context=*static_cast<Adam7DrawContext*>(user);
+  if(step==1) tft.pushImage(context.x+int(x),context.y+int(y),int(count),1,const_cast<uint16_t*>(pixels));
+  else for(unsigned i=0;i<count;++i) tft.pushImage(context.x+int(x+i*step),context.y+int(y),1,1,const_cast<uint16_t*>(pixels+i));
+  return true;
+}
+static bool validateAdam7(epg::Bytes data,size_t size,unsigned width,unsigned height,PngAdam7Info& info) {
+  return PngAdam7Decode(data,size,decoderWorkspace,SLS_DECODER_WORKSPACE_BYTES,width,height,info,nullptr,nullptr,pumpAdam7);
+}
+static bool drawAdam7(epg::Bytes data,size_t size,int x,int y,unsigned width,unsigned height) {
+  Adam7DrawContext context{x,y};PngAdam7Info info;
+  return PngAdam7Decode(data,size,decoderWorkspace,SLS_DECODER_WORKSPACE_BYTES,width,height,info,adam7Pixels,&context,pumpAdam7);
+}
 
 bool ShowSlideShow(void) {
   lastRenderTouchedDisplay = false;
@@ -238,6 +256,16 @@ bool ShowSlideShow(void) {
       return false;
     }
 
+    if(fileSize>=29 && image[28]==1) {
+      PngAdam7Info info;
+      if(!validateAdam7(image,fileSize,SLS_PROFILE_MAX_WIDTH,SLS_PROFILE_MAX_HEIGHT,info)) {
+        DIAG_PRINTLN("[SLS/PNG] Adam7 validation=FAIL");return false;
+      }
+      lastRenderTouchedDisplay=true;fadeDown();tft.fillScreen(TFT_WHITE);tft.startWrite();
+      const bool ok=drawAdam7(image,fileSize,(SLS_PROFILE_MAX_WIDTH-int(info.width))/2,
+                              (SLS_PROFILE_MAX_HEIGHT-int(info.height))/2,SLS_PROFILE_MAX_WIDTH,SLS_PROFILE_MAX_HEIGHT);
+      tft.endWrite();fadeUp();DIAG_PRINTF("[SLS/PNG] Adam7 render=%s size=%u\n",ok?"OK":"FAIL",unsigned(fileSize));return ok;
+    }
     const uint32_t fingerprint = slideshowFingerprint(image, fileSize);
     bool pngInSharedWorkspace = false;
     PNG* png = acquirePngDecoder(pngInSharedWorkspace);
@@ -327,4 +355,68 @@ bool ShowSlideShow(void) {
 
   DIAG_PRINTLN("[SLS] unsupported/invalid image signature");
   return false;
+}
+
+// Small EPG logos use the existing decoder arena. No slideshow ownership,
+// fades, full-screen clear, cache flag or MOT collector is changed.
+struct EpgLogoFile { epg::Bytes data; int32_t size; };
+static EpgLogoFile* epgLogoFile=nullptr;
+static void* epgLogoOpen(const char*,int32_t* size) {
+  if(!epgLogoFile || !size) return nullptr;
+  *size=epgLogoFile->size; return epgLogoFile;
+}
+static void epgLogoClose(void*) {}
+static int32_t epgLogoRead(PNGFILE* file,uint8_t* out,int32_t count) {
+  if(!file || !file->fHandle || !out || count<0 || file->iPos<0 || file->iPos>file->iSize) return 0;
+  EpgLogoFile& input=*static_cast<EpgLogoFile*>(file->fHandle);
+  if(count>file->iSize-file->iPos) count=file->iSize-file->iPos;
+  (input.data+size_t(file->iPos)).copyTo(out,size_t(count)); file->iPos+=count;
+  return count;
+}
+static int32_t epgLogoSeek(PNGFILE* file,int32_t position) {
+  if(!file || position<0 || position>file->iSize) return -1;
+  file->iPos=position; return position;
+}
+bool DrawEpgLogo(epg::Bytes data, size_t size, int x, int y, int width, int height) {
+  if(!data || !size || size>epg::kObjectBytes || epgLogoFile) return false;
+  if(size>=29 && data[28]==1) {
+    PngAdam7Info info;
+    const bool valid=width>0 && height>0 && validateAdam7(data,size,unsigned(width),unsigned(height),info);
+    if(diagSerial.availableForWrite()>=384) diagSerial.printf("[EPG/LOGO] bytes=%u interlace=1 validated=%u stage=%s detail=%s w=%u h=%u in=%u out=%u pass=%u row=%u pad=%u\n",unsigned(size),valid,info.stage,info.detail,info.width,info.height,info.input,info.output,info.pass,info.row,info.padding);
+    if(!valid) return false;
+    tft.startWrite();const bool ok=drawAdam7(data,size,x,y,unsigned(width),unsigned(height));tft.endWrite();
+    if(diagSerial.availableForWrite()>=64) diagSerial.printf("[EPG/LOGO] draw=%u\n",ok);
+    return ok;
+  }
+  EpgLogoFile input{data,int32_t(size)};
+  struct InputGuard { ~InputGuard() { epgLogoFile=nullptr; } } inputGuard;
+  epgLogoFile=&input;
+  bool shared=false; PNG* png=acquirePngDecoder(shared);
+  if(!png) return false;
+  // Validate the complete compressed image before touching TFT, using the same
+  // existing PNG decoder (including radio/CTS service between scanlines).
+  int validated=png->open("EPG",epgLogoOpen,epgLogoClose,epgLogoRead,epgLogoSeek,+[](PNGDRAW*) {
+    radio.Update(false); yield(); return 1;
+  });
+  if(validated!=PNG_SUCCESS) { releasePngDecoder(png,shared); return false; }
+  const bool fits=png->getWidth()<=width && png->getHeight()<=height;
+  if(fits) validated=png->decode(nullptr,0);
+  png->close();
+  if(!fits || validated!=PNG_SUCCESS) { releasePngDecoder(png,shared); return false; }
+  struct Context { PNG* png; int x,y,width,height; } context{png,x,y,width,height};
+  const int rc=png->open("EPG",epgLogoOpen,epgLogoClose,epgLogoRead,epgLogoSeek,+[](PNGDRAW* draw) {
+    if(!draw || !draw->pUser) return 0;
+    Context& c=*static_cast<Context*>(draw->pUser);
+    if(draw->y>=c.height || draw->iWidth>320 || draw->iWidth<=0) return 0;
+    uint16_t line[320];
+    c.png->getLineAsRGB565(draw,line,PNG_RGB565_LITTLE_ENDIAN,0xFFFFFFFF);
+    tft.pushImage(c.x,c.y+draw->y,draw->iWidth,1,line);
+    radio.Update(false); yield(); return 1;
+  });
+  bool ok=false;
+  if(rc==PNG_SUCCESS) {
+    if(png->getWidth()<=width && png->getHeight()<=height) ok=png->decode(&context,0)==PNG_SUCCESS;
+    png->close();
+  }
+  releasePngDecoder(png,shared); return ok;
 }

@@ -3,6 +3,7 @@
 // charset conversion use fixed storage so serial traffic cannot fragment heap.
 
 #include "comms.h"
+#include "epg_runtime.h"
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -242,6 +243,7 @@ void doEnableConnection() {
 void processCommandLine(char* line) {
   char* input = trimInPlace(line);
   if (!input || *input == '\0') return;
+  if (epg::command(input)) return;
 
   char* equals = strchr(input, '=');
   if (!equals) {

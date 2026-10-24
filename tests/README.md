@@ -1,5 +1,22 @@
 # Host regression tests
 
+Current production EPG, UART replay and three-screen navigation are documented in
+[the Czech test guide](../docs/EPG_TEST_CZ.md) and
+[the implementation report](../docs/EPG_IMPLEMENTATION_REPORT.md).
+
+```powershell
+python tests/run_epg_tests.py --compiler C:/msys64/ucrt64/bin/g++.exe
+```
+
+The suite requires the supplied original RAW log under `_usertesting/` and the
+reference decoding ZIP under `Specification/`; `--input` and `--reference`
+override those paths. Neither large input is embedded in firmware or this patch.
+It exercises the production C++ core, actual firmware runtime/buttons/UI with
+mocks, and the real Python CLI against a simulated COM owner. Physical hardware
+acceptance remains separate. Earlier diagnostic-only SPI sections below describe
+previous stages; the current production EPG behavior is in the linked guide.
+
+
 The 2026-10-22 I2S framing/readback and packet-mode DSRV CID corrections
 are documented in [the I2S/SPI repair report](I2S_SPI_20261022_report.md).
 Run the I2S commands below and `test_dab_spi_probe.cpp` from the C++11 suite.
@@ -384,3 +401,61 @@ and stop producing identity-mismatch lines for that endpoint. Verify infotext
 and a completed/new slideshow on the display. Other identity-mismatch lines
 remain useful evidence. This mux reports only Slideshow UA `0x002` in the supplied
 dump, so SPI coexistence is still unverified and needs a mux advertising `0x007`.
+
+
+EPG word-only memory regression (`tests/test_epg_storage.py`, included in
+`run_epg_tests.py`) builds the project's actual PNGdec dependency from
+`.pio/libdeps/esp32dev/PNGdec/src`; run `pio run -e esp32dev` once first.
+It compares 28 supported RAW logos pixel-for-pixel through the production
+word-reader callbacks and verifies both real Adam7 logos against an independent
+Windows System.Drawing reference (Pillow on non-Windows hosts). It also checks unaligned logical byte offsets,
+overlapping moves, tail reads and CRC without exposing word storage as a byte
+pointer. The runtime test models separate 8-bit DRAM and 32-bit IRAM budgets,
+including shortages masked by a large aggregate INTERNAL total.
+
+`tests/test_epg_png_adam7.py` (also in the EPG runner) checks the no-heap Adam7
+decoder on 60 independently generated color/depth/filter/dimension cases and
+eight hostile compressed streams. Run after the storage test, which builds the
+project's inflate objects. EPG and SLS share the same Adam7 decoder and the
+existing 76,800-byte image workspace. No installed third-party library is edited.
+
+The Adam7 regression additionally exercises workspace pointers shifted by 1–7
+bytes. The decoder aligns inside the caller's buffer and accounts for padding
+before accepting capacity. This reproduces the ESP32's 4-byte-aligned shared
+arena against the inflate state's 8-byte alignment. Hardware logs confirmed
+pad=4, validation and drawing for both RAW interlaced logos after the fix.
+
+The UI regression also tracks the startup font on the shared FullLineSprite
+through the EPG programme list, detail, settings and return to the main screen.
+The list must preserve FONT16 without loading/unloading it and use transparent
+text backgrounds. Runtime tests cover the main EPG presence query: live SPI
+outside replay, inactive on START, active after a validated DEMO directory,
+and restoration of live presence after STOP and idle timeout.
+
+The UI test additionally checks two-row selection updates, nine-row page/data
+updates without a full-screen background, empty-list waiting and live data
+arrival into that view. It exercises all eight radio UI translations and checks
+every translated diacritic against FONT16 and heading glyphs against FONT28.
+
+`test_epg_cache.cpp` exercises the production MOT/TLV path with generated
+CRC-valid directories and PI groups: station/day isolation, immediate cached
+return, per-selection freshness, 96-record and 8 KiB text limits, LRU eviction,
+text compaction/reuse, eight slots and acquisition-epoch wrap after 66,000 empty
+selections. The UI test also returns from unloaded days/stations to loaded rows
+without feeding another frame and checks that the waiting panel is not redrawn.
+
+The runtime regression executes the actual ShowEpgIcon painter with recording
+sprite calls and checks grey/cyan/green colours, no repaint for an unchanged
+state, FM hiding, fresh/ambiguous/expired data, an empty day and immediate cached
+return. It uses the production indicator query, not a duplicated colour policy.
+
+The multiline UI regression uses the decoded Jedynka F629/1056061 description:
+it preserves the listener advisory time 6.00 and the separate 06:40:00 schedule
+line. It checks CR/LF/CRLF, tabs, blank lines, scroll coordinates, literal question
+marks, missing-glyph fallback and complete UTF-8 truncation. Broadcast schedule
+text in descriptions is retained, not heuristically removed.
+
+The programme-list geometry regression uses the actual EpgBackground/EpgSelector
+asset accessors, checks the single-panel background without a divider,
+and validates time/name coordinates and text bounds.
+The two-row selection and nine-row page refresh checks remain active.

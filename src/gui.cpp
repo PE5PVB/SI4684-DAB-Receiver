@@ -1,3 +1,5 @@
+#include "epg_ui.h"
+#include "epg_runtime.h"
 // All TFT rendering. Each Show*() function updates one piece of the screen;
 // they only redraw what has actually changed by comparing against a "*Old"
 // shadow variable, so the loop can call them all every iteration cheaply.
@@ -837,6 +839,7 @@ static void RedrawMenuSelection(byte oldItem) {
 
 // Full redraw of the settings menu (entered by long-pressing MODE).
 void BuildMenu(void) {
+  EpgSuspend();
   // Settings has more logical entries than the display's nine-row window.
   // Scroll the existing 9-row window instead of shrinking the proven UI.
   menuopen = false;
@@ -869,6 +872,8 @@ void BuildMenu(void) {
 // memory slot, clock). Called when switching back from another view or
 // after a theme/display-orientation change.
 void BuildDisplay(void) {
+  EpgResume();
+  if (EpgVisible()) { EpgDraw(true); return; }
   SlideShowView = false;
   slsWaitingView = false;
   slsWaitingOverlayVisible = false;
@@ -1385,6 +1390,7 @@ void Infoboxprint(const char* input) {
 // variable and only pushes its sprite/region to the TFT when something changed.
 
 void ShowFreq(void) {
+  if (EpgVisible()) return;
   // Frequency belongs exclusively to the normal radio screen. AUTO seek or a
   // tune already running before System info was opened may still update the
   // radio state in the background, but must never paint through this overlay.
@@ -1809,17 +1815,18 @@ void ShowProtectionlevel(void) {
 
 static void ShowEpgIcon(void) {
   static bool visibleOld = false;
-  static bool presentOld = false;
+  static epg::IndicatorState stateOld = epg::IndicatorState::Absent;
   const bool visible = !radio.isFm();
-  const bool present = visible && radio.spiPresent();
-  if (!displayreset && visible == visibleOld && present == presentOld) return;
+  const epg::IndicatorState state = epg::indicatorState();
+  if (!displayreset && visible == visibleOld && state == stateOld) return;
 
   // Use the same loaded FONT16 as the codec. E/P/G glyphs fit all their
   // antialiasing rows in this 14-pixel crop, above the PR row at y=65.
   RestoreMainBackgroundRegion(58, 50, 58, 14);
   if (visible) {
-    // Use the cyan/grey foregrounds of slideshowon/slideshowoff artwork.
-    const uint16_t color = present ? 0x06DFU : 0x3A4AU;
+    // Grey/cyan match slideshow artwork; green means this selection is cached.
+    const uint16_t color = state == epg::IndicatorState::Ready ? 0x07E0U :
+                           state == epg::IndicatorState::Present ? 0x06DFU : 0x3A4AU;
     FullLineSprite.pushImage(-58, -50, 320, 240, Background);
     FullLineSprite.setTextDatum(TC_DATUM);
     FullLineSprite.setTextColor(color, BackgroundColor2, false);
@@ -1827,7 +1834,7 @@ static void ShowEpgIcon(void) {
     PushMainSprite(FullLineSprite, 58, 50, 58, 14);
   }
   visibleOld = visible;
-  presentOld = present;
+  stateOld = state;
 }
 
 void ShowAudioMode(void) {
@@ -2431,3 +2438,9 @@ void ShowTuneMode(void) {
   }
   PushMainSprite(ModeSprite, 6, 33, 46, 47);
 }
+
+// Share existing flash assets with the EPG renderer; no duplicate bitmap copies.
+// EPG uses a single-panel frame and aligns time/name columns with spacing.
+// The station list bitmap has extra ID/type columns that do not belong here.
+const uint16_t* EpgBackground(bool) { return configurationbackground; }
+const uint16_t* EpgSelector() { return selector; }

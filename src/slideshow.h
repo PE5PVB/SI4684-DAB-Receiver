@@ -6,6 +6,7 @@
 #define SLIDESHOW_H
 
 #include "Arduino.h"
+#include "epg_core.h"
 #include <TFT_eSPI.h>
 #include <PNGdec.h>                 // https://github.com/bitbank2/PNGdec
 #include "JPEGdecoder.h"
@@ -25,6 +26,7 @@ bool SlideshowPrepareWorkspace(void);
 // Decode and display the current RAM image; called from the main loop when
 // radio.SlideShowAvailable && radio.SlideShowUpdate are set.
 bool ShowSlideShow(void);
+bool DrawEpgLogo(epg::Bytes data, size_t size, int x, int y, int width, int height);
 // True only when the most recent ShowSlideShow() attempt began modifying TFT.
 bool SlideshowLastRenderTouchedDisplay(void);
 

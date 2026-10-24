@@ -1,3 +1,5 @@
+#include "src/epg_runtime.h"
+#include "src/epg_ui.h"
 // SI4684 DAB/FM Receiver - main Arduino sketch.
 //
 // HARDWARE WIRING (authoritative for this PCB)
@@ -536,6 +538,16 @@ static void ShowSlideshowWaitingOverlay(void) {
   tftPrint(0, slideshowLoadingText[language], 180, 62,
            PrimaryColor, BackgroundColor3, 16);
   slsWaitingOverlayVisible = true;
+}
+
+// EPG shares the slideshow status panel, without slideshow-specific artwork.
+void DrawEpgWaitingPanel(const char* text) {
+  DrawNeutralStatusPanel();
+  // A compact programme/list symbol uses the current theme colours.
+  tft.drawRoundRect(38, 59, 27, 24, 3, ActiveColor);
+  for (int row = 0; row < 3; ++row)
+    tft.drawLine(43, 65 + row * 6, 60, 65 + row * 6, PrimaryColor);
+  tftPrintFixed(-1, text, 76, 62, PrimaryColor, BackgroundColor3, 16);
 }
 
 static uint32_t SlideshowFingerprint(const uint8_t* data, uint32_t size) {
@@ -1097,6 +1109,7 @@ void ExitSettingsMenu(void) {
 }
 
 void CycleTuneMode(void) {
+  if (EpgVisible()) { EpgBack(); return; }
   // A tune-mode change starts a new input context. Do not let an unfinished
   // AUTO seek or a debounced Rotary2 selection consume the first Rotary1 tick
   // in the newly selected mode.
@@ -1175,7 +1188,7 @@ void RemoteTuneAction(int8_t direction, bool repeat) {
 
   // In Settings / service list / slideshow / diagnostics keep exactly the same
   // contextual behavior as the physical primary encoder.
-  if (menu || ChannelListView || SlideShowView || ShowServiceInformation) {
+  if (menu || EpgVisible() || ChannelListView || SlideShowView || ShowServiceInformation) {
     if (up) KeyUp(); else KeyDown();
     return;
   }
@@ -1753,6 +1766,7 @@ void loop(void) {
   ProcessFmFullScan();
   ProcessDabFullScan();
   Communication();
+  epg::poll();
   diagSerial.service(64U);
   if (displayreset) ShowTuneModeCurrent();
   displayreset = false;
@@ -1847,12 +1861,14 @@ void loop(void) {
   if (rotary == -1) KeyUp();
   if (rotary == 1) KeyDown();
 
-  // Buttons: Mode and Standby are long-press capable (1 s) and self-check
-  // their own pin every iteration. The three other buttons act on the press
-  // edge only and use the buttonEdge() helper to one-shot the action.
-  static bool slArmed = true, rot2Armed = true;
+  // MODE/standby and SL use non-blocking long-press handling. SL short
+  // slideshow action fires only on release; a long press opens EPG once.
+  static bool rot2Armed = true;
+  static fm_features::PressTracker slTracker;
   ModeButtonPress();                                                            // self-checks pin (long-press)
-  if (!menu && buttonEdge(SLBUTTON, slArmed)) SlideShowButtonPress();
+  const uint8_t slAction = slTracker.update(digitalRead(SLBUTTON) == LOW, millis(), 1000UL);
+  if (!menu && slAction == 1U) SlideShowButtonPress();
+  if (!menu && slAction == 2U && fmScanState == FmScanState::Idle && dabFullScanState == DabFullScanState::Idle) EpgToggle();
   if (!menu) StandbyButtonPress();                                              // self-checks pin (long-press)
   Rotary1ButtonProcess();
   if (!menu && buttonEdge(ROTARY_BUTTON2, rot2Armed)) Button2Press();
@@ -1869,7 +1885,7 @@ void loop(void) {
 // Always pump an in-flight radio command. During manual selection, suppress
 // only new metadata/DSRV scheduling so CTS cannot expire behind the debounce.
 void ProcessDAB(void) {
-  const bool fmAfAllowed = radioMode == RADIO_MODE_FM && !menu && !tuning &&
+  const bool fmAfAllowed = radioMode == RADIO_MODE_FM && !menu && !EpgVisible() && !tuning &&
       !seek && !store && !memorystore && fmScanState == FmScanState::Idle &&
       dabFullScanState == DabFullScanState::Idle && !ChannelListView &&
       !DabGlobalListView && !SlideShowView && !ShowServiceInformation;
@@ -2009,6 +2025,14 @@ void ProcessDAB(void) {
     return;
   }
 
+  // EPG is modal for drawing only. Radio, recovery, metadata restore and scans
+  // above remain cooperative; no main-screen widget or auto-SLS can overpaint it.
+  if (EpgVisible() && !menu) {
+    if (radio.SlideShowAvailable && radio.SlideShowUpdate) radio.acknowledgeSlideshow();
+    EpgDraw();
+    return;
+  }
+
   // A manually armed waiting overlay is not a full-screen slideshow. Keep the
   // normal DAB information alive below it. Once an image completes, leave this
   // branch and let the existing full-screen renderer display that image.
@@ -2114,6 +2138,7 @@ void ProcessDAB(void) {
 
 // Leave the volume overlay and redraw whichever view was visible underneath.
 void closeVolume(void) {
+  if (EpgVisible()) { setvolume = false; EpgDraw(true); return; }
   if (ChannelListView) {
     BuildChannelList();
   } else if (ShowServiceInformation) {
@@ -2324,7 +2349,7 @@ void DABSelectService(bool dir) {
 void ShowTuneModeCurrent(void) {
   // This sprite contains a cut-out of the main-screen background. Never push
   // it over a full-screen overlay such as Service Information.
-  if (menu || SlideShowView || ChannelListView || ShowServiceInformation) return;
+  if (menu || EpgVisible() || SlideShowView || ChannelListView || ShowServiceInformation) return;
 
   // Exactly one tune mode is highlighted:
   // selected = ActiveColor, inactive = GreyoutColor.
@@ -2829,6 +2854,7 @@ void Rotary1ButtonProcess(void) {
     return;
   }
   if (action != 2U) return;
+  if (EpgVisible()) return;
   tottimer = millis();
   if (menu || ChannelListView || SlideShowView || ShowServiceInformation ||
       fmScanState != FmScanState::Idle ||
@@ -2843,6 +2869,7 @@ void Rotary1ButtonProcess(void) {
 // Rotary 1 click: stores/recalls a memory preset when in TUNE_MEM, toggles
 // the channel-list view otherwise, or routes to DoMenu() when the menu is open.
 void ButtonPress(void) {
+  if (EpgVisible() && !menu) { EpgClick(); return; }
   tottimer = millis();
   if (fmScanState != FmScanState::Idle) {
     CancelFmFullScan();
@@ -2954,6 +2981,7 @@ void Button2Press(void) {
 // Also called from ProcessDAB() when autoslideshow is enabled and from KeyUp()
 // to leave slideshow view via the rotary.
 void SlideShowButtonPress(void) {
+  if (EpgVisible()) { EpgBack(); return; }
   if (radioMode == RADIO_MODE_FM) return;
   DIAG_PRINTF("[SLS/UI] button available=%u update=%u receiving=%u view=%u\n",
                 radio.SlideShowAvailable ? 1U : 0U,
@@ -2994,6 +3022,17 @@ void SlideShowButtonPress(void) {
 void ModeButtonPress(void) {
   static unsigned long pressStart = 0;
   static bool actionDone = false;
+  static fm_features::PressTracker epgTracker;
+  static bool epgOwned = false;
+  if (EpgVisible() || epgOwned) {
+    epgOwned = true;
+    const bool down = digitalRead(MODEBUTTON) == LOW;
+    const uint8_t action = epgTracker.update(down, millis(), 1000UL);
+    if (action == 1U) EpgBack();
+    if (action == 2U) { EpgSuspend(); CaptureSettingsSnapshot(); menu = true; BuildMenu(); }
+    if (!down) { epgOwned = false; pressStart = 0; actionDone = false; }
+    return;
+  }
   const bool pressed = (digitalRead(MODEBUTTON) == LOW);
 
   if (!pressed) {
@@ -3063,10 +3102,10 @@ void StandbyButtonPress(void) {
     if (pressStart != 0) {
       if (!actionDone) {
         // Short press release in main view: toggle service info
-        if (!ShowServiceInformation && !SlideShowView && !ChannelListView) {
+        if (!EpgVisible() && !ShowServiceInformation && !SlideShowView && !ChannelListView) {
           ShowServiceInfo();
           ShowServiceInformation = true;
-        } else {
+        } else if (!EpgVisible()) {
           BuildDisplay();
         }
       }
@@ -3128,6 +3167,7 @@ void StandbyButtonPress(void) {
 //   TUNE_MAN/AUTO  → next frequency
 //   TUNE_MEM       → next preset
 void KeyUp(void) {
+  if (EpgVisible()) { rotary = rotary2 = 0; tottimer = millis(); EpgMove(1,false); return; }
   if (fmScanState != FmScanState::Idle) CancelFmFullScan();
   if (dabFullScanState != DabFullScanState::Idle) CancelDabFullScan();
   if (setvolume) closeVolume();
@@ -3211,6 +3251,7 @@ void KeyUp(void) {
 
 // Rotary 1 turn downwards. Mirror of KeyUp() — see that function for context map.
 void KeyDown(void) {
+  if (EpgVisible()) { rotary = rotary2 = 0; tottimer = millis(); EpgMove(-1,false); return; }
   if (fmScanState != FmScanState::Idle) CancelFmFullScan();
   if (dabFullScanState != DabFullScanState::Idle) CancelDabFullScan();
   if (setvolume) closeVolume();
@@ -3387,6 +3428,7 @@ static void CloseSlideshowWaitingForDabGlobalSelection(void) {
 // - FM MAN/MEM: existing regional fine step.
 // - After pressing rotary 2: volume mode; rotation adjusts volume.
 void KeyUp2(void) {
+  if (EpgVisible() && !setvolume) { rotary = rotary2 = 0; tottimer = millis(); EpgMove(1,true); return; }
   tottimer = millis();
   CloseSlideshowWaitingForDabGlobalSelection();
 
@@ -3437,6 +3479,7 @@ void KeyUp2(void) {
 // - FM MAN/MEM: existing regional fine step.
 // - After pressing rotary 2: volume mode; rotation adjusts volume.
 void KeyDown2(void) {
+  if (EpgVisible() && !setvolume) { rotary = rotary2 = 0; tottimer = millis(); EpgMove(-1,true); return; }
   tottimer = millis();
   rotary = 0;
   rotary2 = 0;
@@ -4115,3 +4158,6 @@ void loadFonts(bool option) {
     ModeSprite.unloadFont();
   }
 }
+
+// Reuse the main font asset instead of linking another private FONT16 copy.
+const uint8_t* EpgFont16() { return FONT16; }

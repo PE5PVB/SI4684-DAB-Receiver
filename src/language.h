@@ -3,7 +3,7 @@
 
 #include "FmRegion.h"
 
-#define VERSION "v2.4"
+#define VERSION "v2.5b"
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
@@ -974,6 +974,23 @@ static const char* const restartingText[8] PROGMEM = {
 static const char* const i2sAudioMenuText[8] PROGMEM = {
   "I²S Audio", "I²S-audio", "Ήχος I²S", "I²S-Audio",
   "Audio I²S", "Audio I²S", "Dźwięk I²S", "Audio I²S"
+};
+
+// EPG UI strings follow the existing radio language order.
+enum EpgText {
+  EPG_OVERVIEW, EPG_PROGRAM, EPG_DETAIL, EPG_WAIT_SI, EPG_WAIT_PROGRAM,
+  EPG_UNAVAILABLE, EPG_STALE, EPG_NO_TIME, EPG_AMBIGUOUS, EPG_MEMORY,
+  EPG_LIMIT, EPG_NOW, EPG_NEXT, EPG_OVERLAP, EPG_ACTUAL, EPG_TEXT_COUNT
+};
+static const char* const epgText[8][EPG_TEXT_COUNT] PROGMEM = {
+  {"EPG NOW / NEXT", "EPG PROGRAMME", "EPG DETAIL", "Waiting for station", "Waiting for programme...", "EPG unavailable", "EPG unavailable / outdated", "Time unavailable", "Ambiguous service", "EPG: insufficient memory", "LIMIT", "NOW", "NEXT", "NOW (overlap)", "Actual %s (planned time kept)"},
+  {"EPG NU / STRAKS", "EPG PROGRAMMA", "EPG DETAILS", "Wachten op zender", "Wachten op programma...", "EPG niet beschikbaar", "EPG ontbreekt / verouderd", "Tijd niet beschikbaar", "Onzekere zender", "EPG: te weinig geheugen", "LIMIET", "NU", "STRAKS", "NU (overlap)", "Werkelijk %s (planning blijft)"},
+  {"EPG ΤΩΡΑ / ΜΕΤΑ", "EPG ΠΡΟΓΡΑΜΜΑ", "EPG ΛΕΠΤΟΜΕΡΕΙΕΣ", "Αναμονή σταθμού", "Αναμονή προγράμματος...", "EPG μη διαθέσιμο", "EPG μη διαθέσιμο / παλιό", "Ώρα μη διαθέσιμη", "Ασαφής σταθμός", "EPG: ανεπαρκής μνήμη", "ΟΡΙΟ", "ΤΩΡΑ", "ΜΕΤΑ", "ΤΩΡΑ (επικάλυψη)", "Έναρξη %s (βάσει σχεδίου)"},
+  {"EPG JETZT / DANACH", "EPG PROGRAMM", "EPG DETAILS", "Warte auf Sender", "Warte auf Programm...", "EPG nicht verfügbar", "EPG fehlt / veraltet", "Zeit nicht verfügbar", "Sender nicht eindeutig", "EPG: zu wenig Speicher", "LIMIT", "JETZT", "DANACH", "JETZT (Überlappung)", "Beginn %s (Plan bleibt)"},
+  {"EPG EN COURS / APRÈS", "EPG PROGRAMME", "EPG DÉTAIL", "Attente de la station", "Attente du programme...", "EPG indisponible", "EPG indisponible / périmé", "Heure indisponible", "Station ambiguë", "EPG : mémoire insuffisante", "LIMITE", "EN COURS", "ENSUITE", "EN COURS (chevauchement)", "Début %s (horaire conservé)"},
+  {"EPG AHORA / DESPUÉS", "EPG PROGRAMA", "EPG DETALLE", "Esperando emisora", "Esperando programa...", "EPG no disponible", "EPG no disponible / antiguo", "Hora no disponible", "Emisora ambigua", "EPG: memoria insuficiente", "LÍMITE", "AHORA", "DESPUÉS", "AHORA (solapamiento)", "Inicio %s (horario conservado)"},
+  {"EPG TERAZ / POTEM", "EPG PROGRAM", "EPG SZCZEGÓŁY", "Czekam na stację", "Czekam na program...", "EPG niedostępne", "EPG niedostępne / nieaktualne", "Czas niedostępny", "Niejednoznaczna stacja", "EPG: za mało pamięci", "LIMIT", "TERAZ", "POTEM", "TERAZ (nakładanie)", "Początek %s (plan zachowany)"},
+  {"EPG ACUM / URMEAZĂ", "EPG PROGRAM", "EPG DETALII", "Aștept postul", "Aștept programul...", "EPG indisponibil", "EPG indisponibil / expirat", "Ora indisponibilă", "Post ambiguu", "EPG: memorie insuficientă", "LIMITĂ", "ACUM", "URMEAZĂ", "ACUM (suprapunere)", "Început %s (plan păstrat)"}
 };
 
 #endif

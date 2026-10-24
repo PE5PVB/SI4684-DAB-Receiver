@@ -11,6 +11,7 @@
 #include "constants.h"
 #include "dab_scheduler_policy.h"
 #include "dab_user_application.h"
+#include "epg_runtime.h"
 #include "esp_heap_caps.h"
 
 extern void SlideshowReceptionState(bool active);
@@ -30,6 +31,7 @@ unsigned char SPIbuffer[4096];      // shared SPI tx/rx buffer (commands and rep
 bool once = false;
 
 static uint32_t slideshowFirstSegmentMs = 0;
+static bool epgContinuous = false, epgManualPending = false, epgProductionPaused = false;
 
 bool EnsembleInfoSet;
 // FM PTY value 0 is a valid RDS value ("Unknown"), so validity must be
@@ -690,6 +692,8 @@ bool DAB::begin(uint8_t SSpin, RadioMode requestedMode) {
   dabUaLogPending = false;
   dabUaDebugWasEnabled = false;
   dabUaNextQueryMs = millis();
+  epgContinuous = epgManualPending = epgProductionPaused = false;
+  epg::liveReset();
   dabSpiProbe = dab_probe::Probe{};
   resetDabSpiDiscovery();
   SlideShowAvailable = false;
@@ -1384,6 +1388,8 @@ void DAB::onHardwareResetComplete(void) {
   dabXpadLogPending = false;
   dabRawUaLog = dab_diag::RawLog{};
   dabServiceLabelValid = false;
+  epgContinuous = epgManualPending = epgProductionPaused = false;
+  epg::liveReset();
   dabSpiProbe = dab_probe::Probe{};
   const si468x::Result aborted = chip.abortCommand();
   dabGeneration = dab_scheduler::nextGeneration(dabGeneration);
@@ -2205,6 +2211,8 @@ void DAB::setFreq(uint8_t freq) {
   if (dab_switch::transitionActive(dabSwitch.state))
     ++diagDabAbandonedSwitchCount;
   dabSwitch.requestSwitch();
+  epg::liveReset();
+  epgProductionPaused = false;
   ++dabTuneRequestId;
   if (dabTuneRequestId == 0) ++dabTuneRequestId;
   dabRequestedFrequency = freq;
@@ -3084,6 +3092,8 @@ void DAB::finishDabCommand(void) {
     if (completed == DabCommand::SpiProbeStart) {
       dabSpiProbe.started(now, result == si468x::Result::Ok,
                           result == si468x::Result::Timeout);
+      if (result == si468x::Result::Ok)
+        epg::liveEndpoint(dabSpiProbe.spi.sid, dabSpiProbe.spi.cid);
       DIAG_PRINTF("[DAB/SPI/TEST] START result=%d reason=%02X; no SLS STOP issued\n",
                   static_cast<int>(result), static_cast<unsigned>(chip.lastDeviceError()));
     } else {
@@ -3439,6 +3449,8 @@ void DAB::finishDabCommand(void) {
           dabCommandRequestId == dabTuneRequestId) {
         dabWaitingForStc = false;
         tunePending = false;
+        epgContinuous = epgManualPending = epgProductionPaused = false;
+        epg::liveReset();
         dabSpiProbe = dab_probe::Probe{};  // new tuned ensemble, no old probe context
         setDabSwitchState(dab_switch::State::Idle);
         if (signallock) {
@@ -3531,7 +3543,7 @@ void DAB::finishDabCommand(void) {
           suppressedIdentities = 0;
         } else dab_probe::increment(suppressedIdentities);
       }
-      if (dabSpiProbe.running() && diagnosticDebug) {
+      if (!epgContinuous && dabSpiProbe.running() && diagnosticDebug) {
         if (static_cast<uint32_t>(routeNow - dabSpiProbeLastRouteMs[routeIndex]) >= 500U &&
             diagSerial.availableForWrite() >= 256) {
           dabSpiProbeLastRouteMs[routeIndex] = routeNow;
@@ -3549,7 +3561,18 @@ void DAB::finishDabCommand(void) {
         } else dab_probe::increment(dabSpiProbeSuppressedRoutes);
       }
       if (header.byteCount > 0U) {
-        if (feedLegacy) {
+        if (target == dab_probe::Route::Spi) {
+          if (header.dataSource == 0U && header.byteCount <= sizeof(SPIbuffer) - 25U &&
+              epg::liveEnabled() && dabSpiProbe.state == dab_probe::State::Observing &&
+              dabActiveServiceValid && !dabServiceRequestPending && !dabTuneRequestPending) {
+            const si468x::Result readResult = chip.readCurrentReply(
+                SPIbuffer + 1, static_cast<uint16_t>(24U + header.byteCount));
+            finishCommandDiagnostics(readResult);
+            if (readResult == si468x::Result::Ok)
+              epg::livePayload(SPIbuffer + 25, header.byteCount);
+            else ++diagDabCommandErrorCount;
+          }
+        } else if (feedLegacy) {
           getServiceData();
         } else if (target != dab_probe::Route::Spi) {
           ++diagDabStaleMotCount;
@@ -3983,13 +4006,26 @@ void DAB::scheduleNextDabCommand(void) {
     return;
 
   const uint32_t now = millis();
-  const bool sameProbeContext = diagnosticDebug &&
+  // Production packet reception shares the existing serialized START/STOP
+  // cleanup owner. Explicit DEBUG SPI still runs its original finite window.
+  if (dabSpiProbe.state == dab_probe::State::Idle) {
+    epgContinuous = false;
+    if (epgManualPending) { epgManualPending = false; requestSpiProbe(); }
+    else if (!epgProductionPaused && epg::liveEnabled() && !epg::replayActive() &&
+             dabSpiDiscovery.available() && requestSpiProbe()) epgContinuous = true;
+  }
+  const bool sameProbeContext = (epgContinuous || diagnosticDebug) &&
+      (!epgContinuous || (dabSpiPresent && dabSpiDiscovery.status != dab_spi::Status::Ambiguous)) &&
+      !epg::replayActive() && signallock && !dabServiceRequestPending && !dabTuneRequestPending &&
       dabSpiProbe.requestId == dabSwitch.requestId && dabActiveServiceValid &&
       dabSpiProbe.audio.matches(dabActiveServiceId, dabActiveComponentId) &&
       dabSpiProbe.sls.valid == dabActiveDataServiceValid &&
       (!dabActiveDataServiceValid ||
        dabSpiProbe.sls.matches(dabActiveDataServiceId, dabActiveDataComponentId));
-  dabSpiProbe.advance(now, sameProbeContext);
+  // Continuous reception has no observation deadline. Context changes still
+  // take the same bounded STOP/cleanup path, before any tune/service teardown.
+  if (!(epgContinuous && sameProbeContext && dabSpiProbe.state == dab_probe::State::Observing))
+    dabSpiProbe.advance(now, sameProbeContext);
   const bool cleanupPending = dabSpiProbe.state == dab_probe::State::StopRequested;
   if (cleanupPending && dab_probe::due(now, dabSpiProbe.nextActionMs)) {
     uint8_t args[11] = {0};
@@ -4244,6 +4280,12 @@ void DAB::scheduleNextDabCommand(void) {
 }
 
 bool DAB::requestSpiProbe(void) {
+  if (epg::replayActive() || dabSpiProbe.state == dab_probe::State::CleanupFailed) return false;
+  if (epgContinuous && dabSpiProbe.spi.valid) {
+    epgManualPending = true;
+    dabSpiProbe.stop(millis());
+    return true;
+  }
   if (isFm() || !dabSpiDiscovery.available() || !dabActiveServiceValid ||
       !signallock || dabServiceRequestPending || dabTuneRequestPending ||
       (dabSwitch.state != dab_switch::State::Ready &&
@@ -4268,6 +4310,7 @@ bool DAB::requestSpiProbe(void) {
 }
 
 void DAB::stopSpiProbe(void) {
+  epgManualPending = false; epgProductionPaused = true;
   dabSpiProbe.stop(millis());
   DIAG_PRINTLN("[DAB/SPI/TEST] stop requested");
 }
@@ -4572,7 +4615,8 @@ void DAB::Update(bool allowNewWork) {
   if (allowNewWork && !chip.busy()) {
     const bool uaRefreshEligible = !isFm() && dabServiceListReady &&
         dabActiveServiceValid && signallock && !dabServiceRequestPending &&
-        !dabTuneRequestPending && !dabSpiProbe.running() && !dabSpiProbe.spi.valid &&
+        !dabTuneRequestPending && (!dabSpiProbe.running() || epgContinuous) &&
+        (!dabSpiProbe.spi.valid || epgContinuous) &&
         (dabSwitch.state == dab_switch::State::Ready ||
          dabSwitch.state == dab_switch::State::AudioOnly);
     if (dabUaRefresh.ready(now, uaRefreshEligible)) {
@@ -4581,7 +4625,7 @@ void DAB::Update(bool allowNewWork) {
     }
     refreshDabSpiDiscovery();
     logDabUserApplications(now);
-    if (dabSpiProbe.running() &&
+    if (!epgContinuous && dabSpiProbe.running() &&
         static_cast<uint32_t>(now - dabSpiProbeLastSummaryMs) >= 5000U) {
       dabSpiProbeLastSummaryMs = now;
       logSpiProbeSummary("progress");
