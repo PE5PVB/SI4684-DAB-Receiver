@@ -1,24 +1,50 @@
 #include "JPEGdecoder.h"
+#include "constants.h"
+#include <cstdlib>
+#include <cstring>
+
+#define PJ_MAX_COMPONENTS 4
+#define PJ_MAX_HTABLES    4
+
+class MemoryFile {
+ public:
+  MemoryFile(const uint8_t* data, size_t size)
+      : data_(data), size_(size), position_(0), valid_(data != nullptr && size != 0) {}
+  explicit operator bool() const { return data_ != nullptr && size_ != 0; }
+  int read() {
+    if (position_ < size_) return data_[position_++];
+    valid_ = false;
+    return -1;
+  }
+  bool seek(size_t position) {
+    if (position > size_) { valid_ = false; return false; }
+    position_ = position;
+    valid_ = true;
+    return true;
+  }
+  size_t position() const { return position_; }
+  bool valid() const { return valid_; }
+  void close() {}
+
+ private:
+  const uint8_t* data_;
+  size_t size_;
+  size_t position_;
+  bool valid_;
+};
 
 // ============================================================================
 // JPEG decoder for ESP32 (no PSRAM)
 //
-// Uses multi-pass row-by-row decoding: for each MCU row, re-reads the file
-// from the start and decodes all scans, storing only the current row's DCT
-// coefficients in RAM (~15-20KB). This avoids needing the full 225KB+
-// coefficient buffer that traditional progressive decoders require.
+// DAB SlideShow Simple Profile decoder path. ETSI TS 101 499 requires
+// baseline JPEG support; progressive/multiscan support is optional. This
+// receiver supports single-scan SOF0 baseline and Huffman-coded SOF2
+// progressive images using repeated scan passes over one MCU-row workspace.
 //
-// A non-zero bitmap tracks which coefficient positions have been set by
-// AC-first scans, so that AC-refine scans read the correct number of bits
-// even when blocks are being discarded (not in the target row).
-//
-// Supports: SOF0 (baseline) and SOF2 (progressive DCT)
-// Subsampling: YCbCr 4:4:4 / 4:2:2 / 4:2:0 / grayscale / non-standard
-// Max image size: 320x240 pixels
+// Display envelope: up to 320 x 240, 8-bit samples, grayscale or three-
+// component YCbCr. Four-component JPEG is rejected explicitly rather than
+// rendered with an incorrect CMYK/YCCK transform.
 // ============================================================================
-
-#define PJ_MAX_COMPONENTS 3
-#define PJ_MAX_HTABLES    4
 
 // JPEG markers
 #define M_SOF0  0xC0
@@ -35,6 +61,181 @@
 #define M_APP15 0xEF
 #define M_COM   0xFE
 
+const char* JPEGpreflightName(JPEGPreflightResult result) {
+  switch (result) {
+    case JPEGPreflightResult::SupportedBaseline: return "SUPPORTED_BASELINE_JPEG";
+    case JPEGPreflightResult::SupportedProgressive: return "SUPPORTED_PROGRESSIVE_JPEG";
+    case JPEGPreflightResult::InvalidJpeg: return "INVALID_JPEG";
+    case JPEGPreflightResult::UnsupportedProgressive: return "UNSUPPORTED_PROGRESSIVE_JPEG";
+    case JPEGPreflightResult::UnsupportedMultiscan: return "UNSUPPORTED_MULTISCAN_JPEG";
+    case JPEGPreflightResult::UnsupportedDimensions: return "UNSUPPORTED_JPEG_DIMENSIONS";
+    case JPEGPreflightResult::UnsupportedComponents: return "UNSUPPORTED_JPEG_COMPONENTS";
+  }
+  return "INVALID_JPEG";
+}
+
+JPEGPreflightResult JPEGpreflight(const uint8_t* data, size_t size,
+                                  int displayWidth, int displayHeight,
+                                  JPEGImageInfo& info) {
+  info = JPEGImageInfo();
+  if (!data || size < 4U || data[0] != 0xFFU || data[1] != M_SOI)
+    return JPEGPreflightResult::InvalidJpeg;
+
+  size_t position = 2U;
+  int pendingMarker = -1;
+  uint8_t firstScanComponents = 0;
+  uint8_t frameComponentIds[PJ_MAX_COMPONENTS] = {0};
+  bool foundEoi = false;
+
+  while (position < size || pendingMarker >= 0) {
+    int marker = pendingMarker;
+    pendingMarker = -1;
+    if (marker < 0) {
+      if (data[position++] != 0xFFU) return JPEGPreflightResult::InvalidJpeg;
+      while (position < size && data[position] == 0xFFU) ++position;
+      if (position >= size) return JPEGPreflightResult::InvalidJpeg;
+      marker = data[position++];
+    }
+
+    if (marker == M_EOI) { foundEoi = true; break; }
+    if (marker == M_SOI || (marker >= M_RST0 && marker <= M_RST7))
+      return JPEGPreflightResult::InvalidJpeg;
+    if (marker == 0xC8 || marker == 0xCC ||
+        ((marker >= 0xC0 && marker <= 0xCF) &&
+         marker != M_SOF0 && marker != M_SOF2 && marker != M_DHT))
+      return JPEGPreflightResult::InvalidJpeg;
+    if (position + 2U > size) return JPEGPreflightResult::InvalidJpeg;
+    const uint16_t segmentLength = static_cast<uint16_t>(
+        (static_cast<uint16_t>(data[position]) << 8) | data[position + 1U]);
+    if (segmentLength < 2U || position + segmentLength > size)
+      return JPEGPreflightResult::InvalidJpeg;
+    const size_t payload = position + 2U;
+    const size_t segmentEnd = position + segmentLength;
+
+    if (marker == M_APP0) info.app0 = true;
+    if (marker == M_SOF0 || marker == M_SOF2) {
+      if (info.sof0 || info.sof2 || segmentLength < 11U || data[payload] != 8U)
+        return JPEGPreflightResult::InvalidJpeg;
+      info.sof0 = marker == M_SOF0;
+      info.sof2 = marker == M_SOF2;
+      info.height = static_cast<uint16_t>((data[payload + 1U] << 8) |
+                                          data[payload + 2U]);
+      info.width = static_cast<uint16_t>((data[payload + 3U] << 8) |
+                                         data[payload + 4U]);
+      info.components = data[payload + 5U];
+      if (info.width == 0U || info.height == 0U || info.components == 0U ||
+          segmentLength != static_cast<uint16_t>(8U + 3U * info.components))
+        return JPEGPreflightResult::InvalidJpeg;
+      for (uint8_t component = 0; component < info.components; ++component) {
+        const uint8_t componentId = data[payload + 6U + 3U * component];
+        for (uint8_t previous = 0; previous < component; ++previous)
+          if (frameComponentIds[previous] == componentId)
+            return JPEGPreflightResult::InvalidJpeg;
+        frameComponentIds[component] = componentId;
+        const uint8_t sampling = data[payload + 7U + 3U * component];
+        const uint8_t horizontal = sampling >> 4;
+        const uint8_t vertical = sampling & 0x0FU;
+        if (horizontal == 0U || horizontal > 4U || vertical == 0U || vertical > 4U)
+          return JPEGPreflightResult::InvalidJpeg;
+        if (horizontal > info.maxHorizontalSampling)
+          info.maxHorizontalSampling = horizontal;
+        if (vertical > info.maxVerticalSampling)
+          info.maxVerticalSampling = vertical;
+      }
+    } else if (marker == M_DRI) {
+      if (segmentLength != 4U) return JPEGPreflightResult::InvalidJpeg;
+      info.restartInterval = static_cast<uint16_t>(
+          (static_cast<uint16_t>(data[payload]) << 8) | data[payload + 1U]);
+    }
+
+    position = segmentEnd;
+    if (marker != M_SOS) continue;
+    if (!info.sof0 && !info.sof2) return JPEGPreflightResult::InvalidJpeg;
+    const uint8_t scanComponents = data[payload];
+    if (scanComponents == 0U || scanComponents > info.components ||
+        segmentLength != static_cast<uint16_t>(6U + 2U * scanComponents))
+      return JPEGPreflightResult::InvalidJpeg;
+    uint8_t seenScanComponents = 0U;
+    for (uint8_t scanComponent = 0; scanComponent < scanComponents;
+         ++scanComponent) {
+      const uint8_t componentId = data[payload + 1U + 2U * scanComponent];
+      bool foundComponent = false;
+      for (uint8_t frameComponent = 0; frameComponent < info.components;
+           ++frameComponent) {
+        if (frameComponentIds[frameComponent] == componentId) {
+          const uint8_t mask = static_cast<uint8_t>(1U << frameComponent);
+          if ((seenScanComponents & mask) != 0U)
+            return JPEGPreflightResult::InvalidJpeg;
+          seenScanComponents |= mask;
+          foundComponent = true;
+          break;
+        }
+      }
+      if (!foundComponent) return JPEGPreflightResult::InvalidJpeg;
+      const uint8_t tableSelectors =
+          data[payload + 2U + 2U * scanComponent];
+      if ((tableSelectors >> 4) >= PJ_MAX_HTABLES ||
+          (tableSelectors & 0x0FU) >= PJ_MAX_HTABLES)
+        return JPEGPreflightResult::InvalidJpeg;
+    }
+    const size_t spectralOffset = payload + 1U + 2U * scanComponents;
+    const uint8_t spectralStart = data[spectralOffset];
+    const uint8_t spectralEnd = data[spectralOffset + 1U];
+    const uint8_t approximation = data[spectralOffset + 2U];
+    const uint8_t approximationHigh = approximation >> 4;
+    const uint8_t approximationLow = approximation & 0x0FU;
+    if (spectralStart > spectralEnd || spectralEnd > 63U ||
+        approximationHigh > 13U || approximationLow > 13U)
+      return JPEGPreflightResult::InvalidJpeg;
+    if (info.sof2 &&
+        ((spectralStart == 0U && spectralEnd != 0U) ||
+         (spectralStart != 0U && scanComponents != 1U)))
+      return JPEGPreflightResult::InvalidJpeg;
+    if (info.sof0 &&
+        (spectralStart != 0U || spectralEnd != 63U ||
+         approximationHigh != 0U || approximationLow != 0U))
+      return JPEGPreflightResult::InvalidJpeg;
+    if (info.scans == 0U) firstScanComponents = scanComponents;
+    if (info.scans == 0xFFU) return JPEGPreflightResult::InvalidJpeg;
+    ++info.scans;
+
+    // Skip entropy-coded data while respecting byte stuffing and restart
+    // markers. The first non-stuffed, non-RST marker is processed by the outer
+    // loop without treating entropy bytes as segment headers.
+    while (position < size) {
+      if (data[position++] != 0xFFU) continue;
+      while (position < size && data[position] == 0xFFU) ++position;
+      if (position >= size) return JPEGPreflightResult::InvalidJpeg;
+      const uint8_t entropyMarker = data[position++];
+      if (entropyMarker == 0x00U) continue;
+      if (entropyMarker >= M_RST0 && entropyMarker <= M_RST7) {
+        ++info.restartMarkers;
+        continue;
+      }
+      pendingMarker = entropyMarker;
+      break;
+    }
+  }
+
+  if (!foundEoi || (!info.sof0 && !info.sof2) || info.scans == 0U)
+    return JPEGPreflightResult::InvalidJpeg;
+  if (info.width > static_cast<uint16_t>(displayWidth) ||
+      info.height > static_cast<uint16_t>(displayHeight)) {
+    const uint16_t halfWidth = static_cast<uint16_t>((info.width + 1U) / 2U);
+    const uint16_t halfHeight = static_cast<uint16_t>((info.height + 1U) / 2U);
+    if (halfWidth > static_cast<uint16_t>(displayWidth) ||
+        halfHeight > static_cast<uint16_t>(displayHeight))
+      return JPEGPreflightResult::UnsupportedDimensions;
+    info.scaleDivisor = 2U;
+  }
+  if (info.components != 1U && info.components != 3U)
+    return JPEGPreflightResult::UnsupportedComponents;
+  if (info.sof2) return JPEGPreflightResult::SupportedProgressive;
+  if (info.scans != 1U || firstScanComponents != info.components)
+    return JPEGPreflightResult::UnsupportedMultiscan;
+  return JPEGPreflightResult::SupportedBaseline;
+}
+
 static const uint8_t zigzag[64] = {
    0,  1,  8, 16,  9,  2,  3, 10,
   17, 24, 32, 25, 18, 11,  4,  5,
@@ -48,7 +249,7 @@ static const uint8_t zigzag[64] = {
 
 static inline int pjExtend(int v, int bits) {
   int vt = 1 << (bits - 1);
-  if (v < vt) v += (-1 << bits) + 1;
+  if (v < vt) v -= (1 << bits) - 1;
   return v;
 }
 
@@ -135,15 +336,17 @@ struct PJComponent {
 
 // --- Bit reader ---
 struct PJBitReader {
-  File* file;
+  MemoryFile* file;
   uint32_t buf;
   int bits;
   bool hitMarker;
   uint8_t markerVal;
+  bool safeTail;
+  bool decodeError;
 
-  void init(File* f) {
+  void init(MemoryFile* f) {
     file = f; buf = 0; bits = 0;
-    hitMarker = false; markerVal = 0;
+    hitMarker = false; markerVal = 0; safeTail = false; decodeError = false;
   }
 
   void reset() {
@@ -173,9 +376,27 @@ struct PJBitReader {
     }
   }
 
+  void fillBitsMin(int required) {
+    while (bits < required && !hitMarker) {
+      int c = file->read();
+      if (c < 0) { hitMarker = true; return; }
+      if (c == 0xFF) {
+        int c2 = file->read();
+        if (c2 < 0) { hitMarker = true; return; }
+        if (c2 == 0x00) {
+          buf = (buf << 8) | 0xFF; bits += 8;
+        } else {
+          hitMarker = true; markerVal = c2; return;
+        }
+      } else {
+        buf = (buf << 8) | c; bits += 8;
+      }
+    }
+  }
+
   int getBits(int n) {
-    if (bits < n) fillBits();
-    if (bits < n) return 0;
+    if (bits < n) { if (safeTail) fillBitsMin(n); else fillBits(); }
+    if (bits < n) { decodeError = true; return 0; }
     bits -= n;
     return (buf >> bits) & ((1 << n) - 1);
   }
@@ -183,7 +404,7 @@ struct PJBitReader {
   int getBit() { return getBits(1); }
 
   int peekBits(int n) {
-    if (bits < n) fillBits();
+    if (bits < n) { if (safeTail) fillBitsMin(n); else fillBits(); }
     if (bits < n) return 0;
     return (buf >> (bits - n)) & ((1 << n) - 1);
   }
@@ -193,18 +414,32 @@ struct PJBitReader {
 
 // --- Huffman decode ---
 static int pjHuffDecode(PJBitReader* br, PJHuffTable* ht) {
-  int look = br->peekBits(8);
-  if (ht->lookLen[look]) {
-    br->skipBits(ht->lookLen[look]);
-    return ht->lookSym[look];
+  if (!ht || ht->total <= 0) { br->decodeError = true; return 0; }
+  if (br->safeTail) {
+    if (br->bits < 8 && !br->hitMarker) br->fillBitsMin(8);
+    if (br->bits >= 8) {
+      int look = (br->buf >> (br->bits - 8)) & 0xFF;
+      if (ht->lookLen[look]) {
+        br->skipBits(ht->lookLen[look]);
+        return ht->lookSym[look];
+      }
+    }
+  } else {
+    int look = br->peekBits(8);
+    if (ht->lookLen[look]) {
+      br->skipBits(ht->lookLen[look]);
+      return ht->lookSym[look];
+    }
   }
   int code = br->getBits(1);
   for (int l = 1; l <= 16; l++) {
+    if (br->decodeError) return 0;
     if (code <= ht->maxcode[l]) {
       return ht->vals[ht->valptr[l] + code - (ht->maxcode[l] - ht->bits[l] + 1)];
     }
     code = (code << 1) | br->getBits(1);
   }
+  br->decodeError = true;
   return 0;
 }
 
@@ -223,6 +458,7 @@ struct PJDecoder {
   uint8_t blocksPerMCU;
 
   int16_t qtable[4][64];
+  bool qtableDefined[4];
   PJHuffTable dcHuff[PJ_MAX_HTABLES];
   PJHuffTable acHuff[PJ_MAX_HTABLES];
   uint16_t restartInterval;
@@ -240,15 +476,36 @@ struct PJDecoder {
 
   // Global block indexing for bitmap
   int compBlockOffset[PJ_MAX_COMPONENTS];
+  uint16_t compBlockCols[PJ_MAX_COMPONENTS];
+  uint16_t compBlockRows[PJ_MAX_COMPONENTS];
   int totalImageBlocks;
+  int8_t coefficientBits[PJ_MAX_COMPONENTS][64];
+  uint8_t scanCount;
 };
+
+// Persistent decoder state. The receiver is single-threaded, so one zeroed
+// instance can be safely reused for every slideshow decode without runtime
+// allocation.
+static PJDecoder pjDecoderState;
 
 // --- Compute global block offsets after SOF parsing ---
 static void pjComputeBlockOffsets(PJDecoder* d) {
   int offset = 0;
   for (int c = 0; c < d->nComp; c++) {
     d->compBlockOffset[c] = offset;
-    offset += (d->mcuCntX * d->comp[c].hSamp) * (d->mcuCntY * d->comp[c].vSamp);
+    d->compBlockCols[c] = static_cast<uint16_t>(
+        (static_cast<uint32_t>(d->width) * d->comp[c].hSamp +
+         static_cast<uint32_t>(d->maxH) * 8U - 1U) /
+        (static_cast<uint32_t>(d->maxH) * 8U));
+    d->compBlockRows[c] = static_cast<uint16_t>(
+        (static_cast<uint32_t>(d->height) * d->comp[c].vSamp +
+         static_cast<uint32_t>(d->maxV) * 8U - 1U) /
+        (static_cast<uint32_t>(d->maxV) * 8U));
+    // Allocate bitmap indices for the padded interleaved-MCU envelope. Dummy
+    // edge blocks are never displayed, but indexing them keeps interleaved
+    // scans bounded and stable when the image size is not MCU-aligned.
+    offset += (d->mcuCntX * d->comp[c].hSamp) *
+              (d->mcuCntY * d->comp[c].vSamp);
   }
   d->totalImageBlocks = offset;
 }
@@ -259,27 +516,30 @@ static inline int pjGlobalBlockIdx(PJDecoder* d, int ci, int blockCol, int block
 }
 
 // --- Marker reading helpers ---
-static int pjRead8(File& f) { return f.read(); }
+static int pjRead8(MemoryFile& f) { return f.read(); }
 
-static int pjRead16(File& f) {
+static int pjRead16(MemoryFile& f) {
   int hi = f.read();
   int lo = f.read();
   return (hi << 8) | lo;
 }
 
-static void pjSkip(File& f, int n) {
+static void pjSkip(MemoryFile& f, int n) {
   while (n-- > 0) f.read();
 }
 
 // --- Parse DQT ---
 // DQT (Define Quantization Table) parser - up to 4 tables, 8 or 16 bit each.
-static bool pjParseDQT(File& f, PJDecoder* d) {
-  int len = pjRead16(f) - 2;
+static bool pjParseDQT(MemoryFile& f, PJDecoder* d) {
+  const int segmentLength = pjRead16(f);
+  if (!f.valid() || segmentLength < 3) return false;
+  int len = segmentLength - 2;
   while (len > 0) {
     int info = pjRead8(f); len--;
     int tblIdx = info & 0x0F;
     int prec = (info >> 4) & 0x0F;
-    if (tblIdx > 3) return false;
+    const int tableBytes = prec ? 128 : 64;
+    if (tblIdx > 3 || prec > 1 || len < tableBytes) return false;
     for (int i = 0; i < 64; i++) {
       if (prec) {
         d->qtable[tblIdx][zigzag[i]] = pjRead16(f);
@@ -289,98 +549,170 @@ static bool pjParseDQT(File& f, PJDecoder* d) {
         len--;
       }
     }
+    d->qtableDefined[tblIdx] = true;
   }
-  return true;
+  return len == 0 && f.valid();
 }
 
 // --- Parse DHT ---
 // DHT (Define Huffman Table) parser - stores DC/AC tables for each component.
-static bool pjParseDHT(File& f, PJDecoder* d) {
-  int len = pjRead16(f) - 2;
+static bool pjParseDHT(MemoryFile& f, PJDecoder* d) {
+  const int segmentLength = pjRead16(f);
+  if (!f.valid() || segmentLength < 19) return false;
+  int len = segmentLength - 2;
   while (len > 0) {
+    if (len < 17) return false;
     int info = pjRead8(f); len--;
     int cls = (info >> 4) & 0x0F;
     int tblIdx = info & 0x0F;
-    if (tblIdx > 3) return false;
+    if (cls > 1 || tblIdx > 3) return false;
     PJHuffTable* ht = (cls == 0) ? &d->dcHuff[tblIdx] : &d->acHuff[tblIdx];
     int total = 0;
     for (int i = 1; i <= 16; i++) {
       ht->bits[i] = pjRead8(f); len--;
       total += ht->bits[i];
     }
+    if (total > 256 || total > len) return false;
     for (int i = 0; i < total; i++) {
       ht->vals[i] = pjRead8(f); len--;
     }
     pjBuildHuff(ht);
   }
-  return true;
+  return len == 0 && f.valid();
 }
 
 // --- Parse SOF2 ---
 // SOF (Start Of Frame) parser - extracts image dimensions and subsampling info.
-static bool pjParseSOF(File& f, PJDecoder* d) {
-  pjRead16(f); // length
-  if (pjRead8(f) != 8) return false; // precision must be 8
+static bool pjParseSOF(MemoryFile& f, PJDecoder* d) {
+  const int segmentLength = pjRead16(f);
+  if (!f.valid() || segmentLength < 11) return false;
+  if (pjRead8(f) != 8) return false; // precision must be 8 bit
   d->height = pjRead16(f);
   d->width = pjRead16(f);
   d->nComp = pjRead8(f);
-  if (d->nComp > PJ_MAX_COMPONENTS) return false;
+  if (d->nComp == 0 || d->nComp > PJ_MAX_COMPONENTS ||
+      segmentLength != 8 + 3 * d->nComp) return false;
 
-  d->maxH = 0; d->maxV = 0;
+  d->maxH = 0;
+  d->maxV = 0;
+  uint16_t blocksPerMcu = 0;
   for (int i = 0; i < d->nComp; i++) {
     d->comp[i].id = pjRead8(f);
-    int samp = pjRead8(f);
+    const int samp = pjRead8(f);
     d->comp[i].hSamp = (samp >> 4) & 0x0F;
     d->comp[i].vSamp = samp & 0x0F;
     d->comp[i].qtSel = pjRead8(f);
+
+    // ISO/IEC 10918 bounds used by baseline interleaved JPEG: sampling
+    // factors 1..4 and at most 10 data units per MCU. Enforce them before
+    // any workspace-size arithmetic.
+    if (d->comp[i].hSamp < 1 || d->comp[i].hSamp > 4 ||
+        d->comp[i].vSamp < 1 || d->comp[i].vSamp > 4 ||
+        d->comp[i].qtSel > 3) return false;
+    blocksPerMcu += static_cast<uint16_t>(d->comp[i].hSamp) *
+                    static_cast<uint16_t>(d->comp[i].vSamp);
+    if (blocksPerMcu > 10U) return false;
+
     if (d->comp[i].hSamp > d->maxH) d->maxH = d->comp[i].hSamp;
     if (d->comp[i].vSamp > d->maxV) d->maxV = d->comp[i].vSamp;
   }
+  if (d->maxH == 0 || d->maxV == 0) return false;
 
   d->mcuW = d->maxH * 8;
   d->mcuH = d->maxV * 8;
   d->mcuCntX = (d->width + d->mcuW - 1) / d->mcuW;
   d->mcuCntY = (d->height + d->mcuH - 1) / d->mcuH;
-
-  d->blocksPerMCU = 0;
-  for (int i = 0; i < d->nComp; i++) {
-    d->blocksPerMCU += d->comp[i].hSamp * d->comp[i].vSamp;
-  }
+  d->blocksPerMCU = static_cast<uint8_t>(blocksPerMcu);
 
   pjComputeBlockOffsets(d);
-  return true;
+  return f.valid();
 }
 
 // --- Parse SOS ---
 // SOS (Start Of Scan) parser - reads component selectors and the band/Ah/Al
 // fields that drive progressive-mode pass dispatch.
-static bool pjParseSOS(File& f, PJDecoder* d) {
-  pjRead16(f); // length
+static bool pjParseSOS(MemoryFile& f, PJDecoder* d) {
+  const int segmentLength = pjRead16(f);
+  if (!f.valid() || segmentLength < 8) return false;
   d->scanNComp = pjRead8(f);
-  if (d->scanNComp > PJ_MAX_COMPONENTS) return false;
+  if (d->scanNComp == 0 || d->scanNComp > PJ_MAX_COMPONENTS ||
+      d->scanNComp > d->nComp || segmentLength != 6 + 2 * d->scanNComp)
+    return false;
 
+  uint8_t seenComponents = 0;
   for (int i = 0; i < d->scanNComp; i++) {
     int id = pjRead8(f);
     int tbl = pjRead8(f);
-    d->scanCompIdx[i] = 0;
+    bool found = false;
     for (int c = 0; c < d->nComp; c++) {
-      if (d->comp[c].id == id) { d->scanCompIdx[i] = c; break; }
+      if (d->comp[c].id == id) {
+        if (seenComponents & (1U << c)) return false;
+        seenComponents |= static_cast<uint8_t>(1U << c);
+        d->scanCompIdx[i] = c;
+        found = true;
+        break;
+      }
     }
+    if (!found) return false;
     d->scanDcTbl[i] = (tbl >> 4) & 0x0F;
     d->scanAcTbl[i] = tbl & 0x0F;
+    if (d->scanDcTbl[i] >= PJ_MAX_HTABLES ||
+        d->scanAcTbl[i] >= PJ_MAX_HTABLES) return false;
   }
   d->ss = pjRead8(f);
   d->se = pjRead8(f);
   int approx = pjRead8(f);
   d->ah = (approx >> 4) & 0x0F;
   d->al = approx & 0x0F;
+  if (!f.valid() || d->ss > d->se || d->se > 63U || d->ah > 13U ||
+      d->al > 13U) return false;
+  return true;
+}
+
+// Validate the progressive scan script and remember the approximation bit
+// currently available for every coefficient. This rejects duplicate first
+// scans, skipped refinement levels and AC scans containing multiple components.
+static bool pjAcceptProgressiveScan(PJDecoder* d) {
+  if (d->scanCount == 0xFFU) return false;
+  ++d->scanCount;
+
+  if (d->ss == 0U) {
+    if (d->se != 0U) return false;
+    for (uint8_t scanComponent = 0; scanComponent < d->scanNComp;
+         ++scanComponent) {
+      const uint8_t component = d->scanCompIdx[scanComponent];
+      int8_t& current = d->coefficientBits[component][0];
+      if (d->ah == 0U) {
+        if (current >= 0) return false;
+      } else if (d->ah != static_cast<uint8_t>(d->al + 1U) ||
+                 current != static_cast<int8_t>(d->ah)) {
+        return false;
+      }
+      current = static_cast<int8_t>(d->al);
+    }
+    return true;
+  }
+
+  if (d->scanNComp != 1U) return false;
+  const uint8_t component = d->scanCompIdx[0];
+  for (uint8_t coefficient = d->ss; coefficient <= d->se; ++coefficient) {
+    int8_t& current = d->coefficientBits[component][coefficient];
+    if (d->ah == 0U) {
+      if (current >= 0) return false;
+    } else if (d->ah != static_cast<uint8_t>(d->al + 1U) ||
+               current != static_cast<int8_t>(d->ah)) {
+      return false;
+    }
+    current = static_cast<int8_t>(d->al);
+  }
   return true;
 }
 
 // --- Parse DRI ---
-static void pjParseDRI(File& f, PJDecoder* d) {
-  pjRead16(f);
+static bool pjParseDRI(MemoryFile& f, PJDecoder* d) {
+  if (pjRead16(f) != 4) return false;
   d->restartInterval = pjRead16(f);
+  return f.valid();
 }
 
 // --- Entropy decoders ---
@@ -388,10 +720,11 @@ static void pjParseDRI(File& f, PJDecoder* d) {
 static void pjDecodeDCFirst(PJDecoder* d, int16_t* coef, int compScanIdx) {
   PJHuffTable* ht = &d->dcHuff[d->scanDcTbl[compScanIdx]];
   int s = pjHuffDecode(&d->br, ht);
+  if (d->br.decodeError || s > 11) { d->br.decodeError = true; return; }
   int diff = (s > 0) ? pjReceive(&d->br, s) : 0;
   int ci = d->scanCompIdx[compScanIdx];
   d->comp[ci].dcPred += diff;
-  coef[0] = (int16_t)(d->comp[ci].dcPred << d->al);
+  coef[0] = static_cast<int16_t>(d->comp[ci].dcPred * (1 << d->al));
 }
 
 static void pjDecodeDCRefine(PJDecoder* d, int16_t* coef) {
@@ -405,8 +738,11 @@ static void pjDecodeACFirst(PJDecoder* d, int16_t* coef, int compScanIdx) {
 
   for (int k = d->ss; k <= d->se; k++) {
     int rs = pjHuffDecode(&d->br, ht);
+    if (d->br.decodeError) return;
     int s = rs & 0x0F;
     int r = rs >> 4;
+
+    if (s > 10) { d->br.decodeError = true; return; }
 
     if (s == 0) {
       if (r == 15) {
@@ -419,9 +755,9 @@ static void pjDecodeACFirst(PJDecoder* d, int16_t* coef, int compScanIdx) {
       }
     } else {
       k += r;
-      if (k > d->se) break;
+      if (k > d->se) { d->br.decodeError = true; return; }
       int v = pjReceive(&d->br, s);
-      coef[zigzag[k]] = (int16_t)(v << d->al);
+      coef[zigzag[k]] = static_cast<int16_t>(v * (1 << d->al));
     }
   }
 }
@@ -429,12 +765,13 @@ static void pjDecodeACFirst(PJDecoder* d, int16_t* coef, int compScanIdx) {
 static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
   PJHuffTable* ht = &d->acHuff[d->scanAcTbl[compScanIdx]];
   int p1 = 1 << d->al;
-  int m1 = (-1) << d->al;
+  int m1 = -(1 << d->al);
   int k = d->ss;
 
   if (d->eobRun == 0) {
     while (k <= d->se) {
       int rs = pjHuffDecode(&d->br, ht);
+      if (d->br.decodeError) return;
       int s = rs & 0x0F;
       int r = rs >> 4;
 
@@ -445,6 +782,7 @@ static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
           break;
         }
       } else if (s != 1) {
+        d->br.decodeError = true;
         return;
       }
 
@@ -456,7 +794,7 @@ static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
       while (k <= d->se) {
         int zz = zigzag[k];
         if (coef[zz] != 0) {
-          if (d->br.getBit()) {
+          if (d->br.getBit() && (coef[zz] & p1) == 0) {
             if (coef[zz] > 0) coef[zz] += p1;
             else               coef[zz] += m1;
           }
@@ -477,7 +815,7 @@ static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
     while (k <= d->se) {
       int zz = zigzag[k];
       if (coef[zz] != 0) {
-        if (d->br.getBit()) {
+        if (d->br.getBit() && (coef[zz] & p1) == 0) {
           if (coef[zz] > 0) coef[zz] += p1;
           else               coef[zz] += m1;
         }
@@ -492,6 +830,7 @@ static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
 static void pjDecodeBaseline(PJDecoder* d, int16_t* coef, int compScanIdx) {
   PJHuffTable* dcHt = &d->dcHuff[d->scanDcTbl[compScanIdx]];
   int s = pjHuffDecode(&d->br, dcHt);
+  if (d->br.decodeError || s > 11) { d->br.decodeError = true; return; }
   int diff = (s > 0) ? pjReceive(&d->br, s) : 0;
   int ci = d->scanCompIdx[compScanIdx];
   d->comp[ci].dcPred += diff;
@@ -500,8 +839,10 @@ static void pjDecodeBaseline(PJDecoder* d, int16_t* coef, int compScanIdx) {
   PJHuffTable* acHt = &d->acHuff[d->scanAcTbl[compScanIdx]];
   for (int k = 1; k <= 63; k++) {
     int rs = pjHuffDecode(&d->br, acHt);
+    if (d->br.decodeError) return;
     int r = rs >> 4;
     s = rs & 0x0F;
+    if (s > 10) { d->br.decodeError = true; return; }
     if (s == 0) {
       if (r == 15) { k += 15; continue; }
       break;
@@ -554,19 +895,6 @@ static void pjDecodeBlock(PJDecoder* d, int16_t* coef, int compScanIdx,
   }
 }
 
-// --- Handle restart marker ---
-static void pjHandleRestart(PJDecoder* d) {
-  if (d->restartInterval > 0) {
-    d->mcuCount++;
-    if (d->mcuCount >= d->restartInterval) {
-      d->mcuCount = 0;
-      for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
-      d->eobRun = 0;
-      d->br.reset();
-    }
-  }
-}
-
 // --- Get block index within MCU row buffer ---
 static int pjRowBlockIndex(PJDecoder* d, int mcuX, int compIdx, int bh, int bv) {
   int offset = 0;
@@ -577,20 +905,61 @@ static int pjRowBlockIndex(PJDecoder* d, int mcuX, int compIdx, int bh, int bv) 
   return mcuX * d->blocksPerMCU + offset;
 }
 
-// --- Decode a scan's entropy data for the target MCU row ---
-static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
-                         uint8_t* nzBitmap) {
-  d->br.reset();
+static int pjSkipEntropy(MemoryFile& f);
+
+static int pjTakeEntropyMarker(PJDecoder* d) {
+  if (d->br.hitMarker) return d->br.markerVal;
+  return pjSkipEntropy(*d->br.file);
+}
+
+static bool pjConsumeRestart(PJDecoder* d, uint8_t& expectedRestart) {
+  const int marker = pjTakeEntropyMarker(d);
+  if (marker != M_RST0 + expectedRestart) return false;
+  expectedRestart = static_cast<uint8_t>((expectedRestart + 1U) & 7U);
+  MemoryFile* file = d->br.file;
+  d->br.init(file);
+  d->br.safeTail = true;
+  d->mcuCount = 0;
+  d->eobRun = 0;
+  for (int i = 0; i < d->nComp; ++i) d->comp[i].dcPred = 0;
+  return true;
+}
+
+static bool pjScanFailure(PJDecoder* d, const char* reason,
+                          int decodedUnits, int expectedUnits) {
+  const int marker = d->br.hitMarker ? d->br.markerVal : -1;
+  const size_t offset = d->br.file ? d->br.file->position() : 0U;
+  DIAG_PRINTF("[SLS/JPEG] scan=FAIL index=%u reason=%s Ss=%u Se=%u Ah=%u Al=%u "
+              "components=%u decoded=%d expected=%d offset=%u marker=%02X\n",
+              static_cast<unsigned>(d->scanCount), reason,
+              static_cast<unsigned>(d->ss), static_cast<unsigned>(d->se),
+              static_cast<unsigned>(d->ah), static_cast<unsigned>(d->al),
+              static_cast<unsigned>(d->scanNComp), decodedUnits,
+              expectedUnits, static_cast<unsigned>(offset),
+              static_cast<unsigned>(marker & 0xFF));
+  return false;
+}
+
+// Decode a progressive scan through the target frame MCU row. Earlier rows
+// are entropy-decoded but represented only by a non-zero coefficient bitmap;
+// the target row retains complete coefficients across all scans.
+static bool pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
+                         uint8_t* nzBitmap, int& nextMarker) {
   d->eobRun = 0;
   d->mcuCount = 0;
   for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
+  uint8_t expectedRestart = 0U;
+  int decodedUnits = 0;
+  int totalUnits = 0;
+  int unitsToDecode = 0;
 
   if (d->scanNComp > 1) {
     // --- Interleaved scan ---
-    int totalMCUs = d->mcuCntX * (targetMCURow + 1);
+    totalUnits = d->mcuCntX * d->mcuCntY;
+    unitsToDecode = d->mcuCntX * (targetMCURow + 1);
     int startMCU = d->mcuCntX * targetMCURow;
 
-    for (int mcu = 0; mcu < totalMCUs; mcu++) {
+    for (int mcu = 0; mcu < unitsToDecode; mcu++) {
       bool store = (mcu >= startMCU);
       int mcuX = mcu % d->mcuCntX;
       int mcuY = mcu / d->mcuCntX;
@@ -608,23 +977,38 @@ static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
             int blockRow = mcuY * d->comp[ci].vSamp + bv;
             int gbi = pjGlobalBlockIdx(d, ci, blockCol, blockRow);
             pjDecodeBlock(d, coef, si, store, nzBitmap, gbi);
+            if (d->br.decodeError)
+              return pjScanFailure(d, "entropy-decode", decodedUnits,
+                                   unitsToDecode);
           }
         }
       }
-      pjHandleRestart(d);
+      ++decodedUnits;
+      ++d->mcuCount;
+      if (d->restartInterval > 0U &&
+          d->mcuCount == d->restartInterval && decodedUnits < totalUnits) {
+        if (!pjConsumeRestart(d, expectedRestart))
+          return pjScanFailure(d, "restart-sequence", decodedUnits,
+                               unitsToDecode);
+      }
+      // hitMarker can be true while valid entropy bits for later MCUs remain
+      // buffered. Only getBits()/Huffman decode can determine truncation.
     }
   } else {
     // --- Non-interleaved scan (single component) ---
     int ci = d->scanCompIdx[0];
-    int blockCols = d->mcuCntX * d->comp[ci].hSamp;
+    int blockCols = d->compBlockCols[ci];
+    int blockRows = d->compBlockRows[ci];
     int startBlockRow = targetMCURow * d->comp[ci].vSamp;
-    int endBlockRow = startBlockRow + d->comp[ci].vSamp - 1;
-    int totalBlocks = blockCols * (endBlockRow + 1);
+    int endBlockRow = startBlockRow + d->comp[ci].vSamp;
+    if (endBlockRow > blockRows) endBlockRow = blockRows;
+    totalUnits = blockCols * blockRows;
+    unitsToDecode = blockCols * endBlockRow;
 
-    for (int blk = 0; blk < totalBlocks; blk++) {
+    for (int blk = 0; blk < unitsToDecode; blk++) {
       int bCol = blk % blockCols;
       int bRow = blk / blockCols;
-      bool store = (bRow >= startBlockRow && bRow <= endBlockRow);
+      bool store = (bRow >= startBlockRow && bRow < endBlockRow);
 
       int16_t* coef = nullptr;
       if (store) {
@@ -636,19 +1020,46 @@ static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
       }
       int gbi = pjGlobalBlockIdx(d, ci, bCol, bRow);
       pjDecodeBlock(d, coef, 0, store, nzBitmap, gbi);
+      if (d->br.decodeError)
+        return pjScanFailure(d, "entropy-decode", decodedUnits,
+                             unitsToDecode);
 
-      // Restart handling for non-interleaved scans
-      if (d->restartInterval > 0) {
-        d->mcuCount++;
-        if (d->mcuCount >= d->restartInterval) {
-          d->mcuCount = 0;
-          d->comp[ci].dcPred = 0;
-          d->eobRun = 0;
-          d->br.reset();
-        }
+      ++decodedUnits;
+      ++d->mcuCount;
+      if (d->restartInterval > 0U &&
+          d->mcuCount == d->restartInterval && decodedUnits < totalUnits) {
+        if (!pjConsumeRestart(d, expectedRestart))
+          return pjScanFailure(d, "restart-sequence", decodedUnits,
+                               unitsToDecode);
       }
+      // Do not reject a marker merely because fillBitsMin() read it ahead of
+      // the still-buffered tail; the next entropy decode validates that tail.
     }
   }
+
+  if (decodedUnits != unitsToDecode || d->br.decodeError)
+    return pjScanFailure(d, "unit-count", decodedUnits, unitsToDecode);
+
+  int marker = pjTakeEntropyMarker(d);
+  if (decodedUnits == totalUnits) {
+    // Tolerate a final scheduled restart marker only when the scan ends
+    // exactly on its interval boundary, then require the real next marker.
+    if (marker >= M_RST0 && marker <= M_RST7) {
+      if (d->restartInterval == 0U || d->mcuCount != d->restartInterval ||
+          marker != M_RST0 + expectedRestart)
+        return pjScanFailure(d, "final-restart", decodedUnits, totalUnits);
+      marker = pjSkipEntropy(*d->br.file);
+    }
+  } else {
+    // This row pass intentionally stops early. Skip the remaining entropy and
+    // any restart markers; the final-row validation pass checks them exactly.
+    while (marker >= M_RST0 && marker <= M_RST7)
+      marker = pjSkipEntropy(*d->br.file);
+  }
+  nextMarker = marker;
+  if (marker < 0)
+    return pjScanFailure(d, "missing-next-marker", decodedUnits, totalUnits);
+  return true;
 }
 
 // --- Integer IDCT (LLM algorithm, 13-bit fixed point) ---
@@ -772,11 +1183,14 @@ static inline uint16_t pjYCbCrToRGB565(int y, int cb, int cr) {
 // --- Render one MCU row to TFT ---
 // IDCT every block in one MCU row, then convert YCbCr→RGB565 and push the
 // resulting pixel rows to the TFT (centered horizontally and vertically).
-static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
+static bool pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
                            TFT_eSPI& tft, int offsetX, int offsetY,
-                           uint8_t* allBlocks) {
+                           uint8_t* allBlocks, uint8_t scaleDivisor) {
   int totalBlocks = d->mcuCntX * d->blocksPerMCU;
   uint16_t lineBuffer[320];
+  if (scaleDivisor != 2U) scaleDivisor = 1U;
+  const int outputWidth =
+      (static_cast<int>(d->width) + scaleDivisor - 1) / scaleDivisor;
 
   // IDCT all blocks in this row
   for (int b = 0; b < totalBlocks; b++) {
@@ -794,6 +1208,8 @@ static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
   for (int py = 0; py < (int)d->mcuH; py++) {
     int absY = mcuRow * d->mcuH + py;
     if (absY >= d->height) break;
+    if ((absY % scaleDivisor) != 0) continue;
+    int outputX = 0;
 
     for (int mcuX = 0; mcuX < d->mcuCntX; mcuX++) {
       int mcuBase = mcuX * d->blocksPerMCU;
@@ -801,6 +1217,7 @@ static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
       for (int px = 0; px < (int)d->mcuW; px++) {
         int absX = mcuX * d->mcuW + px;
         if (absX >= d->width) break;
+        if ((absX % scaleDivisor) != 0) continue;
 
         int yVal, cbVal, crVal;
 
@@ -826,16 +1243,19 @@ static void pjOutputMCURow(PJDecoder* d, int16_t* rowCoefs, int mcuRow,
           crVal = allBlocks[crBi * 64 + (crPy % 8) * 8 + (crPx % 8)];
         }
 
-        lineBuffer[absX] = pjYCbCrToRGB565(yVal, cbVal, crVal);
+        lineBuffer[outputX++] = pjYCbCrToRGB565(yVal, cbVal, crVal);
       }
     }
 
-    tft.pushImage(offsetX, offsetY + absY, d->width, 1, lineBuffer);
+    if (outputX != outputWidth) return false;
+    tft.pushImage(offsetX, offsetY + absY / scaleDivisor,
+                  outputWidth, 1, lineBuffer);
   }
+  return true;
 }
 
 // --- Skip to next marker ---
-static int pjSkipToMarker(File& f) {
+static int pjSkipToMarker(MemoryFile& f) {
   int c;
   do { c = f.read(); if (c < 0) return -1; } while (c != 0xFF);
   do { c = f.read(); if (c < 0) return -1; } while (c == 0xFF);
@@ -843,7 +1263,7 @@ static int pjSkipToMarker(File& f) {
 }
 
 // --- Skip entropy data to next marker ---
-static int pjSkipEntropy(File& f) {
+static int pjSkipEntropy(MemoryFile& f) {
   while (true) {
     int c = f.read();
     if (c < 0) return -1;
@@ -858,28 +1278,42 @@ static int pjSkipEntropy(File& f) {
 // --- Process entire file for one MCU row ---
 // One pass over the file for the progressive decoder: replays every scan,
 // only retaining coefficients that belong to the target MCU row.
-static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
-                                int targetRow, uint8_t* nzBitmap) {
-  f.seek(0);
+static bool pjProcessFileForRow(MemoryFile& f, PJDecoder* d, int16_t* rowCoefs,
+                                int targetRow, uint8_t* nzBitmap,
+                                JPEGRowCallback progressCallback,
+                                void* progressContext,
+                                bool verboseScanDiagnostics) {
+  if (!f.seek(0)) return false;
+  memset(d, 0, sizeof(*d));
+  memset(d->coefficientBits, -1, sizeof(d->coefficientBits));
   if (pjRead8(f) != 0xFF || pjRead8(f) != M_SOI) return false;
 
   bool sofDone = false;
+  int pendingMarker = -1;
 
   while (true) {
-    int marker = pjSkipToMarker(f);
+    int marker = pendingMarker;
+    pendingMarker = -1;
+    if (marker < 0) marker = pjSkipToMarker(f);
     if (marker < 0) return false;
-    if (marker == M_EOI) break;
-    if (marker >= M_RST0 && marker <= M_RST7) continue;
+    if (marker == M_EOI) {
+      if (!sofDone || d->scanCount == 0U) return false;
+      for (uint8_t component = 0; component < d->nComp; ++component) {
+        if (d->coefficientBits[component][0] < 0 ||
+            !d->qtableDefined[d->comp[component].qtSel]) return false;
+      }
+      return true;
+    }
+    if (marker == M_SOI || (marker >= M_RST0 && marker <= M_RST7))
+      return false;
 
     switch (marker) {
       case M_SOF2:
-        if (!sofDone) {
-          if (!pjParseSOF(f, d)) return false;
-          sofDone = true;
-        } else {
-          int len = pjRead16(f); pjSkip(f, len - 2);
-        }
+        if (sofDone || !pjParseSOF(f, d)) return false;
+        sofDone = true;
         break;
+      case M_SOF0:
+        return false;
       case M_DHT:
         if (!pjParseDHT(f, d)) return false;
         break;
@@ -887,40 +1321,92 @@ static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
         if (!pjParseDQT(f, d)) return false;
         break;
       case M_DRI:
-        pjParseDRI(f, d);
+        if (!pjParseDRI(f, d)) return false;
         break;
       case M_SOS:
-        if (!pjParseSOS(f, d)) return false;
-        d->br.init(&f);
-        pjDecodeScan(d, rowCoefs, targetRow, nzBitmap);
-        if (!d->br.hitMarker) {
-          marker = pjSkipEntropy(f);
-          if (marker == M_EOI) return true;
-          if (marker < 0) return false;
-          f.seek(f.position() - 2);
-        } else {
-          if (d->br.markerVal == M_EOI) return true;
-          f.seek(f.position() - 2);
+        if (!sofDone) {
+          DIAG_PRINTF("[SLS/JPEG] scan=FAIL reason=SOS-before-SOF offset=%u\n",
+                      static_cast<unsigned>(f.position()));
+          return false;
         }
+        if (!pjParseSOS(f, d)) {
+          DIAG_PRINTF("[SLS/JPEG] scan=FAIL reason=SOS-parse index=%u offset=%u\n",
+                      static_cast<unsigned>(d->scanCount + 1U),
+                      static_cast<unsigned>(f.position()));
+          return false;
+        }
+        if (!pjAcceptProgressiveScan(d)) {
+          DIAG_PRINTF("[SLS/JPEG] scan=FAIL reason=scan-script index=%u "
+                      "Ss=%u Se=%u Ah=%u Al=%u components=%u offset=%u\n",
+                      static_cast<unsigned>(d->scanCount),
+                      static_cast<unsigned>(d->ss),
+                      static_cast<unsigned>(d->se),
+                      static_cast<unsigned>(d->ah),
+                      static_cast<unsigned>(d->al),
+                      static_cast<unsigned>(d->scanNComp),
+                      static_cast<unsigned>(f.position()));
+          return false;
+        }
+        if (verboseScanDiagnostics && targetRow == d->mcuCntY - 1) {
+          DIAG_PRINTF("[SLS/JPEG] scan=%u Ss=%u Se=%u Ah=%u Al=%u "
+                      "components=%u entropyOffset=%u\n",
+                      static_cast<unsigned>(d->scanCount),
+                      static_cast<unsigned>(d->ss),
+                      static_cast<unsigned>(d->se),
+                      static_cast<unsigned>(d->ah),
+                      static_cast<unsigned>(d->al),
+                      static_cast<unsigned>(d->scanNComp),
+                      static_cast<unsigned>(f.position()));
+        }
+        if (d->ss == 0U && d->ah == 0U) {
+          for (uint8_t scanComponent = 0;
+               scanComponent < d->scanNComp; ++scanComponent) {
+            if (d->dcHuff[d->scanDcTbl[scanComponent]].total <= 0) {
+              DIAG_PRINTF("[SLS/JPEG] scan=FAIL index=%u reason=missing-DC-table table=%u\n",
+                          static_cast<unsigned>(d->scanCount),
+                          static_cast<unsigned>(d->scanDcTbl[scanComponent]));
+              return false;
+            }
+          }
+        } else if (d->ss != 0U &&
+                   d->acHuff[d->scanAcTbl[0]].total <= 0) {
+          DIAG_PRINTF("[SLS/JPEG] scan=FAIL index=%u reason=missing-AC-table table=%u\n",
+                      static_cast<unsigned>(d->scanCount),
+                      static_cast<unsigned>(d->scanAcTbl[0]));
+          return false;
+        }
+        d->br.init(&f);
+        d->br.safeTail = true;
+        if (!pjDecodeScan(d, rowCoefs, targetRow, nzBitmap,
+                          pendingMarker)) return false;
+        if (progressCallback) progressCallback(progressContext);
         break;
       default:
-        if ((marker >= M_APP0 && marker <= M_APP15) || marker == M_COM) {
-          int len = pjRead16(f); pjSkip(f, len - 2);
-        } else {
-          int len = pjRead16(f);
-          if (len >= 2) pjSkip(f, len - 2);
+        // All remaining supported metadata/table markers carry a length.
+        // Standalone or reserved markers are rejected rather than guessed.
+        if (marker == 0x01 || marker == 0xC8 || marker == 0xCC ||
+            ((marker >= 0xC0 && marker <= 0xCF) && marker != M_DHT) ||
+            (marker >= 0xD0 && marker <= 0xD9)) return false;
+        {
+          const int len = pjRead16(f);
+          if (!f.valid() || len < 2) return false;
+          pjSkip(f, len - 2);
+          if (!f.valid()) return false;
         }
         break;
     }
   }
-  return true;
 }
 
 // --- Baseline single-pass decode ---
 // Single-pass baseline decoder: walks the file once, decoding and rendering
 // each MCU row on the fly. Used for SOF0 images where no multi-pass needed.
-static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
-                                  int offsetX, int offsetY) {
+static bool pjDecodeBaselinePass(MemoryFile& f, PJDecoder* d, TFT_eSPI* tft,
+                                  int offsetX, int offsetY,
+                                  uint8_t* workspace, size_t workspaceSize,
+                                  JPEGImageInfo* info,
+                                  JPEGRowCallback rowCallback,
+                                  void* rowContext) {
   f.seek(0);
   if (pjRead8(f) != 0xFF || pjRead8(f) != M_SOI) return false;
 
@@ -940,23 +1426,51 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
         if (!pjParseDQT(f, d)) return false;
         break;
       case M_DRI:
-        pjParseDRI(f, d);
+        if (!pjParseDRI(f, d)) return false;
         break;
       case M_SOS: {
         if (!pjParseSOS(f, d)) return false;
+        if (d->ss != 0U || d->se != 63U || d->ah != 0U || d->al != 0U)
+          return false;
+        // Baseline multiscan is optional for SlideShow. This renderer handles
+        // one interleaved scan only; reject separate-component scans rather
+        // than displaying an incomplete image.
+        if (d->scanNComp != d->nComp) {
+          DIAG_PRINTF("[SLS/JPEG] multiscan baseline unsupported scanComp=%u frameComp=%u\n",
+                        static_cast<unsigned>(d->scanNComp),
+                        static_cast<unsigned>(d->nComp));
+          return false;
+        }
+        for (uint8_t component = 0; component < d->nComp; ++component)
+          if (!d->qtableDefined[d->comp[component].qtSel]) return false;
         d->br.init(&f);
+        // Read only as many entropy bytes as the current symbol needs. This
+        // keeps EOI/RST markers observable at deterministic MCU boundaries.
+        d->br.safeTail = true;
 
         int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
         size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
         size_t pixelBufSize = blocksPerRow * 64;
         size_t totalSize = coefSize + pixelBufSize;
-        uint8_t* baseBuf = (uint8_t*)malloc(totalSize);
-        if (!baseBuf) return false;
+
+        // Runtime heap allocation is forbidden: the slideshow arena must fit
+        // every baseline row workspace for a supported image.
+        if (!workspace || workspaceSize < totalSize) {
+          DIAG_PRINTF("[SLS/JPEG] baseline workspace too small need=%u have=%u\n",
+                        static_cast<unsigned>(totalSize),
+                        static_cast<unsigned>(workspaceSize));
+          return false;
+        }
+        uint8_t* baseBuf = workspace;
+
         int16_t* rowCoefs = (int16_t*)baseBuf;
         uint8_t* allBlocks = baseBuf + coefSize;
 
         d->mcuCount = 0;
         for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
+        const int totalMcus = d->mcuCntX * d->mcuCntY;
+        int decodedMcus = 0;
+        uint8_t expectedRestart = 0;
 
         for (int row = 0; row < d->mcuCntY; row++) {
           memset(rowCoefs, 0, coefSize);
@@ -968,32 +1482,51 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
                 for (int bh = 0; bh < d->comp[ci].hSamp; bh++) {
                   int idx = pjRowBlockIndex(d, mcuX, ci, bh, bv);
                   pjDecodeBaseline(d, &rowCoefs[idx * 64], si);
+                  if (d->br.decodeError) return false;
                 }
               }
             }
-            if (d->restartInterval > 0) {
-              d->mcuCount++;
-              if (d->mcuCount >= d->restartInterval) {
-                d->mcuCount = 0;
-                for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
-                d->br.reset();
-              }
-            }
-            // Handle RST markers encountered by bitreader read-ahead
-            if (d->br.hitMarker && d->br.markerVal >= M_RST0 && d->br.markerVal <= M_RST7) {
+            ++decodedMcus;
+            ++d->mcuCount;
+
+            const bool restartBoundary = d->restartInterval > 0 &&
+                d->mcuCount >= d->restartInterval && decodedMcus < totalMcus;
+            if (restartBoundary) {
+              int restartMarker = d->br.hitMarker
+                  ? d->br.markerVal
+                  : pjSkipEntropy(f);
+              if (restartMarker != M_RST0 + expectedRestart) return false;
+              expectedRestart = static_cast<uint8_t>((expectedRestart + 1U) & 7U);
               d->mcuCount = 0;
               for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
               d->br.reset();
+              d->br.safeTail = true;
+            } else if (d->br.hitMarker && decodedMcus < totalMcus) {
+              // EOI, SOS or an out-of-place RST before all expected MCUs is a
+              // truncated/corrupt stream, never a partial success.
+              return false;
             }
-            if (d->br.hitMarker) break;
           }
 
-          pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
-          if (d->br.hitMarker) break;
+          if (tft) {
+            if (!pjOutputMCURow(d, rowCoefs, row, *tft, offsetX, offsetY,
+                                allBlocks, info ? info->scaleDivisor : 1U))
+              return false;
+            if (info) info->lastRenderedMcuRow = static_cast<int16_t>(row);
+          }
+          if (rowCallback) rowCallback(rowContext);
         }
 
-        free(baseBuf);
-        return true;
+        if (decodedMcus != totalMcus || d->br.decodeError) return false;
+        int finalMarker = d->br.hitMarker ? d->br.markerVal : pjSkipEntropy(f);
+        // Some encoders emit the scheduled restart marker even when the final
+        // MCU lands exactly on the interval boundary. Accept it only in the
+        // expected sequence, then require EOI immediately afterwards.
+        if (finalMarker >= M_RST0 && finalMarker <= M_RST7) {
+          if (finalMarker != M_RST0 + expectedRestart) return false;
+          finalMarker = pjSkipEntropy(f);
+        }
+        return finalMarker == M_EOI;
       }
       default:
         if ((marker >= M_APP0 && marker <= M_APP15) || marker == M_COM) {
@@ -1008,88 +1541,169 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
   return false;
 }
 
-// --- Main entry point ---
-// Public entry point: opens the file, parses headers, then dispatches to
-// either the single-pass baseline decoder (SOF0) or the multi-pass
-// progressive decoder (SOF2). Returns true on success.
-bool JPEGdecoder(const char* filename, TFT_eSPI& tft,
-                 int displayWidth, int displayHeight) {
-  File f = LittleFS.open(filename, "rb");
+// --- Progressive multi-pass decode ---
+// A full 320x240 4:2:0 coefficient image would consume about 230 KiB. Instead,
+// replay every scan for one frame-MCU row at a time. A compact bitmap preserves
+// only the non-zero pattern of discarded earlier rows, which is sufficient to
+// consume AC-refinement bits correctly.
+static bool pjDecodeProgressivePass(MemoryFile& f, PJDecoder* d,
+                                    TFT_eSPI* tft, int offsetX, int offsetY,
+                                    uint8_t* workspace, size_t workspaceSize,
+                                    JPEGImageInfo* info,
+                                    JPEGRowCallback progressCallback,
+                                    void* progressContext,
+                                    bool verboseScanDiagnostics) {
+  const uint16_t expectedWidth = d->width;
+  const uint16_t expectedHeight = d->height;
+  const uint8_t expectedComponents = d->nComp;
+  const int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
+  const size_t coefficientBytes = static_cast<size_t>(blocksPerRow) * 64U *
+                                  sizeof(int16_t);
+  const size_t pixelBytes = tft
+      ? static_cast<size_t>(blocksPerRow) * 64U
+      : 0U;
+  const size_t bitmapBytes =
+      (static_cast<size_t>(d->totalImageBlocks) * 64U + 7U) / 8U;
+  const size_t requiredBytes = coefficientBytes + pixelBytes + bitmapBytes;
+  if (!workspace || workspaceSize < requiredBytes) {
+    DIAG_PRINTF("[SLS/JPEG] progressive workspace too small need=%u have=%u\n",
+                  static_cast<unsigned>(requiredBytes),
+                  static_cast<unsigned>(workspaceSize));
+    return false;
+  }
+
+  int16_t* rowCoefficients = reinterpret_cast<int16_t*>(workspace);
+  uint8_t* pixelBlocks = tft ? workspace + coefficientBytes : nullptr;
+  uint8_t* nonZeroBitmap = workspace + coefficientBytes + pixelBytes;
+
+  // Validation needs one final-row pass: it decodes every unit of every scan.
+  // Rendering reconstructs each row separately and never stores a full frame.
+  const int firstRow = tft ? 0 : d->mcuCntY - 1;
+  for (int row = firstRow; row < d->mcuCntY; ++row) {
+    memset(rowCoefficients, 0, coefficientBytes);
+    memset(nonZeroBitmap, 0, bitmapBytes);
+    if (!pjProcessFileForRow(f, d, rowCoefficients, row, nonZeroBitmap,
+                             progressCallback, progressContext,
+                             verboseScanDiagnostics)) return false;
+    if (d->width != expectedWidth || d->height != expectedHeight ||
+        d->nComp != expectedComponents) return false;
+
+    if (tft) {
+      if (!pjOutputMCURow(d, rowCoefficients, row, *tft,
+                          offsetX, offsetY, pixelBlocks,
+                          info ? info->scaleDivisor : 1U)) return false;
+      if (info) info->lastRenderedMcuRow = static_cast<int16_t>(row);
+      if (progressCallback) progressCallback(progressContext);
+    }
+  }
+  return true;
+}
+
+// --- Main entry points ---
+// Parse and decode the complete baseline/progressive stream. A null TFT
+// performs entropy/marker validation without changing display state.
+static bool JPEGdecodePass(const uint8_t* data, size_t size, TFT_eSPI* tft,
+                           int displayWidth, int displayHeight,
+                           uint8_t* workspace, size_t workspaceSize,
+                           JPEGImageInfo* callerInfo,
+                           JPEGRowCallback rowCallback,
+                           void* rowContext,
+                           bool verboseScanDiagnostics) {
+  JPEGImageInfo localInfo;
+  JPEGImageInfo& info = callerInfo ? *callerInfo : localInfo;
+  const JPEGPreflightResult preflight =
+      JPEGpreflight(data, size, displayWidth, displayHeight, info);
+  if (preflight != JPEGPreflightResult::SupportedBaseline &&
+      preflight != JPEGPreflightResult::SupportedProgressive) return false;
+
+  MemoryFile f(data, size);
   if (!f) return false;
 
-  PJDecoder* d = (PJDecoder*)calloc(1, sizeof(PJDecoder));
-  if (!d) { f.close(); return false; }
+  PJDecoder* d = &pjDecoderState;
+  memset(d, 0, sizeof(*d));
 
-  // Pre-scan to get dimensions and type
+  // Pre-scan only far enough to identify frame coding and dimensions.
   f.seek(0);
   bool foundSOF = false;
-  bool isBaseline = false;
   while (!foundSOF) {
-    int marker = pjSkipToMarker(f);
+    const int marker = pjSkipToMarker(f);
     if (marker < 0 || marker == M_EOI) break;
-    if (marker == M_SOF0) {
-      pjParseSOF(f, d);
-      isBaseline = true;
-      foundSOF = true;
-    } else if (marker == M_SOF2) {
-      pjParseSOF(f, d);
+    if (marker == M_SOF0 || marker == M_SOF2) {
+      if ((marker == M_SOF0) !=
+          (preflight == JPEGPreflightResult::SupportedBaseline)) {
+        f.close();
+        return false;
+      }
+      if (!pjParseSOF(f, d)) { f.close(); return false; }
       foundSOF = true;
     } else if (marker != M_SOI && !(marker >= M_RST0 && marker <= M_RST7)) {
-      int len = pjRead16(f);
+      const int len = pjRead16(f);
       if (len >= 2) pjSkip(f, len - 2);
     }
   }
 
   if (!foundSOF || d->width == 0 || d->height == 0) {
-    free(d); f.close(); return false;
+    f.close();
+    return false;
+  }
+  const uint8_t scaleDivisor = info.scaleDivisor == 2U ? 2U : 1U;
+  const uint16_t outputWidth = static_cast<uint16_t>(
+      (d->width + scaleDivisor - 1U) / scaleDivisor);
+  const uint16_t outputHeight = static_cast<uint16_t>(
+      (d->height + scaleDivisor - 1U) / scaleDivisor);
+  if (outputWidth > static_cast<uint16_t>(displayWidth) ||
+      outputHeight > static_cast<uint16_t>(displayHeight)) {
+    DIAG_PRINTF("[SLS/JPEG] unsupported dimensions=%ux%u max=%dx%d\n",
+                  static_cast<unsigned>(d->width),
+                  static_cast<unsigned>(d->height),
+                  displayWidth, displayHeight);
+    f.close();
+    return false;
+  }
+  if (d->nComp != 1U && d->nComp != 3U) {
+    // ETSI permits up to four JPEG components, but this compact renderer does
+    // not implement CMYK/YCCK conversion. Reject it explicitly rather than
+    // producing wrong colours.
+    DIAG_PRINTF("[SLS/JPEG] unsupported component count=%u (renderer supports 1 or 3)\n",
+                  static_cast<unsigned>(d->nComp));
+    f.close();
+    return false;
   }
 
-  int offsetX = (displayWidth - d->width) / 2;
-  int offsetY = (displayHeight - d->height) / 2;
-
-  bool result;
-  if (isBaseline) {
-    result = pjDecodeBaselinePass(f, d, tft, offsetX, offsetY);
-  } else {
-    // Progressive: multi-pass row-by-row decode
-    // Single allocation to reduce heap fragmentation on ESP32
-    int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
-    size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
-    size_t pixelBufSize = blocksPerRow * 64;
-    size_t bitmapSize = d->totalImageBlocks * 8;
-    size_t totalSize = coefSize + pixelBufSize + bitmapSize;
-
-    uint8_t* progBuf = (uint8_t*)calloc(1, totalSize);
-    uint8_t* nzBitmap;
-    if (!progBuf) {
-      // Fallback: allocate without nzBitmap (AC refine may be slightly degraded)
-      bitmapSize = 0;
-      totalSize = coefSize + pixelBufSize;
-      progBuf = (uint8_t*)calloc(1, totalSize);
-      if (!progBuf) {
-        free(d); f.close();
-        return false;
-      }
-      nzBitmap = nullptr;
-    } else {
-      nzBitmap = progBuf + coefSize + pixelBufSize;
-    }
-
-    int16_t* rowCoefs = (int16_t*)progBuf;
-    uint8_t* allBlocks = progBuf + coefSize;
-
-    for (int row = 0; row < d->mcuCntY; row++) {
-      memset(rowCoefs, 0, coefSize);
-      if (nzBitmap) memset(nzBitmap, 0, bitmapSize);
-      pjProcessFileForRow(f, d, rowCoefs, row, nzBitmap);
-      pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
-    }
-
-    free(progBuf);
-    result = true;
-  }
-
-  free(d);
+  const int offsetX = (displayWidth - outputWidth) / 2;
+  const int offsetY = (displayHeight - outputHeight) / 2;
+  const bool result = preflight == JPEGPreflightResult::SupportedProgressive
+      ? pjDecodeProgressivePass(f, d, tft, offsetX, offsetY,
+                                workspace, workspaceSize, &info,
+                                rowCallback, rowContext,
+                                verboseScanDiagnostics)
+      : pjDecodeBaselinePass(f, d, tft, offsetX, offsetY,
+                             workspace, workspaceSize, &info,
+                             rowCallback, rowContext);
   f.close();
   return result;
+}
+
+bool JPEGvalidate(const uint8_t* data, size_t size,
+                  int displayWidth, int displayHeight,
+                  uint8_t* workspace, size_t workspaceSize,
+                  JPEGImageInfo* info,
+                  JPEGRowCallback rowCallback,
+                  void* rowContext,
+                  bool verboseScanDiagnostics) {
+  return JPEGdecodePass(data, size, nullptr, displayWidth, displayHeight,
+                        workspace, workspaceSize, info,
+                        rowCallback, rowContext, verboseScanDiagnostics);
+}
+
+bool JPEGdecoder(const uint8_t* data, size_t size, TFT_eSPI& tft,
+                 int displayWidth, int displayHeight,
+                 uint8_t* workspace, size_t workspaceSize,
+                 JPEGImageInfo* info,
+                 JPEGRowCallback rowCallback,
+                 void* rowContext,
+                 bool verboseScanDiagnostics) {
+  return JPEGdecodePass(data, size, &tft, displayWidth, displayHeight,
+                        workspace, workspaceSize, info,
+                        rowCallback, rowContext, verboseScanDiagnostics);
 }

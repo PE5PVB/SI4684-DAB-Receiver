@@ -10,7 +10,7 @@
 
 class TPA6130A2 {
   public:
-    byte Init(void);             // Wire.begin() + apply default register state; returns chip status byte
+    byte Init(void);             // Start I2C once + apply default register state; returns chip status byte
     void SetVolume(byte vol);    // 0..63 maps to the amp's gain register (see datasheet)
     void SetMute(bool mute);     // Mute both channels without changing the volume setting
     void SetHiZ(bool hiz);       // High-impedance outputs (silent, click-free)
@@ -19,6 +19,7 @@ class TPA6130A2 {
     byte GetMute(void);
 
   private:
+    bool wireStarted = false;
     byte GetValue(byte reg);     // I2C register read helper
 };
 

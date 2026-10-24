@@ -10,7 +10,13 @@
 // Powers the amp up, clears the mute bits, and verifies the chip is responsive.
 // Returns 1 on success, 0 if the chip didn't respond as expected.
 byte TPA6130A2::Init(void) {
-  Wire.begin();
+  // ESP32 light sleep retains the I2C controller state. Re-running Wire.begin()
+  // after every wake only produces "Bus already started in Master Mode" and
+  // is unnecessary. Start it once for the lifetime of this driver instance.
+  if (!wireStarted) {
+    Wire.begin();
+    wireStarted = true;
+  }
   byte x = GetValue(0x02);
   bitWrite(x, 6, 0);                  // clear mute R
   bitWrite(x, 7, 0);                  // clear mute L

@@ -1,7 +1,9 @@
 #ifndef LANGUAGE_H
 #define LANGUAGE_H
 
-#define VERSION "v1.20 beta"
+#include "FmRegion.h"
+
+#define VERSION "v2.5b"
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
@@ -24,8 +26,8 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Theme",                      // 14
     "Auto slideshow",             // 15
     "Signal unit",                // 16
-    "Buffer Slideshows",          // 17
-    "",		                      // 18
+    "Radio mode",                 // 17
+    "",                           // 18
     "PRESS MODE TO RETURN",       // 19
     "CONFIGURATION",              // 20
     "High",                       // 21
@@ -34,16 +36,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Off",                        // 24
     "Time-out Timer",             // 25
     "Min.",                       // 26
-    "Service Information",        // 27
-    "Frequency",                  // 28
-    "Ensemblename",               // 29
-    "Servicename",                // 30
-    "Program type",               // 31
-    "Protectionlevel",            // 32
-    "Samplerate",                 // 33
-    "Bitrate",                    // 34
-    "Audio mode",                 // 35
-    "Signal information",         // 36
+    "System info",                          // 27
+    "Tuner",                                // 28
+    "Radio control",                        // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / software",                     // 32
+    "Uptime",                               // 33
+    "Reset reason",                         // 34
+    "RAM free / min",                       // 35
+    "Heap block / frag.",                   // 36
     "Unknown",                    // 37
     "News",                       // 38
     "Current Affairs",            // 39
@@ -79,7 +81,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "",                           // 69
     "",                           // 70
     "",                           // 71
-    "DAB Receiver",               // 72
+    "FM/DAB Receiver",            // 72
     "Waiting for list",           // 73
     "Select service",             // 74
     "Tuning...",                  // 75
@@ -107,9 +109,9 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Taal",                             // 12
     "Helderheid",                       // 13
     "Thema",                            // 14
-    "Auto slideshow",                   // 15
+    "Auto diavoorstelling",             // 15
     "Signaal eenheid",                  // 16
-    "Onthoud Slideshows",               // 17
+    "Radiomodus",                       // 17
     "",                                 // 18
     "DRUK MODE OM AF TE SLUITEN",       // 19
     "CONFIGURATIE",                     // 20
@@ -119,16 +121,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Uit",                              // 24
     "Auto uitschakelen",                // 25
     "Min.",                             // 26
-    "Service informatie",               // 27
-    "Frequentie",                       // 28
-    "Ensemblenaam",                     // 29
-    "Servicenaam",                      // 30
-    "Programma type",                   // 31
-    "Protectionniveau",                 // 32
-    "Bemonst. frequentie",              // 33
-    "Bitsnelheid",                      // 34
-    "Audio modus",                      // 35
-    "Signaal informatie",               // 36
+    "Systeeminfo",                          // 27
+    "Tuner",                                // 28
+    "Radiobesturing",                       // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / software",                     // 32
+    "Bedrijfstijd",                         // 33
+    "Resetreden",                           // 34
+    "RAM vrij / min",                       // 35
+    "Heapblok / frag.",                     // 36
     "Onbekend",                         // 37
     "Nieuws",                           // 38
     "Actualiteit",                      // 39
@@ -156,7 +158,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Jazz",                             // 61
     "Country",                          // 62
     "Nat. muziek",                      // 63
-    "Gouwe ouwe",                       // 64
+    "Gouwe ouwe",                      // 64
     "Volksmuziek",                      // 65
     "Documentaires",                    // 66
     "",                                 // 67
@@ -194,7 +196,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Θέμα",                                  // 14
     "Αυτόματη παρουσίαση",                   // 15
     "Μονάδες σήματος",                       // 16
-    "Buffer Slideshows",                     // 17
+    "Λειτουργία ραδιοφώνου",                 // 17
     "",                                      // 18
     "ΠΙΕΣΤΕ MODE ΓΙΑ ΕΠΙΣΤΡΟΦΗ",             // 19
     "ΡΥΘΜΙΣΕΙΣ",                             // 20
@@ -204,16 +206,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Ανενεργό",                              // 24
     "Χρονοδιακόπτης λήξης",                  // 25
     "λεπτά",                                 // 26
-    "Πληροφορίες υπηρεσίας",                 // 27
-    "Συχνότητα",                             // 28
-    "Όνομα μπουκέτου",                       // 29
-    "Όνομα υπηρεσίας",                       // 30
-    "Τύπος προγράμματος",                    // 31
-    "Επίπεδο προστασίας",                    // 32
-    "Samplerate",                            // 33
-    "Ρυθμός bit",                            // 34
-    "Λειτουργία ήχου",                       // 35
-    "Πληροφορίες σήματος",                   // 36
+    "Στοιχεία συστήματος",                  // 27
+    "Tuner",                                // 28
+    "Έλεγχος radio",                        // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / λογισμικό",                    // 32
+    "Χρόνος λειτουργ.",                     // 33
+    "Αιτία reset",                          // 34
+    "RAM ελεύθ./ελάχ.",                     // 35
+    "Heap block / frag.",                   // 36
     "Άγνωστο",                               // 37
     "Ειδήσεις",                              // 38
     "Επικαιρότητα",                          // 39
@@ -250,7 +252,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "",                                      // 70
     "",                                      // 71
     "Δέκτης DAB",                            // 72
-    "Waiting for list",                      // 73
+    "Αναμονή λίστας",                        // 73
     "Επιλογή υπηρεσίας",                     // 74
     "Συντονισμός...",                        // 75
     "Χωρίς σήμα",                            // 76
@@ -258,7 +260,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "ΑΝΑΜΟΝΗ",                               // 78
     "Ανάπτυξη",                              // 79
     "Γραφικά",                               // 80
-    "Περί"                                   // 81,
+    "Περί"                                   // 81
   },
 
   {
@@ -279,7 +281,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Thema",                            // 14
     "Automatische Slideshow",           // 15
     "Messeinheiten",                    // 16
-    "Buffer Slideshows",                // 17
+    "Radiomodus",                       // 17
     "",                                 // 18
     "MODE DRÜCKEN, UM ZURÜCKZUKEHREN",  // 19
     "KONFIGURATION",                    // 20
@@ -289,16 +291,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Aus",                              // 24
     "Zeit bis Standby",                 // 25
     "Min.",                             // 26
-    "Serviceinformationen",             // 27
-    "Frequenz",                         // 28
-    "Ensemblename",                     // 29
-    "Servicename",                      // 30
-    "Programmtyp",                      // 31
-    "Fehlerschutz",                     // 32
-    "Samplingrate",                     // 33
-    "Bitrate",                          // 34
-    "Audio-Modus",                      // 35
-    "Signalinformationen",              // 36
+    "Systeminfo",                           // 27
+    "Tuner",                                // 28
+    "Radiosteuerung",                       // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / Software",                     // 32
+    "Laufzeit",                             // 33
+    "Reset-Grund",                          // 34
+    "RAM frei / min",                       // 35
+    "Heapblock / Frag.",                    // 36
     "Unbekannt",                        // 37
     "Nachrichten",                      // 38
     "Aktuelle Ereignisse",              // 39
@@ -347,88 +349,88 @@ static const char* const myLanguage[8][82] PROGMEM = {
   },
 
   {
-    "Français",                     // Français
-    "Rotation change",              // 1
-    "Relacher le bouton",           // 2
-    "Bascule Ecran",                // 3
-    "calibrer le compteur",         // 4
-    "Relacher le bouton et start",  // 5
-    "Encodeur regle optique",       // 6
-    "Encodeur sur standard",        // 7
-    "SI-DAB Reception",             // 8
-    "Logiciel",                     // 9
-    "Chargement par defaut",        // 10
-    "Liste canaux",                 // 11
-    "Language",                     // 12
-    "Brillance",                    // 13
-    "Theme",                        // 14
-    "Auto Diapo",                   // 15
-    "Unite de Signal ",             // 16
-    "Buffer Slideshows",            // 17
-    "",                             // 18
-    "Appuyer pour retour",          // 19
-    "CONFIGURATION",                //20
-    "Haut",                         //21
-    "Bas",                          // 22
-    "On",                           // 23
-    "Off",                          // 24
-    "Tempo",                        // 25
-    "Min.",                         // 26
-    "Service information",          // 27
-    "Frequence",                    // 28
-    "Nom ensemble",                 // 29
-    "Nom de service",               // 30
-    "Programme type",               // 31
-    "niveau de protection",         // 32
-    "Echantillonnage",              // 33
-    "Debit",                        // 34
-    "Mode audio",                   // 35
-    "Information signal",           // 36
-    "Inconnu",                      // 37
-    "Nouvelles",                    // 38
-    "Actualite",                    // 39
-    "Information",                  // 40
-    "Sport",                        // 41
-    "Education",                    // 42
-    "Dramatique",                   // 43
-    "Culture",                      // 44
-    "Science",                      // 45
-    "Variete",                      // 46
-    "Pop musique",                  // 47
-    "Rock",                         // 48
-    "Cool",                         // 49
-    "Classique leger",              // 50
-    "Classique serieux",            // 51
-    "Autres musiques",              // 52
-    "Meteo",                        // 53
-    "Economie",                     // 54
-    "Enfants",                      // 55
-    "Affaires sociales",            // 56
-    "Religion",                     // 57
-    "Phoning",                      // 58
-    "Voyage",                       // 59
-    "Loisir",                       // 60
-    "Jazz",                         // 61
-    "Country",                      // 62
-    "musique national",             // 63
-    "Musique ancienne",             // 64
-    "Folk",                         // 65
-    "Documentaires",                // 66
-    "",                             // 67
-    "",                             // 68
-    "",                             // 69
-    "",                             // 70
-    "",                             // 71
-    "DAB plus",                     // 72
-    "Attente liste",                // 73
-    "Selectionnez SVP",             // 74
-    "Recherche....",                // 75
-    "No Signal",                    // 76
-    "Pas de Tuner",                 // 77
-    "MODE STAND-BY",                // 78
-    "Developpement",                // 79
-    "Design graphique",             // 80
-    "a propos"                      // 81
+    "Français",                         // Français
+    "Sens de rotation modifié",          // 1
+    "Relâchez le bouton",                // 2
+    "Écran inversé",                     // 3
+    "Calibrer l'indicateur",             // 4
+    "Relâchez le bouton quand prêt",     // 5
+    "Encodeur réglé optique",            // 6
+    "Encodeur réglé standard",           // 7
+    "Récepteur SI-DAB",                  // 8
+    "Logiciel",                          // 9
+    "Réglages par défaut",               // 10
+    "Liste des canaux",                  // 11
+    "Langue",                            // 12
+    "Luminosité",                        // 13
+    "Thème",                             // 14
+    "Diapo automatique",                 // 15
+    "Unité de signal",                   // 16
+    "Mode radio",                        // 17
+    "",                                  // 18
+    "APPUYEZ MODE POUR RETOUR",          // 19
+    "CONFIGURATION",                     // 20
+    "Haut",                              // 21
+    "Bas",                               // 22
+    "Marche",                            // 23
+    "Arrêt",                             // 24
+    "Temporisation",                     // 25
+    "Min.",                              // 26
+    "Infos système",                        // 27
+    "Tuner",                                // 28
+    "Contrôle radio",                       // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / logiciel",                     // 32
+    "Durée active",                         // 33
+    "Cause reset",                          // 34
+    "RAM libre / min",                      // 35
+    "Bloc heap / frag.",                    // 36
+    "Inconnu",                           // 37
+    "Nouvelles",                         // 38
+    "Actualité",                         // 39
+    "Information",                       // 40
+    "Sport",                             // 41
+    "Éducation",                         // 42
+    "Dramatique",                        // 43
+    "Culture",                           // 44
+    "Science",                           // 45
+    "Variété",                           // 46
+    "Musique pop",                       // 47
+    "Rock",                              // 48
+    "Musique légère",                    // 49
+    "Classique léger",                   // 50
+    "Classique sérieux",                 // 51
+    "Autres musiques",                   // 52
+    "Météo",                             // 53
+    "Économie",                          // 54
+    "Enfants",                           // 55
+    "Affaires sociales",                 // 56
+    "Religion",                          // 57
+    "Téléphone",                         // 58
+    "Voyage",                            // 59
+    "Loisir",                            // 60
+    "Jazz",                              // 61
+    "Country",                           // 62
+    "Musique nationale",                 // 63
+    "Musique ancienne",                  // 64
+    "Folk",                              // 65
+    "Documentaires",                     // 66
+    "",                                  // 67
+    "",                                  // 68
+    "",                                  // 69
+    "",                                  // 70
+    "",                                  // 71
+    "DAB plus",                          // 72
+    "Attente liste",                     // 73
+    "Sélectionnez service",              // 74
+    "Recherche...",                      // 75
+    "Pas de signal",                     // 76
+    "Tuner non détecté!",                // 77
+    "MODE VEILLE",                       // 78
+    "Développement",                     // 79
+    "Design graphique",                  // 80
+    "À propos"                           // 81
   },
 
   {
@@ -449,7 +451,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Tema",                          // 14
     "Diapositivas automáticas",      // 15
     "Unidad de señal",               // 16
-    "Búfer de diapositivas",         // 17
+    "Modo de radio",                 // 17
     "",                              // 18
     "Presionar para volver",         // 19
     "CONFIGURACIÓN",                 // 20
@@ -459,16 +461,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Apagado",                       // 24
     "Tiempo",                        // 25
     "Mín.",                          // 26
-    "Información del servicio",      // 27
-    "Frecuencia",                    // 28
-    "Nombre del conjunto",           // 29
-    "Nombre del servicio",           // 30
-    "Tipo de programa",              // 31
-    "Nivel de protección",           // 32
-    "Muestreo",                      // 33
-    "Tasa de bits",                  // 34
-    "Modo de audio",                 // 35
-    "Información de la señal",       // 36
+    "Info del sistema",                     // 27
+    "Sintonizador",                         // 28
+    "Control radio",                        // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / software",                     // 32
+    "Tiempo activo",                        // 33
+    "Causa reinicio",                       // 34
+    "RAM libre / mín.",                     // 35
+    "Bloque heap / frag.",                  // 36
     "Desconocido",                   // 37
     "Noticias",                      // 38
     "Actualidad",                    // 39
@@ -534,7 +536,7 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Motyw",                             // 14
     "Automatyczny pokaz slajdów",        // 15
     "Jednostka sygnału",                 // 16
-    "Buforuj pokazy slajdów",            // 17
+    "Tryb radia",                        // 17
     "",                                  // 18
     "NACIŚNIJ MODE ABY WYJŚĆ",           // 19
     "KONFIGURACJA",                      // 20
@@ -544,16 +546,16 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Wyłącz",                            // 24
     "Czas do wyłączenia",                // 25
     "Min.",                              // 26
-    "Informacje o serwisie",             // 27
-    "Częstotliwość",                     // 28
-    "Nazwa multipleksu",                 // 29
-    "Nazwa stacji",                      // 30
-    "Rodzaj programu",                   // 31
-    "Poziom ochrony",                    // 32
-    "Częst. próbkowania",                // 33
-    "Bitrate",                           // 34
-    "Tryb audio",                        // 35
-    "Informacje o sygnale",              // 36
+    "Info systemowe",                       // 27
+    "Tuner",                                // 28
+    "Sterowanie radia",                     // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / program",                      // 32
+    "Czas pracy",                           // 33
+    "Przyczyna resetu",                     // 34
+    "RAM wolna / min",                      // 35
+    "Blok heap / frag.",                    // 36
     "Nieznany",                          // 37
     "Wiadomości",                        // 38
     "Aktualności",                       // 39
@@ -600,91 +602,395 @@ static const char* const myLanguage[8][82] PROGMEM = {
     "Projekt graficzny",                 // 80
     "O programie"                        // 81
   },
-  
+
   {
-    "Romana",                     		  // Romana
-    "Direcția de rotație inversata",   	// 1
-    "Vă rugăm să eliberați butonul",	  // 2
-    "Ecranul a fost inversat",    		  // 3
-    "Calibrarea contorului analogic",	  // 4
-    "Eliberați butonul când este gata",	// 5
-    "encoder setat optical",     		    // 6
-    "encoder setat standard",    		    // 7
-    "Receptor SI-DAB",            // 8
-    "Software",                   // 9
-    "Setari Initiale",            // 10
-    "Lista Canale",               // 11
-    "Limba",                      // 12
-    "Luminozitate",               // 13
-    "Tema",                       // 14
-    "Derulare Imagini",           // 15
-    "Masurare Semnal",            // 16
-    "Buffer Slideshows",          // 17
-    "",		                      // 18
-    "APASA MODE PENTRU IESIRE",   // 19
-    "CONFIGURARE",                // 20
-    "Sus",                        // 21
-    "Jos",                        // 22
-    "Pornit",                     // 23
-    "Oprit",                      // 24
-    "Oprire dupa",                // 25
-    "Min.",                       // 26
-    "Informatii Program",         // 27
-    "Frecventa",                  // 28
-    "Nume Multiplex",             // 29
-    "Nume Program",               // 30
-    "Tip Program",                // 31
-    "Nivel Protectie",            // 32
-    "Samplerate",                 // 33
-    "Bitrate",                    // 34
-    "Mod Audio",                  // 35
-    "Informatii Semnal",          // 36
-    "Necunoscut",                 // 37
-    "Stiri",                      // 38
-    "Current Affairs",            // 39
-    "Informatii",                 // 40
-    "Sport",                      // 41
-    "Educatie",                   // 42
-    "Drama",                      // 43
-    "Cultura",                    // 44
-    "Stiinta",                    // 45
-    "Diverse",                    // 46
-    "Pop Music",                  // 47
-    "Rock Music",                 // 48
-    "Easy Listening",             // 49
-    "Light Classical",            // 50
-    "Serious Classical",          // 51
-    "Other Music",                // 52
-    "Vreme",                      // 53
-    "Finante",                    // 54
-    "Copii",                      // 55
-    "Social Affairs",             // 56
-    "Religie",                    // 57
-    "Phone In",                   // 58
-    "Calatorii",                  // 59
-    "Leisure",                    // 60
-    "Jazz Music",                 // 61
-    "Country Music",              // 62
-    "National Music",             // 63
-    "Oldies Music",               // 64
-    "Folk Music",                 // 65
-    "Documentare",                // 66
-    "",                           // 67
-    "",                           // 68
-    "",                           // 69
-    "",                           // 70
-    "",                           // 71
-    "Receptor DAB",               // 72
-    "Asteptare lista",            // 73
-    "Selectare Program",          // 74
-    "Cautare...",                 // 75
-    "Fara Semnal",                // 76
-    "Tuner nedetected!",          // 77
-    "STAND-BY MODE",              // 78
-    "Dezvoltare",                 // 79
-    "Grafica",		              // 80
-    "Despre"                      // 81
+    "Romana",                              // Romana
+    "Direcția de rotație inversată",       // 1
+    "Vă rugăm să eliberați butonul",       // 2
+    "Ecranul a fost inversat",             // 3
+    "Calibrarea contorului analogic",      // 4
+    "Eliberați butonul când este gata",    // 5
+    "encoder setat optic",                  // 6
+    "encoder setat standard",               // 7
+    "Receptor SI-DAB",                      // 8
+    "Software",                             // 9
+    "Setări inițiale",                      // 10
+    "Lista canalelor",                      // 11
+    "Limba",                                // 12
+    "Luminozitate",                         // 13
+    "Tema",                                 // 14
+    "Derulare imagini",                     // 15
+    "Măsurare semnal",                      // 16
+    "Mod radio",                            // 17
+    "",                                     // 18
+    "APASĂ MODE PENTRU IEȘIRE",             // 19
+    "CONFIGURARE",                          // 20
+    "Sus",                                  // 21
+    "Jos",                                  // 22
+    "Pornit",                               // 23
+    "Oprit",                                // 24
+    "Oprire după",                          // 25
+    "Min.",                                 // 26
+    "Info sistem",                          // 27
+    "Tuner",                                // 28
+    "Control radio",                        // 29
+    "GPIO12",                               // 30
+    "VDD_SDIO",                             // 31
+    "ESP32 / software",                     // 32
+    "Timp activ",                           // 33
+    "Cauză reset",                          // 34
+    "RAM liber / min",                      // 35
+    "Bloc heap / frag.",                    // 36
+    "Necunoscut",                           // 37
+    "Știri",                                // 38
+    "Actualități",                          // 39
+    "Informații",                           // 40
+    "Sport",                                // 41
+    "Educație",                             // 42
+    "Dramă",                                // 43
+    "Cultură",                              // 44
+    "Știință",                              // 45
+    "Diverse",                              // 46
+    "Muzică pop",                           // 47
+    "Muzică rock",                          // 48
+    "Muzică ușoară",                        // 49
+    "Clasică ușoară",                       // 50
+    "Muzică clasică",                       // 51
+    "Altă muzică",                          // 52
+    "Vreme",                                // 53
+    "Finanțe",                              // 54
+    "Copii",                                // 55
+    "Probleme sociale",                     // 56
+    "Religie",                              // 57
+    "Telefon în direct",                    // 58
+    "Călătorii",                            // 59
+    "Timp liber",                           // 60
+    "Muzică jazz",                          // 61
+    "Muzică country",                       // 62
+    "Muzică națională",                     // 63
+    "Muzică veche",                         // 64
+    "Muzică folk",                          // 65
+    "Documentare",                          // 66
+    "",                                     // 67
+    "",                                     // 68
+    "",                                     // 69
+    "",                                     // 70
+    "",                                     // 71
+    "Receptor DAB",                         // 72
+    "Așteptare listă",                      // 73
+    "Selectare program",                    // 74
+    "Căutare...",                           // 75
+    "Fără semnal",                          // 76
+    "Tuner nedetectat!",                    // 77
+    "MOD AȘTEPTARE",                        // 78
+    "Dezvoltare",                           // 79
+    "Grafică",                              // 80
+    "Despre"                                // 81
   }
 };
-#endif
 
+// Reset reason strings used by System info. Technical fault names such as WDT,
+// Brownout and SDIO stay recognizable across languages; ordinary states are
+// localized. The table lives in flash and adds no runtime heap allocation.
+static const char* const systemResetReasonText[8][9] PROGMEM = {
+  {"Power-on", "External", "Software", "Panic", "WDT", "Deep sleep", "Brownout", "SDIO", "Unknown"},
+  {"Inschakelen", "Extern", "Software", "Panic", "WDT", "Diepe slaap", "Brownout", "SDIO", "Onbekend"},
+  {"Εκκίνηση", "Εξωτερικό", "Λογισμικό", "Panic", "WDT", "Βαθύς ύπνος", "Brownout", "SDIO", "Άγνωστο"},
+  {"Einschalten", "Extern", "Software", "Panic", "WDT", "Tiefschlaf", "Brownout", "SDIO", "Unbekannt"},
+  {"Mise sous tension", "Externe", "Logiciel", "Panic", "WDT", "Sommeil profond", "Brownout", "SDIO", "Inconnu"},
+  {"Encendido", "Externo", "Software", "Panic", "WDT", "Sueño profundo", "Brownout", "SDIO", "Desconocido"},
+  {"Zasilanie", "Zewnętrzny", "Programowy", "Panic", "WDT", "Głęboki sen", "Brownout", "SDIO", "Nieznany"},
+  {"Pornire", "Extern", "Software", "Panic", "WDT", "Somn profund", "Brownout", "SDIO", "Necunoscut"}
+};
+
+// FM-only labels that have no DAB counterpart in the base 82-string table.
+static const char* const fmMultipathText[8] PROGMEM = {
+  "Multipath", "Multipad", "Πολλαπλή διαδρομή", "Mehrweg", "Trajets multiples",
+  "Multitrayecto", "Wielodrogowość", "Propagare multiplă"
+};
+static const char* const fmStereoBlendText[8] PROGMEM = {
+  "Stereo blend", "Stereomix", "Μίξη στερεοφωνίας", "Stereomischung", "Mélange stéréo",
+  "Mezcla estéreo", "Miks stereo", "Mix stereo"
+};
+static const char* const radioModeValueText[2] PROGMEM = {"DAB", "FM"};
+static const char* const fmRegionMenuText[8] PROGMEM = {
+  "FM Region", "FM-regio", "Περιοχή FM", "FM-Region",
+  "Région FM", "Región FM", "Region FM", "Regiune FM"
+};
+static const char* const fmRegionValueText[8][FM_REGION_COUNT] PROGMEM = {
+  {"Europe", "N.America", "Japan"},
+  {"Europa", "N.Amerika", "Japan"},
+  {"Ευρώπη", "Β. Αμερική", "Ιαπωνία"},
+  {"Europa", "N.Amerika", "Japan"},
+  {"Europe", "Amér. Nord", "Japon"},
+  {"Europa", "N.América", "Japón"},
+  {"Europa", "Am. Półn.", "Japonia"},
+  {"Europa", "America N.", "Japonia"}
+};
+static const char* const radioIrqText[8] PROGMEM = {
+  "Radio IRQ", "Radio-IRQ", "IRQ ραδιοφώνου", "Radio-IRQ",
+  "IRQ radio", "IRQ de radio", "IRQ radia", "IRQ radio"
+};
+static const char* const fmModeText[8] PROGMEM = {"FM", "FM", "FM", "FM", "FM", "FM", "FM", "FM"};
+static const char* const fmPiText[8] PROGMEM = {"PI", "PI", "PI", "PI", "PI", "PI", "PI", "PI"};
+static const char* const fmPsText[8] PROGMEM = {"PS", "PS", "PS", "PS", "PS", "PS", "PS", "PS"};
+static const char* const fmPtyText[8] PROGMEM = {"PTY", "PTY", "PTY", "PTY", "PTY", "PTY", "PTY", "PTY"};
+static const char* const fmRdsText[8] PROGMEM = {"RDS", "RDS", "RDS", "RDS", "RDS", "RDS", "RDS", "RDS"};
+static const char* const fmRbdsText[8] PROGMEM = {"RBDS", "RBDS", "RBDS", "RBDS", "RBDS", "RBDS", "RBDS", "RBDS"};
+static const char* const fmSnrText[8] PROGMEM = {"SNR", "SNR", "SNR", "SNR", "SNR", "SNR", "SNR", "SNR"};
+// Compact scan/status strings use the documented English fallback in every
+// language until native translations are supplied; array indexes stay aligned.
+static const char* const fmNoScanText[8] PROGMEM = {
+  "NO FM SCAN", "NO FM SCAN", "NO FM SCAN", "NO FM SCAN",
+  "NO FM SCAN", "NO FM SCAN", "NO FM SCAN", "NO FM SCAN"};
+static const char* const fmScanText[8] PROGMEM = {
+  "FM SCAN", "FM SCAN", "FM SCAN", "FM SCAN",
+  "FM SCAN", "FM SCAN", "FM SCAN", "FM SCAN"};
+static const char* const fmSeekMenuText[8] PROGMEM = {
+  "FM Seek", "FM Seek", "FM Seek", "FM Seek",
+  "FM Seek", "FM Seek", "FM Seek", "FM Seek"};
+static const char* const fmAfMenuText[8] PROGMEM = {
+  "FM AF", "FM AF", "FM AF", "FM AF",
+  "FM AF", "FM AF", "FM AF", "FM AF"};
+static const char* const fmSeekValueText[8][3] PROGMEM = {
+  {"Weak", "Normal", "Strong"}, {"Weak", "Normal", "Strong"},
+  {"Weak", "Normal", "Strong"}, {"Weak", "Normal", "Strong"},
+  {"Weak", "Normal", "Strong"}, {"Weak", "Normal", "Strong"},
+  {"Weak", "Normal", "Strong"}, {"Weak", "Normal", "Strong"}};
+static const char* const noDabServiceText[8] PROGMEM = {
+  "NO DAB SERVICE", "NO DAB SERVICE", "NO DAB SERVICE", "NO DAB SERVICE",
+  "NO DAB SERVICE", "NO DAB SERVICE", "NO DAB SERVICE", "NO DAB SERVICE"};
+static const char* const dabScanText[8] PROGMEM = {
+  "DAB SCAN", "DAB SCAN", "DAB SCAN", "DAB SCAN",
+  "DAB SCAN", "DAB SCAN", "DAB SCAN", "DAB SCAN"};
+static const char* const fmStationListText[8] PROGMEM = {
+  "FM STATIONS", "FM STATIONS", "FM STATIONS", "FM STATIONS",
+  "FM STATIONS", "FM STATIONS", "FM STATIONS", "FM STATIONS"};
+static const char* const dabStationListText[8] PROGMEM = {
+  "DAB STATIONS", "DAB STATIONS", "DAB STATIONS", "DAB STATIONS",
+  "DAB STATIONS", "DAB STATIONS", "DAB STATIONS", "DAB STATIONS"};
+static const char* const currentMuxListText[8] PROGMEM = {
+  "CURRENT MUX", "CURRENT MUX", "CURRENT MUX", "CURRENT MUX",
+  "CURRENT MUX", "CURRENT MUX", "CURRENT MUX", "CURRENT MUX"};
+static const char* const scanNotRunText[8] PROGMEM = {
+  "SCAN NOT RUN", "SCAN NOT RUN", "SCAN NOT RUN", "SCAN NOT RUN",
+  "SCAN NOT RUN", "SCAN NOT RUN", "SCAN NOT RUN", "SCAN NOT RUN"};
+static const char* const noStationsFoundText[8] PROGMEM = {
+  "NO STATIONS FOUND", "NO STATIONS FOUND", "NO STATIONS FOUND", "NO STATIONS FOUND",
+  "NO STATIONS FOUND", "NO STATIONS FOUND", "NO STATIONS FOUND", "NO STATIONS FOUND"};
+static const char* const pressOkScanText[8] PROGMEM = {
+  "OK = START SCAN", "OK = START SCAN", "OK = START SCAN", "OK = START SCAN",
+  "OK = START SCAN", "OK = START SCAN", "OK = START SCAN", "OK = START SCAN"};
+static const char* const fmAfInfoText[8] PROGMEM =
+  {"AF list", "AF list", "AF list", "AF list", "AF list", "AF list", "AF list", "AF list"};
+static const char* const fmTrafficInfoText[8] PROGMEM =
+  {"TP / TA / PTY", "TP / TA / PTY", "TP / TA / PTY", "TP / TA / PTY",
+   "TP / TA / PTY", "TP / TA / PTY", "TP / TA / PTY", "TP / TA / PTY"};
+static const char* const fmCtInfoText[8] PROGMEM =
+  {"RDS clock", "RDS clock", "RDS clock", "RDS clock",
+   "RDS clock", "RDS clock", "RDS clock", "RDS clock"};
+static const char* const fmQualityInfoText[8] PROGMEM =
+  {"FM quality", "FM quality", "FM quality", "FM quality",
+   "FM quality", "FM quality", "FM quality", "FM quality"};
+static const char* const fmMultipathShortText[8] PROGMEM = {"MP", "MP", "MP", "MP", "MP", "MP", "MP", "MP"};
+static const char* const fmBlendShortText[8] PROGMEM = {"BL", "BL", "BL", "BL", "BL", "BL", "BL", "BL"};
+static const char* const fmAfcRailText[8] PROGMEM = {"AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL", "AFCRL"};
+static const char* const fmMonoText[8] PROGMEM = {
+  "Mono", "Mono", "Μονοφωνικό", "Mono", "Mono", "Mono", "Mono", "Mono"
+};
+static const char* const fmStereoText[8] PROGMEM = {
+  "Stereo", "Stereo", "Στερεοφωνικό", "Stereo", "Stéréo", "Estéreo", "Stereo", "Stereo"
+};
+
+// Slideshow waiting text is kept outside the base 82-string table so existing
+// menu and status indexes remain unchanged.
+static const char* const slideshowLoadingText[8] PROGMEM = {
+  "Loading slideshow...",
+  "Slideshow laden...",
+  "Φόρτωση παρουσίασης...",
+  "Slideshow laden...",
+  "Chargement diapo...",
+  "Cargando diapositiva...",
+  "Ładowanie slajdu...",
+  "Se încarcă imaginea..."
+};
+static const char* const slideshowReceivingText[8] PROGMEM = {
+  "MOT reception in progress",
+  "MOT-ontvangst actief",
+  "Λήψη MOT σε εξέλιξη",
+  "MOT-Empfang läuft",
+  "Réception MOT en cours",
+  "Recepción MOT en curso",
+  "Trwa odbiór MOT",
+  "Recepție MOT în curs"
+};
+static const char* const switchingToFmText[8] PROGMEM = {
+  "Switching to FM...",
+  "Overschakelen naar FM...",
+  "Μετάβαση σε FM...",
+  "Wechsel zu FM...",
+  "Passage en FM...",
+  "Cambiando a FM...",
+  "Przełączanie na FM...",
+  "Comutare la FM..."
+};
+static const char* const switchingToDabText[8] PROGMEM = {
+  "Switching to DAB...",
+  "Overschakelen naar DAB...",
+  "Μετάβαση σε DAB...",
+  "Wechsel zu DAB...",
+  "Passage en DAB...",
+  "Cambiando a DAB...",
+  "Przełączanie na DAB...",
+  "Comutare la DAB..."
+};
+static const char* const radioErrorText[8] PROGMEM = {
+  "RADIO ERROR",
+  "RADIOFOUT",
+  "ΣΦΑΛΜΑ ΡΑΔΙΟΦΩΝΟΥ",
+  "RADIOFEHLER",
+  "ERREUR RADIO",
+  "ERROR DE RADIO",
+  "BŁĄD RADIA",
+  "EROARE RADIO"
+};
+
+// IR Remote UI. Technical labels and action names (GPIO12, IR, TUNE, VOL,
+// MODE, SLIDESHOW, STANDBY, protocol names and hexadecimal values) remain
+// language-independent; only ordinary user-facing instructions are localized.
+static const char* const irRemoteText[8] PROGMEM = {
+  "IR Remote", "IR-afstandsbed.", "Χειριστήριο IR", "IR-Fernbed.",
+  "Télécommande IR", "Mando IR", "Pilot IR", "Telecomandă IR"
+};
+static const char* const irLearnText[8] PROGMEM = {
+  "Learn", "Leren", "Εκμάθηση", "Lernen",
+  "Apprendre", "Aprender", "Nauka", "Învățare"
+};
+static const char* const irClearText[8] PROGMEM = {
+  "Clear", "Verwijder", "Διαγραφή", "Löschen",
+  "Effacer", "Borrar", "Usuń", "Șterge"
+};
+static const char* const irTestText[8] PROGMEM = {
+  "Test", "Test", "Δοκιμή", "Test", "Test", "Prueba", "Test", "Test"
+};
+static const char* const irBackText[8] PROGMEM = {
+  "Back", "Terug", "Πίσω", "Zurück", "Retour", "Atrás", "Wstecz", "Înapoi"
+};
+static const char* const irProfileLearnedText[8] PROGMEM = {
+  "Profile: learned", "Profiel: geleerd", "Προφίλ: εκμαθημένο", "Profil: gelernt",
+  "Profil : appris", "Perfil: aprendido", "Profil: nauczony", "Profil: învățat"
+};
+static const char* const irProfileEmptyText[8] PROGMEM = {
+  "Profile: empty", "Profiel: leeg", "Προφίλ: κενό", "Profil: leer",
+  "Profil : vide", "Perfil: vacío", "Profil: pusty", "Profil: gol"
+};
+static const char* const irLearnedShortText[8] PROGMEM = {
+  "learned", "geleerd", "εκμαθημένο", "gelernt",
+  "appris", "aprendido", "nauczony", "învățat"
+};
+static const char* const irEmptyShortText[8] PROGMEM = {
+  "empty", "leeg", "κενό", "leer",
+  "vide", "vacío", "pusty", "gol"
+};
+static const char* const irSetGpio12Text[8] PROGMEM = {
+  "Set GPIO12 to IR", "GPIO12 op IR zetten", "GPIO12 σε IR", "GPIO12 auf IR",
+  "GPIO12 sur IR", "GPIO12 en IR", "GPIO12 na IR", "GPIO12 pe IR"
+};
+static const char* const irPressOkText[8] PROGMEM = {
+  "Press OK", "Druk op OK", "Πατήστε OK", "OK drücken",
+  "Appuyez sur OK", "Pulse OK", "Naciśnij OK", "Apăsați OK"
+};
+static const char* const irLearningText[8] PROGMEM = {
+  "IR Learning", "IR leren", "Εκμάθηση IR", "IR lernen",
+  "Apprentissage IR", "Aprendizaje IR", "Nauka IR", "Învățare IR"
+};
+static const char* const irPressText[8] PROGMEM = {
+  "Press", "Druk", "Πατήστε", "Drücken",
+  "Appuyez", "Pulse", "Naciśnij", "Apăsați"
+};
+static const char* const irPhysicalOkCancelsText[8] PROGMEM = {
+  "Physical OK cancels", "Fysieke OK annuleert", "Φυσικό OK: ακύρωση", "Physisches OK: Abbruch",
+  "OK physique : annuler", "OK físico: cancelar", "Fizyczny OK: anuluj", "OK fizic: anulare"
+};
+static const char* const irReleaseKeyText[8] PROGMEM = {
+  "Release key...", "Laat toets los...", "Αφήστε το πλήκτρο...", "Taste loslassen...",
+  "Relâchez la touche...", "Suelte la tecla...", "Puść przycisk...", "Eliberați tasta..."
+};
+static const char* const irClearLearnedRemoteText[8] PROGMEM = {
+  "Clear learned remote?", "Remote wissen?", "Διαγραφή IR;", "IR-Fernbed. löschen?",
+  "Effacer télécommande ?", "¿Borrar mando?", "Usunąć pilota?", "Șterge telecomanda?"
+};
+static const char* const irYesText[8] PROGMEM = {
+  "Yes", "Ja", "Ναι", "Ja", "Oui", "Sí", "Tak", "Da"
+};
+static const char* const irNoText[8] PROGMEM = {
+  "No", "Nee", "Όχι", "Nein", "Non", "No", "Nie", "Nu"
+};
+static const char* const irTestTitleText[8] PROGMEM = {
+  "IR Test", "IR-test", "Δοκιμή IR", "IR-Test",
+  "Test IR", "Prueba IR", "Test IR", "Test IR"
+};
+static const char* const irPressRemoteKeyText[8] PROGMEM = {
+  "Press remote key", "Druk IR-toets", "Πατήστε πλήκτρο IR", "IR-Taste drücken",
+  "Appuyez touche IR", "Pulse tecla IR", "Naciśnij klawisz IR", "Apăsați tasta IR"
+};
+static const char* const irPhysicalOkExitsText[8] PROGMEM = {
+  "Physical OK exits", "Fysieke OK sluit af", "Φυσικό OK: έξοδος", "Physisches OK: Ende",
+  "OK physique : quitter", "OK físico: salir", "Fizyczny OK: wyjście", "OK fizic: ieșire"
+};
+static const char* const irProtocolText[8] PROGMEM = {
+  "Protocol", "Protocol", "Πρωτόκολλο", "Protokoll",
+  "Protocole", "Protocolo", "Protokół", "Protocol"
+};
+static const char* const irAddressText[8] PROGMEM = {
+  "Address", "Adres", "Διεύθυνση", "Adresse",
+  "Adresse", "Dirección", "Adres", "Adresă"
+};
+static const char* const irCommandText[8] PROGMEM = {
+  "Command", "Commando", "Εντολή", "Befehl",
+  "Commande", "Comando", "Komenda", "Comandă"
+};
+static const char* const irActionText[8] PROGMEM = {
+  "Action", "Actie", "Ενέργεια", "Aktion",
+  "Action", "Acción", "Akcja", "Acțiune"
+};
+static const char* const irNotAssignedText[8] PROGMEM = {
+  "NOT ASSIGNED", "NIET TOEGEWEZEN", "ΧΩΡΙΣ ΑΝΑΘΕΣΗ", "NICHT ZUGEORDNET",
+  "NON ATTRIBUÉ", "NO ASIGNADO", "NIEPRZYPISANE", "NEATRIBUIT"
+};
+static const char* const irRepeatText[8] PROGMEM = {
+  "Repeat", "Herhaling", "Επανάληψη", "Wiederholung",
+  "Répétition", "Repetición", "Powtórzenie", "Repetare"
+};
+static const char* const irMemoryErrorText[8] PROGMEM = {
+  "IR memory error", "IR-geheugenfout", "Σφάλμα μνήμης IR", "IR-Speicherfehler",
+  "Erreur mémoire IR", "Error memoria IR", "Błąd pamięci IR", "Eroare memorie IR"
+};
+static const char* const restartingText[8] PROGMEM = {
+  "Restarting...", "Herstarten...", "Επανεκκίνηση...", "Neustart...",
+  "Redémarrage...", "Reiniciando...", "Restart...", "Repornire..."
+};
+
+static const char* const i2sAudioMenuText[8] PROGMEM = {
+  "I²S Audio", "I²S-audio", "Ήχος I²S", "I²S-Audio",
+  "Audio I²S", "Audio I²S", "Dźwięk I²S", "Audio I²S"
+};
+
+// EPG UI strings follow the existing radio language order.
+enum EpgText {
+  EPG_OVERVIEW, EPG_PROGRAM, EPG_DETAIL, EPG_WAIT_SI, EPG_WAIT_PROGRAM,
+  EPG_UNAVAILABLE, EPG_STALE, EPG_NO_TIME, EPG_AMBIGUOUS, EPG_MEMORY,
+  EPG_LIMIT, EPG_NOW, EPG_NEXT, EPG_OVERLAP, EPG_ACTUAL, EPG_TEXT_COUNT
+};
+static const char* const epgText[8][EPG_TEXT_COUNT] PROGMEM = {
+  {"EPG NOW / NEXT", "EPG PROGRAMME", "EPG DETAIL", "Waiting for station", "Waiting for programme...", "EPG unavailable", "EPG unavailable / outdated", "Time unavailable", "Ambiguous service", "EPG: insufficient memory", "LIMIT", "NOW", "NEXT", "NOW (overlap)", "Actual %s (planned time kept)"},
+  {"EPG NU / STRAKS", "EPG PROGRAMMA", "EPG DETAILS", "Wachten op zender", "Wachten op programma...", "EPG niet beschikbaar", "EPG ontbreekt / verouderd", "Tijd niet beschikbaar", "Onzekere zender", "EPG: te weinig geheugen", "LIMIET", "NU", "STRAKS", "NU (overlap)", "Werkelijk %s (planning blijft)"},
+  {"EPG ΤΩΡΑ / ΜΕΤΑ", "EPG ΠΡΟΓΡΑΜΜΑ", "EPG ΛΕΠΤΟΜΕΡΕΙΕΣ", "Αναμονή σταθμού", "Αναμονή προγράμματος...", "EPG μη διαθέσιμο", "EPG μη διαθέσιμο / παλιό", "Ώρα μη διαθέσιμη", "Ασαφής σταθμός", "EPG: ανεπαρκής μνήμη", "ΟΡΙΟ", "ΤΩΡΑ", "ΜΕΤΑ", "ΤΩΡΑ (επικάλυψη)", "Έναρξη %s (βάσει σχεδίου)"},
+  {"EPG JETZT / DANACH", "EPG PROGRAMM", "EPG DETAILS", "Warte auf Sender", "Warte auf Programm...", "EPG nicht verfügbar", "EPG fehlt / veraltet", "Zeit nicht verfügbar", "Sender nicht eindeutig", "EPG: zu wenig Speicher", "LIMIT", "JETZT", "DANACH", "JETZT (Überlappung)", "Beginn %s (Plan bleibt)"},
+  {"EPG EN COURS / APRÈS", "EPG PROGRAMME", "EPG DÉTAIL", "Attente de la station", "Attente du programme...", "EPG indisponible", "EPG indisponible / périmé", "Heure indisponible", "Station ambiguë", "EPG : mémoire insuffisante", "LIMITE", "EN COURS", "ENSUITE", "EN COURS (chevauchement)", "Début %s (horaire conservé)"},
+  {"EPG AHORA / DESPUÉS", "EPG PROGRAMA", "EPG DETALLE", "Esperando emisora", "Esperando programa...", "EPG no disponible", "EPG no disponible / antiguo", "Hora no disponible", "Emisora ambigua", "EPG: memoria insuficiente", "LÍMITE", "AHORA", "DESPUÉS", "AHORA (solapamiento)", "Inicio %s (horario conservado)"},
+  {"EPG TERAZ / POTEM", "EPG PROGRAM", "EPG SZCZEGÓŁY", "Czekam na stację", "Czekam na program...", "EPG niedostępne", "EPG niedostępne / nieaktualne", "Czas niedostępny", "Niejednoznaczna stacja", "EPG: za mało pamięci", "LIMIT", "TERAZ", "POTEM", "TERAZ (nakładanie)", "Początek %s (plan zachowany)"},
+  {"EPG ACUM / URMEAZĂ", "EPG PROGRAM", "EPG DETALII", "Aștept postul", "Aștept programul...", "EPG indisponibil", "EPG indisponibil / expirat", "Ora indisponibilă", "Post ambiguu", "EPG: memorie insuficientă", "LIMITĂ", "ACUM", "URMEAZĂ", "ACUM (suprapunere)", "Început %s (plan păstrat)"}
+};
+
+#endif

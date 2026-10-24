@@ -1,349 +1,428 @@
 // Serial-line control protocol implementation.
-//
-// Inbound (PC -> radio): newline-terminated text. Two forms:
-//   "DEBUG"        bare keyword → toggle slideshow debug logging
-//   "CMD=VALUE"    key/value pair → see hashCommand() / handleCommunication()
-//
-// Outbound (radio -> PC): event-driven, only while connectedSerial is true:
-//   $L=...   service list changed
-//   $I=...   service info (bitrate, PTY, etc.) changed
-//   $D=RT=   radiotext changed
-//   $S=...   signal/lock/CNR/FIC (rate-limited by `interval` ms)
-//   $M=...   slideshow availability
-//   *TUNE/*SERVICE/*ENABLE  command acknowledgements
-//   #0..#2   numeric status replies (#0 OK, #1 bad arg, #2 unknown cmd)
+// Runtime path is intentionally Arduino-String-free: RX, diff caches and
+// charset conversion use fixed storage so serial traffic cannot fragment heap.
 
 #include "comms.h"
+#include "epg_runtime.h"
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
 
-unsigned long signalMillis;          // last time the periodic signal line was emitted
-unsigned int interval = 100;         // signal-line emission interval (ms), configurable via INTERVAL=
+unsigned long signalMillis;
+unsigned int interval = 100;
 byte ServiceIndexOld;
 byte dabfreqOld;
-String ServiceListOld;               // cached last-emitted service list, used for diff detection
-String ServiceInfoOld;
-String ServiceDataOld;
-bool connectedSerial;                // protocol active only after ENABLE=1 handshake
+bool connectedSerial;
 
-// Called once per main loop. Parses at most one inbound line (non-blocking)
-// and then emits diffs of cached state to the host if connected.
-void Communication(void) {
-  if (Serial.available() > 0) {
-    Serial.setTimeout(100);  // partial packet shouldn't freeze the loop for 1s
-    String input = Serial.readStringUntil('\n');
-    unsigned int equalsIndex = input.indexOf('=');
+namespace {
+constexpr size_t kRxLineBytes = 128;
+constexpr size_t kUtf8LabelBytes = 64;
+constexpr size_t kServiceDataUtf8Bytes = 385;
 
-    if (equalsIndex == -1) {
-      // Bare keyword (no '='): only DEBUG is recognised; anything else is #2 (unknown)
-      input.trim();
-      input.toUpperCase();
-      if (input.equals("DEBUG")) {
-        radio.SlideShowDebug = !radio.SlideShowDebug;
-        Serial.printf("[SLS] Debug %s\n", radio.SlideShowDebug ? "ON" : "OFF");
-      } else {
-        DataPrint("#2\n");
-      }
-      return;
-    }
+char rxLine[kRxLineBytes];
+size_t rxLen = 0;
+bool rxOverflow = false;
+uint32_t rxLastByteMs = 0;
+constexpr uint32_t kRxIdleCommitMs = 100U;
 
-    if (equalsIndex != -1) {
-      String command = input.substring(0, equalsIndex);
-      String value = input.substring(equalsIndex + 1);
+struct ServiceListSnapshot {
+  bool valid;
+  bool signalLock;
+  uint8_t count;
+  uint8_t ensembleCharset;
+  uint8_t serviceCharset;
+  char eid[5];
+  char ensembleLabel[17];
+  struct Item {
+    uint8_t type;
+    char label[17];
+  } items[32];
+};
 
-      unsigned int intValue = value.toInt();
-      command.trim();
-      command.toUpperCase();
+struct ServiceInfoSnapshot {
+  bool valid;
+  bool started;
+  uint8_t serviceIndex;
+  uint8_t componentId;
+  char sid[5];
+  uint8_t pty;
+  uint8_t protection;
+  uint16_t samplerate;
+  uint16_t bitrate;
+  uint8_t audioMode;
+};
 
-      if (connectedSerial) {
-        switch (hashCommand(command)) {
-          case 'E':
-            if (command.equals("ENABLE")) {
-              if (intValue == 0) {
-                DataPrint("*ENABLE=0\n");
-                connectedSerial = false;
-              } else if (intValue == 1) {
-                doEnableConnection();
-              } else {
-                DataPrint("#1\n");
-              }
-            }
-            break;
+ServiceListSnapshot serviceListOld = {};
+ServiceInfoSnapshot serviceInfoOld = {};
+char serviceDataOld[kServiceDataUtf8Bytes] = {};
+bool serviceDataOldValid = false;
 
-          case 'I':
-            if (command.equals("INTERVAL")) {
-              if (intValue > 0 && intValue <= 500) {
-                DataPrint("*INTERVAL=" + String(intValue) + "\n#0\n");
-                interval = intValue;
-              } else {
-                DataPrint("#1\n");
-              }
-              break;
+void resetOutputCaches() {
+  serviceListOld.valid = false;
+  serviceInfoOld.valid = false;
+  serviceDataOldValid = false;
+  serviceDataOld[0] = '\0';
+}
 
-            case 'T':
-              if (command.equals("TUNE")) {
-                if (intValue < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
-                  radio.ServiceStart = false;
-                  radio.ServiceIndex = 0;
-                  radio.clearData();
-                  for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
-                  dabfreq = intValue;
-                  radio.setFreq(dabfreq);
-                  if (SlideShowView || ChannelListView || ShowServiceInformation || menu) {
-                    SlideShowView = false;
-                    ChannelListView = false;
-                    ShowServiceInformation = false;
-                    menu = false;
-                    BuildDisplay();
-                  } else {
-                    ShowFreq();
-                  }
-                  DataPrint("#0\n*TUNE=" + String(dabfreq) + "\n");
-                  DataPrint("$M=SLIDESHOW=0\n");
-                } else {
-                  DataPrint("#1\n");
-                }
-              }
-              break;
-            case 'S':
-              if (command.equals("SERVICE")) {
-                if (intValue < radio.numberofservices) {
-                  radio.ServiceIndex = intValue;
-                  radio.setService(radio.ServiceIndex);
-                  radio.ServiceStart = true;
-                  store = true;
-                  DataPrint("#0\n*SERVICE=" + String(radio.ServiceIndex) + "\n");
-                  DataPrint("$M=SLIDESHOW=0\n");
-                } else {
-                  DataPrint("#1\n");
-                }
-              }
-              break;
-            default:
-              DataPrint("#2\n");
-              break;
-            }
-        }
-      } else {
-        if (command == "ENABLE") {
-          if (intValue == 0) {
-            DataPrint("*ENABLE=0\n");
-            connectedSerial = false;
-          } else if (intValue == 1) {
-            connectedSerial = true;
-            doEnableConnection();
-          } else {
-            DataPrint("#1\n");
-          }
-        }
-      }
-    }
-  }
+void DataPrint(const char* data) {
+  if (data) diagSerial.print(data);
+}
 
-  // Outbound diff-stream: only emit changes since the last loop iteration
-  // so the protocol stays event-driven (signal/CNR is the only periodic line).
-  if (connectedSerial) {
-    if (radio.ServiceIndex != ServiceIndexOld) {
-      if (radio.ServiceStart) DataPrint("*SERVICE=" + String(radio.ServiceIndex) + "\n");
-      DataPrint("$M=SLIDESHOW=0\n");
-      ServiceIndexOld = radio.ServiceIndex;
-    }
+char* trimInPlace(char* text) {
+  if (!text) return text;
+  while (*text && isspace(static_cast<unsigned char>(*text))) ++text;
+  char* end = text + strlen(text);
+  while (end > text && isspace(static_cast<unsigned char>(end[-1]))) --end;
+  *end = '\0';
+  return text;
+}
 
-    if (dabfreq != dabfreqOld) {
-      DataPrint("*TUNE=" + String(dabfreq) + "\n");
-      DataPrint("$M=SLIDESHOW=0\n");
-      dabfreqOld = dabfreq;
-    }
+void upperInPlace(char* text) {
+  if (!text) return;
+  for (; *text; ++text)
+    *text = static_cast<char>(toupper(static_cast<unsigned char>(*text)));
+}
 
-    String currentList = ServiceList();
-    if (currentList != ServiceListOld) {
-      DataPrint(currentList);
-      ServiceListOld = currentList;
-    }
+char hashCommand(const char* command) {
+  if (!command) return 0;
+  if (strcmp(command, "ENABLE") == 0) return 'E';
+  if (strcmp(command, "TUNE") == 0) return 'T';
+  if (strcmp(command, "SERVICE") == 0) return 'S';
+  if (strcmp(command, "INTERVAL") == 0) return 'I';
+  return 0;
+}
 
-    String currentInfo = ServiceInfo();
-    if (currentInfo != ServiceInfoOld) {
-      DataPrint(currentInfo);
-      ServiceInfoOld = currentInfo;
-    }
+long parseInteger(const char* value) {
+  if (!value) return 0;
+  char* end = nullptr;
+  const long parsed = strtol(value, &end, 10);
+  return end == value ? 0 : parsed;
+}
 
-    String currentData = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
-    if (currentData != ServiceDataOld) {
-      DataPrint("$D=RT=" + currentData + "\n");
-      ServiceDataOld = currentData;
-    }
-
-    if (millis() - signalMillis > interval) {
-      DataPrint("$S=SIGNAL=" + String(SignalLevel / 10) + "." + String(SignalLevel % 10) + ",LOCK=" + String(radio.signallock) + ",CNR=" + String(radio.cnr) + ",FIC=" + String(radio.fic) + "\n");
-      signalMillis = millis();
-    }
-
-    doMOTShow();
+void captureServiceList(ServiceListSnapshot& out) {
+  memset(&out, 0, sizeof(out));
+  out.valid = true;
+  out.signalLock = radio.signallock;
+  out.count = radio.numberofservices > 32U ? 32U : radio.numberofservices;
+  out.ensembleCharset = radio.EnsembleLabelCharset;
+  out.serviceCharset = radio.ServiceLabelCharset;
+  memcpy(out.eid, radio.EID, sizeof(out.eid));
+  memcpy(out.ensembleLabel, radio.EnsembleLabel, sizeof(out.ensembleLabel));
+  for (uint8_t i = 0; i < out.count; ++i) {
+    out.items[i].type = radio.service[i].ServiceType;
+    memcpy(out.items[i].label, radio.service[i].Label, sizeof(out.items[i].label));
   }
 }
 
-// Map a command string to a single-char tag for the switch in handleCommunication().
-// Returning 0 = unknown command.
-static char hashCommand(String command) {
-  if (command.equals("ENABLE")) {
-    return 'E';
-  } else if (command.equals("TUNE")) {
-    return 'T';
-  } else if (command.equals("SERVICE")) {
-    return 'S';
-  } else if (command.equals("INTERVAL")) {
-    return 'I';
-  } else {
-    return 0;
+bool serviceListChanged() {
+  ServiceListSnapshot current;
+  captureServiceList(current);
+  if (!serviceListOld.valid || memcmp(&current, &serviceListOld, sizeof(current)) != 0) {
+    serviceListOld = current;
+    return true;
   }
+  return false;
 }
 
-// Wraps Serial.print so we have one place to swap the transport if needed.
-static void DataPrint(String data) {
-  Serial.print(data);
-}
-
-// Build the "$L=..." service-list line for the host. Called once per loop
-// while connected and diffed against ServiceListOld to avoid spam.
-static String ServiceList(void) {
-  String ServiceList;
-  ServiceList = "$L=COUNT=" + String(radio.numberofservices) + ",ENSEMBLE=" + String(radio.EID) + "," + String(radio.ASCII(radio.EnsembleLabel, radio.EnsembleLabelCharset)) + ";SERVICES=";
+void emitServiceList() {
+  char label[kUtf8LabelBytes];
+  radio.ASCIIToBuffer(radio.EnsembleLabel, radio.EnsembleLabelCharset,
+                      label, sizeof(label));
+  diagSerial.printf("$L=COUNT=%u,ENSEMBLE=%s,%s;SERVICES=",
+                static_cast<unsigned>(radio.numberofservices), radio.EID, label);
 
   if (radio.signallock) {
-    for (int x = 0; x < radio.numberofservices; x++) {
-      ServiceList += String(x) + ",";
-      ServiceList += String(radio.service[x].ServiceType);
-      ServiceList += ",";
-      ServiceList += String(radio.ASCII(radio.service[x].Label, radio.ServiceLabelCharset));
-
-      if (x < radio.numberofservices - 1) ServiceList += ";";
+    const uint8_t count = radio.numberofservices > 32U ? 32U : radio.numberofservices;
+    for (uint8_t i = 0; i < count; ++i) {
+      radio.ASCIIToBuffer(radio.service[i].Label, radio.ServiceLabelCharset,
+                          label, sizeof(label));
+      diagSerial.printf("%u,%u,%s", static_cast<unsigned>(i),
+                    static_cast<unsigned>(radio.service[i].ServiceType), label);
+      if (i + 1U < count) diagSerial.print(';');
     }
   } else {
-    ServiceList += "0";
+    diagSerial.print('0');
   }
-  ServiceList += "\n";
-  return ServiceList;
+  diagSerial.print('\n');
 }
 
-// Build the "$I=..." service-info line summarising the currently playing service.
-static String ServiceInfo(void) {
-  String ServiceInfo;
-  ServiceInfo = "$I=";
-  ServiceInfo += "ID=" + (radio.ServiceStart ? String(radio.service[radio.ServiceIndex].CompID & 0xFF, DEC) : "0") + ";";
-  ServiceInfo += "SID=" + (radio.ServiceStart ? String(radio.SID) : "0") + ";";
-  ServiceInfo += "PTY=" + (radio.ServiceStart ? String(radio.pty, DEC) : "0") + ";";
-  ServiceInfo += "PROTECTION=" + (radio.ServiceStart ? String(radio.protectionlevel) : "0") + ";";
-  ServiceInfo += "SAMPLERATE=" + (radio.ServiceStart ? String(radio.samplerate) : "0") + ";";
-  ServiceInfo += "BITRATE=" + (radio.ServiceStart ? String(radio.bitrate, DEC) : "0") + ";";
-  ServiceInfo += "AUDIO=" + (radio.ServiceStart ? String(radio.audiomode, DEC) : "0");
-  ServiceInfo += "\n";
-  return ServiceInfo;
+void captureServiceInfo(ServiceInfoSnapshot& out) {
+  memset(&out, 0, sizeof(out));
+  out.valid = true;
+  out.started = radio.ServiceStart;
+  out.serviceIndex = radio.ServiceIndex;
+  if (!radio.ServiceStart || radio.ServiceIndex >= 32U) return;
+  out.componentId = static_cast<uint8_t>(radio.service[radio.ServiceIndex].CompID & 0xFFU);
+  memcpy(out.sid, radio.SID, sizeof(out.sid));
+  out.pty = radio.pty;
+  out.protection = radio.protectionlevel;
+  out.samplerate = radio.samplerate;
+  out.bitrate = radio.bitrate;
+  out.audioMode = radio.audiomode;
 }
 
-// Handshake response after the host sends ENABLE=1. Sends version, chip info,
-// the supported mode, the current update interval and the full DAB frequency
-// table so the client can label channels.
-static void doEnableConnection(void) {
-  DataPrint("*ENABLE=1," + String(VERSION) + "," + String(radio.getChipID()) + "/" + String(radio.getFirmwareVersion()) + "\n");
+bool serviceInfoChanged() {
+  ServiceInfoSnapshot current;
+  captureServiceInfo(current);
+  if (!serviceInfoOld.valid || memcmp(&current, &serviceInfoOld, sizeof(current)) != 0) {
+    serviceInfoOld = current;
+    return true;
+  }
+  return false;
+}
+
+void emitServiceInfo() {
+  if (!radio.ServiceStart || radio.ServiceIndex >= 32U) {
+    DataPrint("$I=ID=0;SID=0;PTY=0;PROTECTION=0;SAMPLERATE=0;BITRATE=0;AUDIO=0\n");
+    return;
+  }
+  diagSerial.printf("$I=ID=%u;SID=%s;PTY=%u;PROTECTION=%u;SAMPLERATE=%u;BITRATE=%u;AUDIO=%u\n",
+                static_cast<unsigned>(radio.service[radio.ServiceIndex].CompID & 0xFFU),
+                radio.SID,
+                static_cast<unsigned>(radio.pty),
+                static_cast<unsigned>(radio.protectionlevel),
+                static_cast<unsigned>(radio.samplerate),
+                static_cast<unsigned>(radio.bitrate),
+                static_cast<unsigned>(radio.audiomode));
+}
+
+void emitServiceDataIfChanged() {
+  char current[kServiceDataUtf8Bytes];
+  radio.ASCIIToBuffer(radio.ServiceData, radio.ServiceLabelCharset,
+                      current, sizeof(current));
+  if (!serviceDataOldValid || strcmp(current, serviceDataOld) != 0) {
+    diagSerial.print("$D=RT=");
+    diagSerial.print(current);
+    diagSerial.print('\n');
+    snprintf(serviceDataOld, sizeof(serviceDataOld), "%s", current);
+    serviceDataOldValid = true;
+  }
+}
+
+void doMOTShow() {
+  if (!radio.SlideShowAvailable || !radio.SlideShowUpdate2) return;
+  const uint8_t* image = radio.slideshowData();
+  const size_t size = radio.slideshowSize();
+  uint8_t type = 3;
+  if (image && size >= 8) {
+    if (image[0] == 0x89 && image[1] == 0x50 && image[2] == 0x4E &&
+        image[3] == 0x47 && image[4] == 0x0D && image[5] == 0x0A &&
+        image[6] == 0x1A && image[7] == 0x0A) type = 2;
+    else if (image[0] == 0xFF && image[1] == 0xD8 && image[2] == 0xFF) type = 1;
+  }
+  diagSerial.printf("$M=SLIDESHOW=%u\n", static_cast<unsigned>(type));
+  radio.SlideShowUpdate2 = false;
+}
+
+void doEnableConnection() {
+  diagSerial.printf("*ENABLE=1,%s,%s/%s\n", VERSION,
+                radio.getChipID(), radio.getFirmwareVersion());
   DataPrint(":MODE=3,3-3\n");
-  DataPrint("*INTERVAL=" + String(interval) + "\n");
-  DataPrint(":FREQ=" + String(sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) + ",");
+  diagSerial.printf("*INTERVAL=%u\n", interval);
 
-  for (int i = 0; i < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0]); ++i) {
-    DataPrint(String(i));
-    DataPrint(":");
-    DataPrint(String(DABfrequencyTable_DAB[i].frequency));
-    DataPrint(",");
-    DataPrint(String(DABfrequencyTable_DAB[i].label));
-
-    if (i < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0]) - 1) {
-      DataPrint(";");
-    }
+  const size_t count = sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0]);
+  diagSerial.printf(":FREQ=%u,", static_cast<unsigned>(count));
+  for (size_t i = 0; i < count; ++i) {
+    diagSerial.printf("%u:%lu,%s", static_cast<unsigned>(i),
+                  static_cast<unsigned long>(DABfrequencyTable_DAB[i].frequency),
+                  DABfrequencyTable_DAB[i].label);
+    if (i + 1U < count) diagSerial.print(';');
   }
-  DataPrint("\n");
+  diagSerial.print('\n');
 
-  if (radio.ServiceStart) DataPrint("*SERVICE=" + String(radio.ServiceIndex) + "\n");
-  DataPrint("*TUNE=" + String(dabfreq) + "\n");
+  if (radio.ServiceStart)
+    diagSerial.printf("*SERVICE=%u\n", static_cast<unsigned>(radio.ServiceIndex));
+  diagSerial.printf("*TUNE=%u\n", static_cast<unsigned>(dabfreq));
   DataPrint("$M=SLIDESHOW=0\n");
 
-  ServiceListOld = "";
-  ServiceInfoOld = "";
-  ServiceDataOld = "";
-  if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true; else DataPrint("$M=SLIDESHOW=0\n");
+  resetOutputCaches();
+  if (radio.SlideShowAvailable) radio.SlideShowUpdate2 = true;
+  else DataPrint("$M=SLIDESHOW=0\n");
 }
 
-// When a new slideshow is ready, stream the file to the host as base64
-// in a single "$M=SLIDESHOW=..." line so a client can preview it.
-static void doMOTShow(void) {
-  if (radio.SlideShowAvailable && radio.SlideShowUpdate2) {
-    DataPrint("$M=SLIDESHOW=");
+void processCommandLine(char* line) {
+  char* input = trimInPlace(line);
+  if (!input || *input == '\0') return;
+  if (epg::command(input)) return;
 
-    fs::File file = LittleFS.open("/slideshow.img", "r");
-
-    if (!file) {
-      DataPrint("3\n");
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    size_t size = file.size();
-    uint8_t* image = (uint8_t*)malloc(size);
-
-    if (image == nullptr) {
-      DataPrint("3\n");
-      file.close();
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    file.read(image, size);
-    file.close();
-
-    size_t buffer_size_needed = (size + 2 - ((size + 2) % 3)) / 3 * 4 + 1;
-    uint8_t *buffer = (uint8_t*)calloc(buffer_size_needed, sizeof(char));
-
-    if (buffer == nullptr) {
-      DataPrint("3\n");
-      free(image);
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    size_t buff_size = 0;
-    int ret = mbedtls_base64_encode(buffer, buffer_size_needed, &buff_size, image, size);
-
-    if (ret != 0) {
-      DataPrint("3\n");
-      free(image);
-      free(buffer);
-      radio.SlideShowUpdate2 = false;
-      return;
-    }
-
-    buffer[buff_size] = '\0';
-
-    file = LittleFS.open("/slideshow.img", "r");
-    uint8_t header[8];
-    size_t bytesRead = file.read(header, sizeof(header));
-    file.close();
-
-    if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
-      DataPrint("2,");
-    } else if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
-      DataPrint("1,");
+  char* equals = strchr(input, '=');
+  if (!equals) {
+    upperInPlace(input);
+    if (strcmp(input, "DEBUG") == 0) {
+      diagnosticDebug = !diagnosticDebug;
+      radio.SlideShowDebug = diagnosticDebug;
+      if (!diagnosticDebug) radio.SlideShowVerbose = false;
+      diagSerial.printf("[DEBUG] diagnostics %s\n", diagnosticDebug ? "ON" : "OFF");
+    } else if (strcmp(input, "DEBUG SPI") == 0) {
+      diagnosticDebug = true;
+      radio.SlideShowDebug = true;
+      if (!radio.requestSpiProbe())
+        diagSerial.println("[DAB/SPI/TEST] refused: requires stable DAB, complete SPI discovery, distinct SID/CID and idle probe");
+    } else if (strcmp(input, "DEBUG SPI STOP") == 0) {
+      radio.stopSpiProbe();
+    } else if (strcmp(input, "DEBUG VERBOSE") == 0 ||
+               strcmp(input, "DEBUG SLSV") == 0) {
+      diagnosticDebug = true;
+      radio.SlideShowDebug = true;
+      radio.SlideShowVerbose = !radio.SlideShowVerbose;
+      diagSerial.printf("[DEBUG] SLS per-segment verbose %s\n",
+                    radio.SlideShowVerbose ? "ON" : "OFF");
     } else {
-      DataPrint("3\n");
-      free(image);
-      free(buffer);
-      radio.SlideShowUpdate2 = false;
-      return;
+      DataPrint("#2\n");
+    }
+    return;
+  }
+
+  *equals = '\0';
+  char* command = trimInPlace(input);
+  char* value = trimInPlace(equals + 1);
+  upperInPlace(command);
+  const long intValue = parseInteger(value);
+
+  if (!connectedSerial) {
+    if (strcmp(command, "ENABLE") == 0) {
+      if (intValue == 0) {
+        DataPrint("*ENABLE=0\n");
+        connectedSerial = false;
+      } else if (intValue == 1) {
+        connectedSerial = true;
+        doEnableConnection();
+      } else {
+        DataPrint("#1\n");
+      }
+    }
+    return;
+  }
+
+  switch (hashCommand(command)) {
+    case 'E':
+      if (intValue == 0) {
+        DataPrint("*ENABLE=0\n");
+        connectedSerial = false;
+      } else if (intValue == 1) {
+        doEnableConnection();
+      } else DataPrint("#1\n");
+      break;
+
+    case 'I':
+      if (intValue > 0 && intValue <= 500) {
+        interval = static_cast<unsigned int>(intValue);
+        diagSerial.printf("*INTERVAL=%u\n#0\n", interval);
+      } else DataPrint("#1\n");
+      break;
+
+    case 'T':
+      if (radio.isFm()) {
+        DataPrint("#1\n");
+      } else if (intValue >= 0 &&
+                 static_cast<size_t>(intValue) <
+                     sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
+        radio.ServiceStart = false;
+        radio.ServiceIndex = 0;
+        radio.clearData();
+        memset(_serviceName, 0, 17);
+        dabfreq = static_cast<byte>(intValue);
+        radio.setFreq(dabfreq);
+        if (SlideShowView || ChannelListView || ShowServiceInformation || menu) {
+          SlideShowView = false;
+          ChannelListView = false;
+          ShowServiceInformation = false;
+          menu = false;
+          BuildDisplay();
+        } else ShowFreq();
+        diagSerial.printf("#0\n*TUNE=%u\n", static_cast<unsigned>(dabfreq));
+        DataPrint("$M=SLIDESHOW=0\n");
+      } else DataPrint("#1\n");
+      break;
+
+    case 'S':
+      if (radio.isFm()) {
+        DataPrint("#1\n");
+      } else if (intValue >= 0 && intValue < radio.numberofservices) {
+        radio.ServiceIndex = static_cast<uint8_t>(intValue);
+        radio.setService(radio.ServiceIndex);
+        store = true;
+        diagSerial.printf("#0\n*SERVICE=%u\n", static_cast<unsigned>(radio.ServiceIndex));
+        DataPrint("$M=SLIDESHOW=0\n");
+      } else DataPrint("#1\n");
+      break;
+
+    default:
+      DataPrint("#2\n");
+      break;
+  }
+}
+
+void finishSerialLine() {
+  if (rxOverflow) {
+    DataPrint("#1\n");
+  } else if (rxLen > 0U) {
+    rxLine[rxLen] = '\0';
+    processCommandLine(rxLine);
+  }
+  rxLen = 0;
+  rxOverflow = false;
+}
+
+void consumeSerialInput() {
+  while (Serial.available() > 0) {
+    const int raw = Serial.read();
+    if (raw < 0) break;
+    const char c = static_cast<char>(raw);
+
+    // Accept every common Serial Monitor line-ending mode. CRLF is handled as
+    // one command because the following empty terminator is simply ignored.
+    if (c == '\r' || c == '\n') {
+      if (rxLen > 0U || rxOverflow) finishSerialLine();
+      return;  // preserve at-most-one-command-per-loop behaviour
     }
 
-    DataPrint("BASE64=");
-    DataPrint((char*)buffer);
-
-    free(image);
-    free(buffer);
-
-    DataPrint("\n");
-    radio.SlideShowUpdate2 = false;
+    rxLastByteMs = millis();
+    if (rxOverflow) continue;
+    if (rxLen + 1U < sizeof(rxLine)) rxLine[rxLen++] = c;
+    else rxOverflow = true;
   }
+
+  // Some terminals use "No line ending". Commit a received command after a
+  // short idle period so DEBUG/ENABLE remain usable without Arduino String or
+  // readStringUntil() timeouts.
+  if ((rxLen > 0U || rxOverflow) &&
+      static_cast<uint32_t>(millis() - rxLastByteMs) >= kRxIdleCommitMs) {
+    finishSerialLine();
+  }
+}
+}  // namespace
+
+void Communication(void) {
+  consumeSerialInput();
+  if (!connectedSerial) return;
+
+  if (radio.ServiceIndex != ServiceIndexOld) {
+    if (radio.ServiceStart)
+      diagSerial.printf("*SERVICE=%u\n", static_cast<unsigned>(radio.ServiceIndex));
+    DataPrint("$M=SLIDESHOW=0\n");
+    ServiceIndexOld = radio.ServiceIndex;
+  }
+
+  if (dabfreq != dabfreqOld) {
+    diagSerial.printf("*TUNE=%u\n", static_cast<unsigned>(dabfreq));
+    DataPrint("$M=SLIDESHOW=0\n");
+    dabfreqOld = dabfreq;
+  }
+
+  if (serviceListChanged()) emitServiceList();
+  if (serviceInfoChanged()) emitServiceInfo();
+  emitServiceDataIfChanged();
+
+  if (millis() - signalMillis > interval) {
+    diagSerial.printf("$S=SIGNAL=%d.%d,LOCK=%u,CNR=%u,FIC=%u\n",
+                  static_cast<int>(SignalLevel / 10),
+                  static_cast<int>(SignalLevel % 10),
+                  radio.signallock ? 1U : 0U,
+                  static_cast<unsigned>(radio.cnr),
+                  static_cast<unsigned>(radio.fic));
+    signalMillis = millis();
+  }
+
+  doMOTShow();
 }
