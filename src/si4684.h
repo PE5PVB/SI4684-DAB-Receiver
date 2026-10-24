@@ -232,6 +232,7 @@ class DAB {
     const dab_spi::Result& spiDiscovery(void) const { return dabSpiDiscovery; }
     // Advertised SPI presence in this multiplex, not decoded programme data.
     bool spiPresent(void) const { return dabSpiPresent; }
+    bool xpadSpiPresent(void) const;
     // Configure the next Si4684 application boot; never reconfigure live audio.
     void setI2sAudioMode(I2sAudioMode mode);
     bool requestSpiProbe(void);

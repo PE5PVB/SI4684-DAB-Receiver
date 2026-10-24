@@ -12,6 +12,7 @@
 #include "dab_scheduler_policy.h"
 #include "dab_user_application.h"
 #include "epg_runtime.h"
+#include "epg_ingress.h"
 #include "esp_heap_caps.h"
 
 extern void SlideshowReceptionState(bool active);
@@ -2944,6 +2945,7 @@ void DAB::setService(uint8_t _index) {
 
   // Invalidate in-flight UA ownership as well as endpoint selection. Keep the
   // last known ensemble presence while the new audio context becomes stable.
+  epg::livePadEndpoint(0,0);
   resetDabSpiDiscovery(true, false);
   dabSpiProbe.stop(millis());
   pty = 36;
@@ -3561,7 +3563,30 @@ void DAB::finishDabCommand(void) {
         } else dab_probe::increment(dabSpiProbeSuppressedRoutes);
       }
       if (header.byteCount > 0U) {
-        if (target == dab_probe::Route::Spi) {
+        const epg_ingress::PadRoute padRoute = epg_ingress::pad(
+            header.dataSource, header.dscType, header.rawUatypeOrRfu,
+            header.serviceId, header.componentId,
+            dab_probe::Endpoint(dabActiveServiceId,dabActiveComponentId,dabActiveServiceValid),
+            xpadSpiPresent(),
+            dabActiveServiceValid && dab_switch::audioContextUsable(dabSwitch.state) &&
+                !dabServiceRequestPending && !dabTuneRequestPending,
+            (header.serviceState==0U || header.serviceState==3U) &&
+                !(header.interruptSource & 0x04U));
+        if (padRoute == epg_ingress::PadRoute::Epg) {
+          if (header.byteCount <= sizeof(SPIbuffer)-25U) {
+            epg::livePadEndpoint(dabActiveServiceId,dabActiveComponentId);
+            if (epg::liveEnabled()) {
+              const si468x::Result readResult = chip.readCurrentReply(
+                  SPIbuffer+1,static_cast<uint16_t>(24U+header.byteCount));
+              finishCommandDiagnostics(readResult);
+              if (readResult==si468x::Result::Ok)
+                epg::livePadPayload(SPIbuffer+25,header.byteCount);
+              else ++diagDabCommandErrorCount;
+            }
+          }
+        } else if (padRoute == epg_ingress::PadRoute::Discard) {
+          ++diagDabStaleMotCount;
+        } else if (target == dab_probe::Route::Spi) {
           if (header.dataSource == 0U && header.byteCount <= sizeof(SPIbuffer) - 25U &&
               epg::liveEnabled() && dabSpiProbe.state == dab_probe::State::Observing &&
               dabActiveServiceValid && !dabServiceRequestPending && !dabTuneRequestPending) {
@@ -4336,6 +4361,21 @@ void DAB::logSpiProbeSummary(const char* phase) {
     DIAG_PRINTLN("[DAB/SPI/TEST] coexistence inconclusive; missing packets can be carousel timing");
 }
 
+bool DAB::xpadSpiPresent(void) const {
+  if(isFm() || !ServiceStart || !dabUaInventoryValid || !dabActiveServiceValid ||
+     dabServiceRequestPending || dabTuneRequestPending ||
+     !dab_switch::audioContextUsable(dabSwitch.state)) return false;
+  for(uint8_t i=0;i<dabUaServiceCount;++i) {
+    const UaService& entry=dabUaServices[i];
+    if(entry.sid!=dabActiveServiceId || entry.first>dabUaComponentCount ||
+       entry.count>dabUaComponentCount-entry.first) continue;
+    for(uint16_t j=entry.first;j<entry.first+entry.count;++j)
+      if(dabUaComponents[j]==dabActiveComponentId && dab_spi::isSpi(dabSpiIdentities[j]))
+        return true;
+  }
+  return false;
+}
+
 void DAB::resetDabSpiDiscovery(bool preservePresence, bool logInventory) {
   const uint16_t previousConfirmed = dabSpiDiscovery.confirmed;
   for (auto& identity : dabSpiIdentities) identity = dab_spi::Identity::Unqueried;
@@ -4393,6 +4433,13 @@ void DAB::refreshDabSpiDiscovery(void) {
   dabSpiDiscovery = result;
   dabSpiDiscoveryGeneration = dabUaScan.generation;
   if (dabUaInventoryValid) dabSpiPresent = result.confirmedPresent();
+  // Only a completed validated inventory can withdraw the selected PAD owner.
+  // During routine UA refresh a temporarily unqueried answer merely pauses PAD.
+  if(dabUaInventoryValid) {
+    const bool pad=xpadSpiPresent();
+    if(pad) epg::livePadEndpoint(dabActiveServiceId,dabActiveComponentId);
+    else if(dabUaScan.failed==0) epg::livePadEndpoint(0,0);
+  }
   dabSpiDiscoveryDirty = false;
   // Invalid inventories require a new valid service list, never a UA-only pass.
   if (dabUaInventoryValid) {

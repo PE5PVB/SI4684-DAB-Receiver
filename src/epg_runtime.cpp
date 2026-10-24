@@ -2,6 +2,8 @@
 #include "epg_uart.h"
 #include "epg_ui.h"
 #include "epg_demo.h"
+#include "epg_ingress.h"
+#include "vendor/si468x/Si468x.h"
 #include "gui.h"
 #include "serial_monitor.h"
 #include <esp_heap_caps.h>
@@ -19,6 +21,43 @@ static uint8_t snapshotFreq=0;
 static uint32_t snapshotSid=0;
 static bool allocationReported=false;
 static uint32_t endpointSid=0, endpointCid=0, pendingSid=0;
+static uint32_t padSid=0, padCid=0;
+static bool injectDsrv=false, injectPad=false, injectUa=false;
+static uint32_t injectAccepted=0, injectLegacy=0, injectRejected=0, injectBlocked=0;
+static void clearInjection() {
+  injectDsrv=injectPad=injectUa=false;
+  injectAccepted=injectLegacy=injectRejected=injectBlocked=0;
+}
+// Isolated test boundary: emulate a DSRV reply, never read the real chip reply
+// or feed simulated bytes into the live SLS/DLS collector.
+static Feed injectedDsrv(const uint8_t* data,size_t n,uint32_t now) {
+  si468x::DsrvHeader h;
+  if(!replay || !injectDsrv || !core ||
+     si468x::Si468x::parseDsrvHeader(data,n,h)!=si468x::Result::Ok ||
+     n!=24U+h.byteCount || !h.byteCount ||
+     (h.serviceState!=0U && h.serviceState!=3U) || h.physicalError()) {
+    ++injectRejected; return Feed::Rejected;
+  }
+  const dab_probe::Endpoint audio(0x3201U,0x01FE0005U), packet(0xE23153FEU,0x01F2C00CU), sls;
+  const auto target=dab_probe::route(h.serviceId,h.componentId,h.dataSource,audio,sls,packet);
+  const auto pad=epg_ingress::pad(h.dataSource,h.dscType,h.rawUatypeOrRfu,
+      h.serviceId,h.componentId,audio,injectUa,true,true);
+  bool deliver=injectPad && pad==epg_ingress::PadRoute::Epg;
+  if(pad==epg_ingress::PadRoute::Discard) { ++injectRejected; return Feed::Rejected; }
+  if(h.dataSource==0U && target==dab_probe::Route::Spi) {
+    if(injectPad) { ++injectBlocked; return Feed::Accepted; }
+    deliver=true;
+  }
+  if(deliver) {
+    const Feed result=core->feed(data+24,h.byteCount,now);
+    if(result==Feed::Accepted) ++injectAccepted; else ++injectRejected;
+    return result;
+  }
+  if((h.dataSource==1U || h.dataSource==2U) && target==dab_probe::Route::Audio) {
+    ++injectLegacy; return Feed::Accepted; // Hand-off decision only, no SLS mutation.
+  }
+  ++injectRejected; return Feed::Rejected;
+}
 static void objectReady(void*,uint16_t tid,uint8_t type,Bytes data,size_t n) {
   if(diagSerial.availableForWrite()<192) return;
   const char* kind=type==6?"DIR":n && data[0]==2?"PI":n && data[0]==3?"SI":"PNG";
@@ -27,7 +66,7 @@ static void objectReady(void*,uint16_t tid,uint8_t type,Bytes data,size_t n) {
 Core* runtime() { return core; }
 bool replayActive() { return replay; }
 // UART replay has its own discovery state; never alter the live radio probe.
-bool indicatorPresent() { return replay ? core && core->stats.directories!=0 : radio.spiPresent(); }
+bool indicatorPresent() { return replay ? core && core->stats.directories!=0 : radio.spiPresent() || padSid!=0; }
 IndicatorState indicatorState() {
   if(core && core->count() && core->fresh() && !core->ambiguous()) return IndicatorState::Ready;
   return indicatorPresent()?IndicatorState::Present:IndicatorState::Absent;
@@ -59,9 +98,14 @@ bool ensure(bool reportFailure) {
   if(core) core->observer.object=objectReady;
   return core!=nullptr;
 }
-void liveReset() {
-  if(replay) { replay=demo=false; pendingSid=0; receiver.reset(); EpgClose(false); }
+static void resetLiveCore() {
   if(core) { core->reset(); core->select(0,0,0); EpgInvalidate(); }
+}
+void liveReset() {
+  clearInjection();
+  if(replay) { replay=demo=false; pendingSid=0; receiver.reset(); EpgClose(false); }
+  endpointSid=endpointCid=padSid=padCid=0;
+  resetLiveCore();
 }
 void liveContext(uint32_t sid,uint16_t eid,uint8_t ecc,uint32_t utc) {
   if(!core || replay) return;
@@ -77,24 +121,37 @@ void liveContext(uint32_t sid,uint16_t eid,uint8_t ecc,uint32_t utc) {
   core->select(match,utc,offset); core->identityConflict=conflict;
 }
 void liveEndpoint(uint32_t sid,uint32_t cid) {
-  if(!core || replay) return;
-  if(endpointSid!=sid || endpointCid!=cid) { liveReset(); endpointSid=sid; endpointCid=cid; }
+  if(replay) return;
+  if(endpointSid!=sid || endpointCid!=cid) {
+    endpointSid=sid; endpointCid=cid;
+    if(!padSid) resetLiveCore();
+  }
 }
-void livePayload(const uint8_t* data,size_t n) { if(core && !replay) core->feed(data,n,millis()); }
+void livePadEndpoint(uint32_t sid,uint32_t cid) {
+  if(replay || (padSid==sid && padCid==cid)) return;
+  padSid=sid; padCid=cid;
+  resetLiveCore(); // Never mix directories/TIDs from independent transports.
+}
+void livePayload(const uint8_t* data,size_t n) { if(core && !replay && !padSid) core->feed(data,n,millis()); }
+void livePadPayload(const uint8_t* data,size_t n) { if(core && !replay && padSid) core->feed(data,n,millis()); }
 void stopReplay() {
+  clearInjection();
   replay=demo=false; pendingSid=0; receiver.reset();
+  endpointSid=endpointCid=padSid=padCid=0;
   if(core) { core->reset(); core->select(0,0,0); }
   EpgClose();
 }
 static uint32_t radioSid() { return radio.ServiceStart && radio.ServiceIndex<radio.numberofservices ? radio.service[radio.ServiceIndex].ServiceID:0; }
 static void startReplay() {
+  clearInjection();
+  endpointSid=endpointCid=padSid=padCid=0;
   core->reset(); replay=true; demo=false; activity=millis(); receiver.reset();
   snapshotFm=radio.isFm(); snapshotFreq=dabfreq; snapshotSid=radioSid();
   core->select(0x40e231533233ULL,epoch(2024,11,12,3,30),60);
 }
 void poll() {
   static bool autoAttempted=false;
-  if(!core && !autoAttempted && !radio.isFm() && radio.spiPresent() && radio.ServiceStart) { autoAttempted=true; ensure(); }
+  if(!core && !autoAttempted && !radio.isFm() && (radio.spiPresent() || padSid) && radio.ServiceStart) { autoAttempted=true; ensure(); }
   if(!core) return;
   const uint32_t nowMs=millis();
   if(replay && (snapshotFm!=radio.isFm() || snapshotFreq!=dabfreq || (snapshotSid && radioSid() && snapshotSid!=radioSid()))) {
@@ -138,13 +195,14 @@ static void status() {
   diagSerial.printf("EPG RAM arena=%u free=%u min=%u largest=%u audio=%u SLS=%u UARTdrop=%u rxCRC=%u rxOrder=%u rxIdentity=%u\n",unsigned(Core::memoryBytes()),ESP.getFreeHeap(),ESP.getMinFreeHeap(),unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL|MALLOC_CAP_8BIT)),radio.ServiceStart,radio.SlideShowAvailable,diagSerial.droppedBytes(),receiver.crcErrors,receiver.orderErrors,receiver.identityErrors);
   diagSerial.printf("EPG LOGO bytes=%u interlace=%u\n",unsigned(core->logoSize()),core->logoSize()>28?unsigned(core->logo()[28]):0U);
   diagSerial.printf("EPG POOLS free8=%u largest8=%u free32=%u largest32=%u\n",unsigned(heap_caps_get_free_size(byteCaps)),unsigned(heap_caps_get_largest_free_block(byteCaps)),unsigned(heap_caps_get_free_size(wordCaps)),unsigned(heap_caps_get_largest_free_block(wordCaps)));
+  if(injectDsrv) diagSerial.printf("EPG INJECT path=%s ua=%u accepted=%u legacy=%u rejected=%u blocked=%u\n",injectPad?"PAD":"MSC",injectUa,unsigned(injectAccepted),unsigned(injectLegacy),unsigned(injectRejected),unsigned(injectBlocked));
 }
 bool command(char* input) {
-  if(!strncmp(input,"E1 ",3)) {
+  if(!strncmp(input,"E1 ",3) || !strncmp(input,"E2 ",3)) {
     if(!replay || demo || !core) { diagSerial.println("EPG ERROR START required"); return true; }
     if(diagSerial.availableForWrite()<160) return true; // sender retries; no silent commit
     activity=millis();
-    const auto result=receiver.receive(input,*core,activity);
+    const auto result=receiver.receive(input,*core,activity,injectedDsrv);
     if(result==UartReceiver::Result::Ack) diagSerial.printf("EPG ACK %04X %08X\n",receiver.session(),unsigned(receiver.sequence()));
     else {
       const char* reasons[]={"ACK","BUSY","CRC","FORMAT","ORDER","IDENTITY","DATA"};
@@ -157,11 +215,19 @@ bool command(char* input) {
   if(diagSerial.availableForWrite()<1024) return true;
   char* arg=input+9; activity=millis();
   if(!strcasecmp(arg,"HELP")) {
-    diagSerial.println("EPG OK HELP: DEMO | START [SID FULLCID] | TIME ISO8601 | STATION HEX | STATUS | STOP | CLEAR");
+    diagSerial.println("EPG OK HELP: DEMO | START [SID FULLCID] | INJECT MSC/PAD [NOSPI] | TIME ISO8601 | STATION HEX | STATUS | STOP | CLEAR");
     return true;
   }
   if(!strcasecmp(arg,"STOP") || !strcasecmp(arg,"CLEAR")) { const bool clear=!strcasecmp(arg,"CLEAR"); stopReplay(); diagSerial.printf("EPG OK %s\n",clear?"CLEAR":"STOP"); return true; }
   if(!ensure(true)) return true;
+  if(!strcasecmp(arg,"INJECT MSC") || !strcasecmp(arg,"INJECT PAD") || !strcasecmp(arg,"INJECT PAD NOSPI")) {
+    const bool pad=strncasecmp(arg+7,"PAD",3)==0;
+    const bool ua=pad && strcasecmp(arg,"INJECT PAD NOSPI")!=0;
+    startReplay(); injectDsrv=true; injectPad=pad; injectUa=ua;
+    const unsigned session=(esp_random()&0xffffU)|1U;
+    receiver.resetDsrv(pad?0x3201U:0xE23153FEU,pad?0x01FE0005U:0x01F2C00CU,session,pad?1:0);
+    EpgOpen(); diagSerial.printf("EPG OK INJECT V2 session=%04X path=%s fragment=32 group=4071\n",session,pad?"PAD":"MSC"); return true;
+  }
   if(!strcasecmp(arg,"DEMO")) {
     startReplay(); demo=true; demoIndex=0;
     core->select(0x40e231533211ULL,epoch(2024,11,12,3,30),60);

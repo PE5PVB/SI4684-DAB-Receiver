@@ -1,5 +1,17 @@
 # Host regression tests
 
+Synthetic X-PAD/MSC scenarios without RF, COM, the RAW log or reference ZIP:
+
+```powershell
+python tests/test_epg_synthetic_paths.py C:/msys64/ucrt64/bin/g++.exe
+python tests/test_dab_xpad_integration.py C:/msys64/ucrt64/bin/g++.exe
+```
+
+See [the synthetic-path report](../docs/EPG_SYNTHETIC_PATHS_CZ.md). Packet MSC
+and confirmed X-PAD EPG decoding both pass through the actual DSRV admission.
+The current-component UA query and cross-transport runtime ownership are tested. The legacy decoder is a recorded
+hand-off, not an emulated content decoder. Both tests also run in the full suite.
+
 Current production EPG, UART replay and three-screen navigation are documented in
 [the Czech test guide](../docs/EPG_TEST_CZ.md) and
 [the implementation report](../docs/EPG_IMPLEMENTATION_REPORT.md).
@@ -459,3 +471,9 @@ The programme-list geometry regression uses the actual EpgBackground/EpgSelector
 asset accessors, checks the single-panel background without a divider,
 and validates time/name coordinates and text bounds.
 The two-row selection and nine-row page refresh checks remain active.
+
+
+On-device synthetic MSC/PAD DSRV suite (after generating groups.bin with
+`test_epg_synthetic_paths.py` and uploading the E2-enabled firmware):
+`python -u tools/epg_synthetic.py --port COM4 --loop`.
+See docs/EPG_SYNTHETIC_PATHS_CZ.md for the nine cases and RF limitations.

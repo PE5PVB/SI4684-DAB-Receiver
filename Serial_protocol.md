@@ -287,7 +287,10 @@ context, scan generation and suppressed-sample count. Raw 2/7 at source 0/1
 prints SLS-candidate/SPI-candidate; source 2 prints DLS-raw regardless of raw UA,
 and source 3 prints reserved. `context` reports audio/sls/spi/unmatched/inactive
 using existing endpoint and audio-state rules. Raw interpretation does not
-supply endpoint confirmation or change routing.
+supply endpoint confirmation. The X-PAD EPG adapter additionally requires a
+validated current-component SPI UA answer and matching audio SID/CID before
+using UATYPE=7 to select the EPG decoder. Other sources do not use raw UA as
+an application discriminator.
 
 One line globally per five seconds within a scan generation is allowed, only
 with DEBUG and at least 256 bytes of UART headroom. Suppressed counts saturate;
@@ -300,7 +303,9 @@ has not been established. See [the diagnostics report](tests/DAB_XPAD_UATYPE_dia
 Enables diagnostics and requests one controlled SPI coexistence probe. Requires
 stable DAB audio, a complete unambiguous SPI discovery result, an idle probe,
 and SPI SID/CID distinct from both audio and the active standalone SLS context.
-Shared-component SPI is refused until application-level MOT routing exists.
+The packet coexistence probe still refuses a shared audio endpoint. X-PAD EPG
+is admitted independently on the playing audio component with confirmed SPI UA
+and DATA_SRC=1/UATYPE=7; it does not issue a second START for the audio endpoint.
 If discovery has not finished, wait for its result and send the command again;
 the request is not silently queued for a later station.
 
@@ -603,3 +608,42 @@ emits bounded `[EPG/LOGO]` diagnostics: `validated`, `stage`, `detail`, dimensio
 compressed/decompressed byte counts, pass/row and internal workspace alignment
 `pad`, followed by `draw=0|1`. The ESP32 test required `pad=4` and both real
 Adam7 logos reached `validated=1 stage=ok` and `draw=1`.
+
+
+X-PAD EPG and packet EPG share one decoder. Confirmed PAD owns the input until
+it is withdrawn or its audio component changes; source changes clear in-flight
+objects and cached programmes so colliding transport IDs cannot mix. The existing
+E1 UART replay remains source=0 only. Synthetic tests run on the host and through the MCU injection interface below;
+they do not establish on-air behavior of the installed Si4684 firmware.
+
+
+### Synthetic DSRV injection (E2)
+
+`EPG TEST INJECT MSC`, `EPG TEST INJECT PAD`, or `EPG TEST INJECT PAD NOSPI`
+starts an isolated TEST session. The response is
+`EPG OK INJECT V2 session=HHHH path=MSC|PAD fragment=32 group=4071`.
+PAD simulates confirmed SPI UA; NOSPI deliberately withholds confirmation.
+No tuning or NVS writes occur. STOP and the existing replay watchdog/retune
+cancellation restore LIVE operation.
+
+E2 uses the same acknowledged fragmentation, CRC32, ordering and retry rules
+as E1, but carries the whole DSRV reply (24-byte header plus payload):
+
+```text
+E2 SESSION SEQ OFFSET TOTAL SID CID SOURCE HEX CRC32
+```
+
+Fields retain E1 hexadecimal widths. CRC32 covers ASCII before the final space.
+The whole reply is limited to 4071 bytes (payload at most 4047), with 32 bytes
+per fragment. E1 remains source=0 only; E1 and E2 session modes cannot mix.
+The outer endpoint must match the injection session: MSC E23153FE/01F2C00C,
+source=0; PAD 00003201/01FE0005, source=1 (supported short CID also accepted).
+Inner DSRV identities can intentionally differ to test rejection.
+
+STATUS adds `EPG INJECT path=... ua=... accepted=N legacy=N rejected=N blocked=N`.
+The actual DSRV parser and shared admission rules feed the production Core.
+Under PAD ownership, packet groups are counted as blocked without entering Core.
+SLS/DLS legacy handoff is dry-run only; it does not invoke the slideshow collector.
+The UA flag and endpoint context are simulated, so RF and chip PAD extraction
+remain outside this test. See [synthetic tests](docs/EPG_SYNTHETIC_PATHS_CZ.md)
+and `tools/epg_synthetic.py` for the executable client and results.

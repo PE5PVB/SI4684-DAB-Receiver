@@ -194,8 +194,9 @@ Konkrétní postup je v EPG_TEST_CZ.md, včetně DEMO i skutečného COM replay.
   Překročení rozpočtu parseru/live zahození je vidět v busy/timeout/incomplete.
 - Obrázky se ověřují před kreslením; EPG logo je do 100×70 bez škálování.
 - Šifrované/komprimované MOT objekty/adresář a jiné obsahové profily nejsou
-  implementované. X-PAD SPI adaptér není implementovaný ani HW ověřený;
-  transportně neutrální Core::feed umožňuje jeho pozdější doplnění.
+  implementované. X-PAD SPI adaptér je nově implementovaný a synteticky ověřený;
+  skutečný X-PAD příjem z čipu dosud ověřený není. Podrobnosti jsou v
+  EPG_SYNTHETIC_PATHS_CZ.md.
 - Programové události/actual údaje/CRID se dekódují do strukturovaného callbacku;
   omezený seznam prezentuje hlavní programme s shortId, plánem a popisem.
 - Diagnostické příznaky audio=1/SLS=1 znamenají stav firmware; souvislý zvuk a
@@ -507,3 +508,65 @@ obnoven. Jedynka data se opakují ve smyčce, log hardware_v25b_no_divider_strea
 
 Po obnovení: cached=41, PI=2/SI=1/PNG=1, NOW=12/NEXT=13; CRC/invalid a
 UARTdrop/rxCRC/rxOrder/rxIdentity byly 0. Přenos zůstává spuštěný přes COM4.
+
+
+## X-PAD EPG adaptér (24. 10. 2026)
+
+Doplněn vstup DATA_SRC=1 pro SPI aplikaci potvrzenou v UA aktuální audio
+komponenty, UATYPE=7, přesný nebo povolený krátký audio CID a použitelný
+kontext bez přeladění. Chybné DSRV bloky se odmítají. Potvrzené PAD SPI se
+předá společnému Core, ne slideshow. SLS/DLS mají původní předání.
+
+PAD má přednost před paketovým vstupem. Runtime neprokládá jejich adresáře
+ani shodná TID; změna vstupu/identity zruší rozpracovaná data a cache.
+Nové buffery ani alokace nevznikly. Syntetické scénáře MSC i PAD dekódují
+stanici, tři pořady a NOW/NEXT; runtime ověřuje přepínání vlastníka a UART
+izolaci. Celá sada a build prošly. Následné nahrání a test na desce viz níže.
+Podrobný rozsah, standardový podklad, limity a hash buildu:
+[EPG_SYNTHETIC_PATHS_CZ.md](EPG_SYNTHETIC_PATHS_CZ.md).
+
+
+## Syntetický DSRV test na ESP32 (24. 10. 2026)
+
+Doplněn izolovaný E2 UART vstup celé DSRV odpovědi, příkazy INJECT MSC/PAD/NOSPI
+ a klient tools/epg_synthetic.py. Používá stávající UART buffer a Core;
+UA potvrzení je syntetické, SLS/DLS handoff pouze čítaný. RF tím není ověřeno.
+Celá hostitelská sada prošla včetně stejného klienta proti runtime.
+
+Nahráno přes COM4 na 0x10000 a ověřeno následným verify_flash (digest matched).
+V2.5b, RAM 66544 B, flash 3538461 B, firmware.bin 3539088 B.
+SHA256: `5C4490F195788A74119322DC65A793FF21689C705095EF5555C44B78EB2B65C7`.
+
+Na přijímači prošlo všech devět scénářů: MSC, PAD, duplicity/cache/izolace/
+SLS-DLS handoff a šest odmítacích případů (UA, SID, CID, stav, krátká hlavička,
+CRC). Závěrečný stav PAD má tři pořady, PI=1/SI=1/dirs=1, NOW=1/NEXT=2,
+nulové CRC/invalid i UART chyby. Arena 50800 B, free heap 31712 B, min 31376 B.
+Report hardware_synthetic_dsrv.json a .log jsou v .pio/epg_acceptance.
+Syntetická PAD data zůstala ve smyčce na COM4 pro kontrolu displeje;
+nejde o původní Jedynka replay. Podrobný postup a hranice ověření jsou
+v EPG_SYNTHETIC_PATHS_CZ.md.
+
+Uživatel následně potvrdil správné zobrazení syntetického programu
+a funkčnost přehledu, seznamu i detailu na displeji přijímače.
+
+
+## Syntetické logo stanice na přijímači (24. 10. 2026)
+
+Bez změny firmwaru byl původní syntetický program doplněn o SI odkaz na
+synthetic.png a odpovídající MOT obrazový objekt. Vygenerované RGB logo
+96 × 64 má bílé EPG na tmavomodrém pozadí, cyan rám a žlutý/růžový roh.
+Běžné PNG má 267 B, Adam7 varianta stejného obrazu 551 B.
+
+Na COM4 prošly všechny čtyři kombinace MSC/PAD × běžné/Adam7 PNG.
+Každá načetla tři pořady, SI=1, PI=1, PNG=1 a přesnou délku loga;
+CRC/invalid/UART chyby byly nulové. U obou Adam7 vstupů diagnostika
+potvrdila validated=1 stage=ok, w=96 h=64, pad=4 a draw=1.
+Běžná PNG větev samostatný čítač úspěšného kreslení nevypisuje;
+její načtení do cache bylo ověřeno, vizuální kontrola je zatím neuzavřená.
+
+PAD Adam7 data zůstala ve smyčce. Skript, obě PNG, report a log jsou
+v .pio/epg_acceptance/: synthetic_logo_test.py, synthetic_logo_0.png,
+synthetic_logo_1.png, hardware_synthetic_logo.json a .log.
+Jde nadále o syntetickou DSRV injekci, nikoli ověření příjmu z éteru.
+
+Uživatel potvrdil, že závěrečné PAD Adam7 logo je celé a správně vykreslené.
