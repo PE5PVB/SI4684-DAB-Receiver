@@ -26,6 +26,12 @@ static uint32_t ctsFailures     = 0;
 static uint32_t ctsFirstFailure = 0;
 static bool     ctsStalled      = false;
 
+// Set inside cts() whenever the chip reports ERR_CMD in STATUS0. Read by
+// setFreq() (and potentially other command issuers) to decide whether a
+// COMMAND_BUSY retry is in order. Reset at the start of every cts() call so
+// it always reflects the latest observation, nothing older.
+static bool ctsLastErrCmd = false;
+
 static void SPIwrite(unsigned char* data, uint32_t length);
 static void SPIread(uint16_t length);
 static void cts(void);
@@ -181,6 +187,7 @@ static void ctsRecordOutcome(bool answered) {
 }
 
 static void cts(void) {
+  ctsLastErrCmd = false;              // fresh observation per transaction
   bool timeout = false;
   uint16_t countdown = 200;
 
@@ -197,6 +204,7 @@ static void cts(void) {
   }
 
   if (SPIbuffer[1] & 0x40) {
+    ctsLastErrCmd = true;             // ERR_CMD latched for the caller
     memset(SPIbuffer, 0, 5);
   }
 
@@ -1111,15 +1119,28 @@ void DAB::setFreq(uint8_t freq) {
   SlideShowInit = false;
   SlideShowAvailable = false;
 
-  // DAB_TUNE_FREQ command
-  SPIbuffer[0] = 0xB0;
-  SPIbuffer[1] = 0x00;
-  SPIbuffer[2] = freq;
-  SPIbuffer[3] = 0x00;
-  SPIbuffer[4] = 0x00;
-  SPIbuffer[5] = 0x00;
-  SPIwrite(SPIbuffer, 6);
-  cts();
+  // DAB_TUNE_FREQ command with bales0-style COMMAND_BUSY retry: the chip
+  // occasionally rejects a tune attempt with ERR_CMD (DEVERR 0x18) when it
+  // is still finishing housekeeping from a previous channel. Rather than
+  // accept the rejection and sit in the STCINT wait loop for 5 s, retry up
+  // to three times with an increasing back-off (40/80/120 ms).
+  const uint8_t  TUNE_BUSY_MAX_RETRIES = 3;
+  const uint32_t TUNE_BUSY_BACKOFF_MS  = 40;
+  uint8_t tuneRetries = 0;
+  while (true) {
+    SPIbuffer[0] = 0xB0;
+    SPIbuffer[1] = 0x00;
+    SPIbuffer[2] = freq;
+    SPIbuffer[3] = 0x00;
+    SPIbuffer[4] = 0x00;
+    SPIbuffer[5] = 0x00;
+    SPIwrite(SPIbuffer, 6);
+    cts();
+    if (!ctsLastErrCmd) break;        // tune accepted
+    if (tuneRetries >= TUNE_BUSY_MAX_RETRIES) break;  // give up, fall through
+    tuneRetries++;
+    delay(TUNE_BUSY_BACKOFF_MS * tuneRetries);
+  }
 
   uint16_t timeout = 250;
   while (bitRead(SPIbuffer[1], 0) == false) {
