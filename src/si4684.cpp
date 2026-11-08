@@ -283,14 +283,22 @@ bool DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 2);
     cts();
 
-    uint32_t index = 0;  // Write bootloader
-    for (uint16_t i = 0; index < sizeof(rom_patch_016); i++) {
+    // Write bootloader patch. Chunked at 2044 payload bytes/transfer (same
+    // size the firmware upload below already uses successfully) instead of
+    // the previous 124-byte chunks — that cut this loop from ~47 SPI
+    // round-trips down to ~3 for the 5.8 KB rom_patch_016 blob, shaving a
+    // measurable chunk off boot time.
+    uint32_t index = 0;
+    uint16_t romChunkLen = 0;
+    while (index < sizeof(rom_patch_016)) {
       SPIbuffer[0] = 0x04;
       SPIbuffer[1] = 0x00;
       SPIbuffer[2] = 0x00;
       SPIbuffer[3] = 0x00;
-      for (uint16_t j = 4; j < 128 && index < sizeof(rom_patch_016); j++, index++) SPIbuffer[j] = pgm_read_byte_near(rom_patch_016 + index);
-      SPIwrite(SPIbuffer, 128);
+      for (romChunkLen = 4; (romChunkLen < 2048) && (index < sizeof(rom_patch_016)); romChunkLen++, index++) {
+        SPIbuffer[romChunkLen] = pgm_read_byte_near(rom_patch_016 + index);
+      }
+      SPIwrite(SPIbuffer, romChunkLen);
       cts();
     }
 
