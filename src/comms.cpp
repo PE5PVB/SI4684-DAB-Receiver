@@ -165,7 +165,7 @@ void Communication(void) {
       ServiceInfoOld = currentInfo;
     }
 
-    String currentData = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
+    String currentData = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset, radio.ServiceDataLen));
     if (currentData != ServiceDataOld) {
       DataPrint("$D=RT=" + currentData + "\n");
       ServiceDataOld = currentData;

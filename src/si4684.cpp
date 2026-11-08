@@ -555,10 +555,17 @@ void DAB::getServiceData(void) {
         SPIread((SPIbuffer[19] + (SPIbuffer[20] << 8)) + 24);
         byte_count = SPIbuffer[19] + (SPIbuffer[20] << 8);
 
-        // Read Radiotext
+        // Read Radiotext. Cap at sizeof(ServiceData)-1 so the terminator
+        // always has room, and remember the real byte count: a UCS-2
+        // payload (charset 6) can contain legitimate 0x00 bytes mid-string,
+        // so ASCII() needs the true length to decode it rather than
+        // trusting the C-string terminator.
         if (((SPIbuffer[8] >> 6) & 0x03) == 0x02 && !((SPIbuffer[25] & 0x10) == 0x10)) {
-          for (byte_number = 0; byte_number < byte_count; byte_number++) ServiceData[byte_number] = (char)SPIbuffer[27 + byte_number];
+          uint32_t copyLen = byte_count;
+          if (copyLen > sizeof(ServiceData) - 1) copyLen = sizeof(ServiceData) - 1;
+          for (byte_number = 0; byte_number < copyLen; byte_number++) ServiceData[byte_number] = (char)SPIbuffer[27 + byte_number];
           ServiceData[byte_number] = '\0';
+          ServiceDataLen = (uint8_t)copyLen;
 
           // Read Slideshow header - extract total length
         } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count >= 13 && byte_count < 200) {
@@ -1102,6 +1109,7 @@ void DAB::clearData(void) {
     for (byte y = 0; y < 16; y++) service[x].Label[y] = '\0';
   }
   for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
+  ServiceDataLen = 0;
 }
 
 // Tune to channel `freq` (an index into DABfrequencyTable_DAB). Sends the
@@ -1195,6 +1203,7 @@ void DAB::setService(uint8_t _index) {
   bitrate = 0;
   protectionlevel = 0;
   for (byte x = 0; x < 128; x++) ServiceData[x] = '\0';
+  ServiceDataLen = 0;
   SlideShowByteCounter = 0;
   SlideShowLength = 0;
   SlideShowLengthOld = 0;
@@ -1339,11 +1348,32 @@ void DAB::Update(void) {
 
 // Convert a label/text from the DAB-side character set to UTF-8 for the TFT.
 // charset 0 = ETSI EBU Latin (the most common), uses a lookup table via
-// charConverter()+convertToUTF8(). All other charsets are assumed UTF-8 already.
-// Also auto-detects already-UTF-8 input to avoid double conversion.
-String DAB::ASCII(const char* input, uint8_t charset) {
+// charConverter()+convertToUTF8(). charset 6 = UCS-2 (big-endian); all other
+// charsets are assumed UTF-8 already. Also auto-detects already-UTF-8 input
+// to avoid double conversion.
+String DAB::ASCII(const char* input, uint8_t charset, int length) {
   if (!input) return String();
   String result;
+
+  // UCS-2 big-endian (ETSI TS 101 756 charset id 6). Every ASCII-range
+  // character is encoded as 0x00 <value>, so the string legitimately
+  // contains 0x00 bytes mid-stream — scanning for a single C-string
+  // terminator (as the generic charset!=0 path below does) would cut the
+  // text after its very first character. Decoding needs the real byte
+  // length, which only the radiotext fill site currently tracks; other
+  // callers (fixed-size labels) pass no length and fall through unchanged.
+  if (charset == 6 && length >= 0) {
+    wchar_t temp[128];
+    const size_t maxUnits = (sizeof(temp) / sizeof(wchar_t)) - 1;
+    size_t units = (size_t)length / 2;
+    if (units > maxUnits) units = maxUnits;
+    for (size_t i = 0; i < units; i++) {
+      temp[i] = (wchar_t)(((uint8_t)input[i * 2] << 8) | (uint8_t)input[i * 2 + 1]);
+    }
+    temp[units] = 0;
+    return convertToUTF8(temp);
+  }
+
   if (charset != 0) return String(input);
 
   bool looksLikeUTF8 = false;

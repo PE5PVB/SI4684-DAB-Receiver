@@ -104,12 +104,16 @@ class DAB {
     char EnsembleLabel[17];
     char PStext[17];
     char ServiceData[128];
+    uint8_t ServiceDataLen;    // Actual byte count stored in ServiceData, for charset-aware decoding (e.g. UCS-2)
     char SID[5];
     char* getChipID(void);
     char* getFirmwareVersion(void);
     const char* getChannel(uint8_t freq);
     DABService service[32];
-    String ASCII(const char* input, uint8_t charset);
+    // `length` is the real byte count of `input` when known (e.g. radiotext,
+    // whose charset can legitimately be UCS-2). Pass -1 (default) when the
+    // caller only has a C-string, as for the fixed-size label fields.
+    String ASCII(const char* input, uint8_t charset, int length = -1);
     uint16_t bitrate;
     uint16_t ecc;
     uint16_t ensembleEcc;

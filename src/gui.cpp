@@ -709,13 +709,17 @@ void ShowRT(void) {
     FullLineSprite.pushImage(-6, -220, 320, 240, Background);
   }
 
+  // Pass the real byte length so a UCS-2 (charset 6) radiotext decodes
+  // correctly instead of truncating at its first embedded 0x00 byte.
+  String rt = radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset, radio.ServiceDataLen);
+
   FullLineSprite.setTextColor(PrimaryColor, PrimaryColorSmooth, false);
-  if (radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset).length() > 0) {
-    RTWidth = tft.textWidth(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
+  if (rt.length() > 0) {
+    RTWidth = tft.textWidth(rt);
     if (RTWidth < 300) {
       xPos = 0;
       FullLineSprite.setTextDatum(TC_DATUM);
-      FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), 154, 1);
+      FullLineSprite.drawString(rt, 154, 1);
       FullLineSprite.pushSprite(6, 219);
     } else {
       if (millis() - rtticker >= 20) {
@@ -724,8 +728,8 @@ void ShowRT(void) {
 
         if (xPos < -RTWidth - 50) xPos = 0;
         FullLineSprite.setTextDatum(TL_DATUM);
-        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), xPos, 1);
-        FullLineSprite.drawString(String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)), xPos + RTWidth + 50, 1);
+        FullLineSprite.drawString(rt, xPos, 1);
+        FullLineSprite.drawString(rt, xPos + RTWidth + 50, 1);
         FullLineSprite.pushSprite(6, 219);
         rtticker = millis();
       }
@@ -733,8 +737,8 @@ void ShowRT(void) {
   } else {
     FullLineSprite.pushSprite(6, 220);
   }
-  if (RTold != radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset)) xPos = 0;
-  RTold = radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset);
+  if (RTold != rt) xPos = 0;
+  RTold = rt;
 }
 
 void ShowSID(void) {
