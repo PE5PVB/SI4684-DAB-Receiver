@@ -144,6 +144,13 @@ class DAB {
     void Update(void);
     void vol(uint8_t vol);
 
+    // Expose the slideshow segment buffer as scratch space for the image
+    // decoder: between assembly completion and the next segment arriving the
+    // 40 KiB packed arena sits unused, so slideshow.cpp reuses it as the
+    // Adam7 PNG workspace to avoid allocating another large static buffer.
+    uint8_t* getSlideshowBuffer(void)     { return slideshowSegBuf; }
+    size_t   getSlideshowBufferSize(void) { return SLS_BUF_BYTES;   }
+
   private:
     bool SlideShowInit;
     bool SlideShowNew;
@@ -168,12 +175,18 @@ class DAB {
     uint32_t SlideShowLastActivity;       // millis() of last new segment received
 
     // RAM-based segment buffer (replaces /seg_N.bin files for speed).
-    // 80 segments * 512 bytes = 40 KB. Practical DAB MOT segments are 501 bytes.
-    // Sized to leave a few KB of DRAM headroom for future Arduino-core upgrades.
-    static const uint8_t  SLS_MAX_SEGMENTS  = 80;
-    static const uint16_t SLS_MAX_SEG_SIZE  = 512;
-    uint8_t  slideshowSegBuf[SLS_MAX_SEGMENTS * SLS_MAX_SEG_SIZE];
+    // Packed layout: each incoming segment is appended at slideshowBufWrite;
+    // its position and length are tracked via side tables indexed by the DAB
+    // segment number (7-bit, 0..127). This removes the fixed-stride waste of
+    // the previous layout and lets us accept larger per-segment payloads
+    // (ETSI allows up to 8 KiB; DAB+ Simple Profile often uses 1–2 KiB).
+    static const uint16_t SLS_MAX_SEGMENTS = 128;             // 7-bit segment number
+    static const uint16_t SLS_MAX_SEG_SIZE = 2048;            // Defensive per-segment cap
+    static const uint32_t SLS_BUF_BYTES    = 40UL * 1024UL;   // Packed arena, 40 KiB
+    uint8_t  slideshowSegBuf[SLS_BUF_BYTES];
+    uint16_t slideshowSegOfs[SLS_MAX_SEGMENTS];
     uint16_t slideshowSegLen[SLS_MAX_SEGMENTS];
+    uint32_t slideshowBufWrite;                               // Next free byte in buf
     void clearSegmentBuffer(void);
 
     void assembleSlideshow(void);

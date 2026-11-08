@@ -9,9 +9,28 @@
 // referenced by the read/seek lambdas passed to PNGdec.
 
 #include "slideshow.h"
+#include "PNGAdam7decoder.h"
 
 File pngfile;                       // shared file handle used by PNGdec callbacks
 PNG png;
+
+// Row callback for the Adam7 PNG decoder: writes individual pixels into the
+// correct interlaced positions. Slower than PNGdec's bulk pushImage path,
+// but Adam7 produces visibly progressive output which hides the per-pixel
+// cost nicely.
+struct Adam7Context {
+  int xOffset;                      // left edge of the image inside the 320x240 panel
+  int yOffset;                      // top edge of the image inside the 320x240 panel
+};
+
+static bool adam7RowCallback(void* context, unsigned x, unsigned y, unsigned step,
+                             const uint16_t* pixels, unsigned count) {
+  Adam7Context* ctx = (Adam7Context*)context;
+  for (unsigned i = 0; i < count; i++) {
+    tft.drawPixel(ctx->xOffset + (int)(x + i * step), ctx->yOffset + (int)y, pixels[i]);
+  }
+  return true;
+}
 
 // Walks the JPEG markers to find the Start-Of-Frame:
 // 0xC0 = baseline, 0xC2 = progressive. Other markers are skipped using
@@ -64,16 +83,19 @@ void ShowSlideShow(void) {
   File file = LittleFS.open("/slideshow.img", "r");
   if (!file) { if (radio.SlideShowDebug) Serial.println("[SLS] Failed to open slideshow.img"); return; }
   size_t fileSize = file.size();
-  byte header[8];
-  file.read(header, sizeof(header));
+  // Read enough of the header to see the PNG IHDR interlace byte (offset 28).
+  byte header[29];
+  size_t hdrRead = file.read(header, sizeof(header));
   file.close();
 
   bool isJPG = (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF);
-  bool isPNG = (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
-                header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A);
+  bool isPNG = (hdrRead >= 8
+                && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+                && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A);
+  bool isAdam7 = isPNG && hdrRead >= 29 && header[28] == 1;
 
-  if (radio.SlideShowDebug) Serial.printf("[SLS] Display: size=%u, isJPG=%d, isPNG=%d, hdr=%02X%02X%02X%02X\n",
-    fileSize, isJPG, isPNG, header[0], header[1], header[2], header[3]);
+  if (radio.SlideShowDebug) Serial.printf("[SLS] Display: size=%u, isJPG=%d, isPNG=%d, adam7=%d, hdr=%02X%02X%02X%02X\n",
+    fileSize, isJPG, isPNG, isAdam7, header[0], header[1], header[2], header[3]);
 
   if (isJPG && isProgressiveJPEG()) {
     if (radio.SlideShowDebug) Serial.println("[SLS] Decoding as progressive JPEG");
@@ -92,6 +114,51 @@ void ShowSlideShow(void) {
     bool ok = JPEGdecoder("/slideshow.img", tft);
     tft.endWrite();
     if (radio.SlideShowDebug) Serial.printf("[SLS] Baseline decode result: %s\n", ok ? "OK" : "FAIL");
+    fadeUp();
+  } else if (isAdam7) {
+    // Adam7-interlaced PNG: PNGdec cannot decode these reliably from LittleFS
+    // on ESP32, so route to our own progressive decoder. It uses the DAB
+    // slideshow segment buffer (40 KiB, idle at this point in the pipeline)
+    // as its working set and reads the entire image via a heap allocation
+    // large enough for the file.
+    if (radio.SlideShowDebug) Serial.println("[SLS] Decoding as Adam7 interlaced PNG");
+    uint8_t* image = (uint8_t*)malloc(fileSize);
+    if (!image) {
+      if (radio.SlideShowDebug) Serial.printf("[SLS] Adam7 skip: malloc(%u) failed\n", fileSize);
+      return;
+    }
+    File f = LittleFS.open("/slideshow.img", "rb");
+    size_t got = f ? f.read(image, fileSize) : 0;
+    if (f) f.close();
+    if (got != fileSize) {
+      if (radio.SlideShowDebug) Serial.printf("[SLS] Adam7 skip: read %u/%u bytes\n", got, fileSize);
+      free(image);
+      return;
+    }
+    fadeDown();
+    tft.fillScreen(TFT_WHITE);
+    PngAdam7Info info;
+    // Peek width/height from the IHDR we already have so the row callback can
+    // centre the image on the 320x240 panel.
+    unsigned imgW = ((unsigned)header[16] << 24) | ((unsigned)header[17] << 16)
+                  | ((unsigned)header[18] << 8)  |  (unsigned)header[19];
+    unsigned imgH = ((unsigned)header[20] << 24) | ((unsigned)header[21] << 16)
+                  | ((unsigned)header[22] << 8)  |  (unsigned)header[23];
+    Adam7Context ctx;
+    ctx.xOffset = (320 - (int)imgW) / 2;
+    ctx.yOffset = (240 - (int)imgH) / 2;
+    tft.startWrite();
+    bool ok = PNGAdam7decoder(image, fileSize,
+                              radio.getSlideshowBuffer(),
+                              radio.getSlideshowBufferSize(),
+                              320, 240, info,
+                              adam7RowCallback, &ctx);
+    tft.endWrite();
+    if (radio.SlideShowDebug) {
+      Serial.printf("[SLS] Adam7 result: %s (stage=%s, detail=%s, pass=%u row=%u)\n",
+                    ok ? "OK" : "FAIL", info.stage, info.detail, info.pass, info.row);
+    }
+    free(image);
     fadeUp();
   } else if (isPNG) {
     // PNG: fade down, decode hidden, fade up

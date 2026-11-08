@@ -22,6 +22,7 @@ uint8_t slaveSelectPin;
 static void SPIwrite(unsigned char* data, uint32_t length);
 static void SPIread(uint16_t length);
 static void cts(void);
+static uint16_t crc16_ccitt(const uint8_t* data, size_t len);
 static void Set_Property(uint16_t property, uint16_t value);
 static String convertToUTF8(const wchar_t* input);
 static String extractUTF8Substring(const String& utf8String, size_t start, size_t length);
@@ -157,6 +158,21 @@ static void cts(void) {
   if (timeout && sizeof(SPIbuffer) > 5) {
     SPIbuffer[5] |= (1 << 7);
   }
+}
+
+// CRC-16/CCITT-FALSE as used by ETSI EN 301 234 MOT headers and body segments
+// (polynomial 0x1021, init 0xFFFF, final XOR 0xFFFF). The two trailing bytes
+// of each MOT object hold this value over the preceding bytes; a mismatch
+// means a corrupt packet that must be dropped.
+static uint16_t crc16_ccitt(const uint8_t* data, size_t len) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= (uint16_t)data[i] << 8;
+    for (uint8_t b = 0; b < 8; b++) {
+      crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
+    }
+  }
+  return (uint16_t)(crc ^ 0xFFFF);
 }
 
 // Cold-start sequence per AN649:
@@ -480,9 +496,22 @@ void DAB::getServiceData(void) {
           ServiceData[byte_number] = '\0';
 
           // Read Slideshow header - extract total length
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 200) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count >= 13 && byte_count < 200) {
+          // MOT trailer: the final two bytes of the body are the CRC-16 over
+          // everything preceding them. Drop corrupt headers before they can
+          // lock us onto a bogus BodySize.
+          uint16_t hdrCrcExp = ((uint16_t)SPIbuffer[23 + byte_count] << 8) | SPIbuffer[24 + byte_count];
+          if (crc16_ccitt(&SPIbuffer[25], byte_count - 2) != hdrCrcExp) {
+            if (SlideShowDebug) Serial.printf("[SLS] Header CRC mismatch (expected 0x%04X), dropped\n", hdrCrcExp);
+          } else {
           uint16_t transportID = (SPIbuffer[30] << 8) | SPIbuffer[31];
-          uint32_t newLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
+          // MOT BodySize is a 28-bit field split across bytes 34..37 (ETSI EN 301 234).
+          // Previous code masked to 16 bits and skipped byte 34, which truncated the
+          // length for images > 64 KiB or headers whose high nibble was non-zero.
+          uint32_t newLength = ((uint32_t)SPIbuffer[34] << 20)
+                             | ((uint32_t)SPIbuffer[35] << 12)
+                             | ((uint32_t)SPIbuffer[36] << 4)
+                             | ((uint32_t)SPIbuffer[37] >> 4);
 
           if (newLength > 0 && newLength != SlideShowLengthOld) {
             if (SlideShowLength == 0) {
@@ -533,11 +562,23 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
             SlideShowTotalSegments = 0;
             SlideShowInit = false;
           }
+          }  // end header CRC-ok branch
 
           // Read Slideshow packets - store each segment (works with or without header)
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12 && byte_count >= 13) {
+          // MOT trailer: same CRC-16 rule as for headers. Drop corrupt
+          // segments so they never make it into the packed arena.
+          uint16_t segCrcExp = ((uint16_t)SPIbuffer[23 + byte_count] << 8) | SPIbuffer[24 + byte_count];
+          if (crc16_ccitt(&SPIbuffer[25], byte_count - 2) != segCrcExp) {
+            if (SlideShowDebug) Serial.printf("[SLS] Segment CRC mismatch (expected 0x%04X), dropped\n", segCrcExp);
+          } else {
           uint16_t transportID = (SPIbuffer[30] << 8) | SPIbuffer[31];
           uint8_t segmentNumber = SPIbuffer[28];
+          // Bit 0x80 of byte 27 flags the final segment of the body; without it
+          // completion detection relies on either the MOT header's BodySize or
+          // observing segment 0 twice, both of which fail when we tune in
+          // mid-carousel.
+          bool lastSegment = (SPIbuffer[27] & 0x80) != 0;
 
           // Check Transport ID
           if (SlideShowTransportID == 0) {
@@ -556,10 +597,16 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
             if (!(SlideShowSegmentBitmap[byteIndex] & (1 << bitIndex))) {
               uint16_t dataLen = byte_count - 11;
 
-              // Bounds-check: discard segments that don't fit our RAM buffer
-              if (segmentNumber < SLS_MAX_SEGMENTS && dataLen <= SLS_MAX_SEG_SIZE) {
-                memcpy(&slideshowSegBuf[segmentNumber * SLS_MAX_SEG_SIZE], &SPIbuffer[34], dataLen);
+              // Bounds-check: segment number must fit the side tables, payload
+              // must fit the per-segment cap, and we must still have room in
+              // the packed arena. If any check fails the segment is dropped.
+              if (segmentNumber < SLS_MAX_SEGMENTS
+                  && dataLen <= SLS_MAX_SEG_SIZE
+                  && (slideshowBufWrite + dataLen) <= SLS_BUF_BYTES) {
+                memcpy(&slideshowSegBuf[slideshowBufWrite], &SPIbuffer[34], dataLen);
+                slideshowSegOfs[segmentNumber] = (uint16_t)slideshowBufWrite;
                 slideshowSegLen[segmentNumber] = dataLen;
+                slideshowBufWrite += dataLen;
 
                 // Mark segment as received and update highest seen
                 SlideShowSegmentBitmap[byteIndex] |= (1 << bitIndex);
@@ -571,14 +618,23 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                 SlideShowLastActivity = millis();
                 if (SlideShowDebug) Serial.printf("[SLS] Segment %u saved, %u bytes (total %u/%u) TID=%u\n", segmentNumber, dataLen, SlideShowByteCounter, SlideShowLength, transportID);
 
-                // Check if complete - using byte count + all segments when we have header length
-                if (SlideShowLength > 0 && SlideShowByteCounter >= SlideShowLength && allSegmentsReceived()) {
+                // Three independent completion triggers:
+                //   a) last-segment flag seen (reliable, works mid-carousel)
+                //   b) MOT header BodySize reached and all segments present
+                //   c) segment 0 seen a second time (fallback handled below)
+                if (lastSegment) {
+                  SlideShowTotalSegments = segmentNumber + 1;
+                  if (allSegmentsReceived()) {
+                    if (SlideShowDebug) Serial.printf("[SLS] Last-segment flag at %u, assembling %u segments\n", segmentNumber, SlideShowTotalSegments);
+                    assembleSlideshow();
+                  }
+                } else if (SlideShowLength > 0 && SlideShowByteCounter >= SlideShowLength && allSegmentsReceived()) {
                   SlideShowTotalSegments = SlideShowHighestSegment + 1;
                   if (SlideShowDebug) Serial.printf("[SLS] Complete by byte count, assembling %u segments\n", SlideShowTotalSegments);
                   assembleSlideshow();
                 }
               } else {
-                if (SlideShowDebug) Serial.printf("[SLS] Drop seg %u (dataLen=%u out of buffer bounds)\n", segmentNumber, dataLen);
+                if (SlideShowDebug) Serial.printf("[SLS] Drop seg %u (dataLen=%u, bufWrite=%u — out of buffer bounds)\n", segmentNumber, dataLen, (unsigned)slideshowBufWrite);
               }
             } else if (segmentNumber == 0 && SlideShowLength == 0 && SlideShowHighestSegment > 0) {
               // Segment 0 received again (duplicate) - a full broadcast cycle has completed
@@ -601,6 +657,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
               }
             }
           }
+          }  // end segment CRC-ok branch
         }
       }
     }
@@ -608,12 +665,15 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
 }
 
 // Forget every buffered slideshow segment. Used on TID switch, duplicate-image
-// detection, assembly completion, and timeouts. Clearing the lengths array is
-// enough — the data bytes in slideshowSegBuf only get read for indices where
-// the corresponding length is non-zero.
+// detection, assembly completion, and timeouts. Resets the packed-arena write
+// pointer so new segments start at offset 0; the side tables and bitmap are
+// what mark a segment as present, so the data bytes themselves need not be
+// wiped.
 void DAB::clearSegmentBuffer(void) {
   memset(slideshowSegLen, 0, sizeof(slideshowSegLen));
+  memset(slideshowSegOfs, 0, sizeof(slideshowSegOfs));
   memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+  slideshowBufWrite = 0;
 }
 
 // Check if we have every segment from 0..N where N is either:
@@ -666,10 +726,11 @@ void DAB::assembleSlideshow(void) {
     return;
   }
 
-  // Concatenate all segments from RAM in order — single sequential write
-  for (uint8_t i = 0; i < SlideShowTotalSegments && i < SLS_MAX_SEGMENTS; i++) {
+  // Concatenate all segments from RAM in order — single sequential write.
+  // Each segment is read from its recorded offset in the packed arena.
+  for (uint16_t i = 0; i < SlideShowTotalSegments && i < SLS_MAX_SEGMENTS; i++) {
     if (slideshowSegLen[i] > 0) {
-      destFile.write(&slideshowSegBuf[i * SLS_MAX_SEG_SIZE], slideshowSegLen[i]);
+      destFile.write(&slideshowSegBuf[slideshowSegOfs[i]], slideshowSegLen[i]);
     } else if (SlideShowDebug) {
       Serial.printf("[SLS] WARNING: segment %u missing!\n", i);
     }
