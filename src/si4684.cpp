@@ -19,6 +19,13 @@ unsigned long SlideShowRecoverTimer = 0;
 bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
 
+// CTS watchdog state (populated by ctsRecordOutcome, consumed by panic()).
+// Declared up here so panic() can see the latch flag; the counter helper
+// itself lives next to cts() a few hundred lines down.
+static uint32_t ctsFailures     = 0;
+static uint32_t ctsFirstFailure = 0;
+static bool     ctsStalled      = false;
+
 static void SPIwrite(unsigned char* data, uint32_t length);
 static void SPIread(uint16_t length);
 static void cts(void);
@@ -65,7 +72,20 @@ char* DAB::getFirmwareVersion(void) {
 
 // Sanity check: query the chip status. Returns true if it looks hung
 // (caller responds by reinitialising the chip via doRecovery()).
+// Sanity check: query the chip status. Returns true if it looks hung
+// (caller responds by reinitialising the chip via doRecovery()). Also
+// returns true when the CTS watchdog has flagged a continuous burst of
+// unanswered commands, so a wedged chip is recovered instead of letting
+// cts() stall the main loop in 400 ms chunks indefinitely.
 bool DAB::panic(void) {
+  if (ctsStalled) {
+    // One-shot: hand off to the recovery path and clear the latch so the
+    // next cycle starts a fresh measurement window.
+    ctsStalled     = false;
+    ctsFailures    = 0;
+    ctsFirstFailure = 0;
+    return true;
+  }
   SPIbuffer[0] = 0x09;
   SPIbuffer[1] = 0x00;
   SPIwrite(SPIbuffer, 2);
@@ -135,6 +155,31 @@ static void Set_Property(uint16_t property, uint16_t value) {
   cts();
 }
 
+// CTS watchdog. A healthy chip answers every command within a handful of
+// 2 ms polls; when cts() times out eight times inside a 5 s window we treat
+// the device as wedged and set `ctsStalled` (declared at file top so that
+// panic() can see it) so the next panic() call triggers doRecovery().
+static const uint32_t CTS_WDT_WINDOW_MS = 5000;
+static const uint32_t CTS_WDT_LIMIT     = 8;
+
+// Record the outcome of the last cts() call. On success the window resets;
+// on timeout the counter advances and `ctsStalled` latches once the limit
+// is reached within the sliding window.
+static void ctsRecordOutcome(bool answered) {
+  if (answered) {
+    ctsFailures     = 0;
+    ctsFirstFailure = 0;
+    return;
+  }
+  const uint32_t now = millis();
+  if (ctsFailures == 0) ctsFirstFailure = now;
+  if (ctsFailures < UINT32_MAX) ctsFailures++;
+  if (ctsFailures >= CTS_WDT_LIMIT &&
+      (uint32_t)(now - ctsFirstFailure) >= CTS_WDT_WINDOW_MS) {
+    ctsStalled = true;
+  }
+}
+
 static void cts(void) {
   bool timeout = false;
   uint16_t countdown = 200;
@@ -158,6 +203,7 @@ static void cts(void) {
   if (timeout && sizeof(SPIbuffer) > 5) {
     SPIbuffer[5] |= (1 << 7);
   }
+  ctsRecordOutcome(!timeout);
 }
 
 // CRC-16/CCITT-FALSE as used by ETSI EN 301 234 MOT headers and body segments
