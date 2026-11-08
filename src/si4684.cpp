@@ -367,6 +367,9 @@ void DAB::EnsembleInfo(void) {
   SPIread(19);
   fic = SPIbuffer[9];
   cnr = SPIbuffer[10];
+  // fibErrorCount (16-bit LE) at offsets 11..12 — number of uncorrectable
+  // FIB errors seen in the period since the previous STATUSACK poll.
+  fibErrors = (uint16_t)SPIbuffer[11] | ((uint16_t)SPIbuffer[12] << 8);
   if (fic > 0) signallock = true;
   else signallock = false;
 

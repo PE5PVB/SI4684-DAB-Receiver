@@ -1118,12 +1118,47 @@ void ShowSignalLevel(void) {
       CNRold = CNR;
     }
 
-    if (ficold != radio.fic || displayreset) {
-      byte quality = map(radio.fic, 0, 100, 139, 0);
+    // Quality score: minimum of three components, each clipped at 100:
+    //   - FIC quality      (chip-reported, 0..100)
+    //   - CNR * 5          (dB → percent, caps at CNR 20 dB)
+    //   - BER proxy        (derived from fibErrorCount, log-ish buckets)
+    // The weakest link wins. FIC alone used to peg at 100% on any usable
+    // signal; adding CNR and fibErrors reflects multipath / weak SNR /
+    // actual bit-stream errors the receiver is coping with.
+    byte qscore = 0;
+    if (radio.signallock) {
+      byte ficClipped = radio.fic > 100 ? 100 : radio.fic;
+      byte cnrScaled  = radio.cnr >= 20 ? 100 : (byte)(radio.cnr * 5);
+      // fibErrors is the count of uncorrectable FIB errors in the last
+      // ~500 ms window. 0 is perfect; a few are tolerable; hundreds mean
+      // the audio stream is already breaking up.
+      byte berScore;
+      if      (radio.fibErrors == 0)   berScore = 100;
+      else if (radio.fibErrors <= 2)   berScore = 95;
+      else if (radio.fibErrors <= 10)  berScore = 85;
+      else if (radio.fibErrors <= 50)  berScore = 60;
+      else if (radio.fibErrors <= 200) berScore = 30;
+      else                             berScore = 0;
+      qscore = ficClipped;
+      if (cnrScaled < qscore) qscore = cnrScaled;
+      if (berScore  < qscore) qscore = berScore;
+    }
+    // Exponential moving average (same 0.9/0.1 shape as the S-meter above)
+    // so the bar glides between the limiting factors instead of snapping
+    // whenever min(FIC, CNR*5) swaps which input it tracks.
+    static uint16_t qAvg = 0;
+    qAvg = (((qAvg * 9) + 5) / 10) + qscore;
+    byte qDisplay = qAvg / 10;
+    if (qDisplay > 100) qDisplay = 100;
+
+    // Redraw only on 2%+ change to avoid single-step flicker from the EMA
+    // stepping through adjacent integer buckets.
+    if ((qDisplay > ficold + 1) || (qDisplay + 1 < ficold) || displayreset) {
+      byte quality = map(qDisplay, 0, 100, 139, 0);
       for (byte x = 0; x < 10; x++) tft.pushImage (135, 91 + x, 139, 1, QualLine);
       tft.fillRect(274 - quality, 91, quality, 10, BackgroundColor3);
-      tftReplace(1, String(ficold) + "%", String(radio.fic) + "%", 315, 90, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
-      ficold = radio.fic;
+      tftReplace(1, String(ficold) + "%", String(qDisplay) + "%", 315, 90, PrimaryColor, PrimaryColorSmooth, BackgroundColor3, 16);
+      ficold = qDisplay;
     }
 
 

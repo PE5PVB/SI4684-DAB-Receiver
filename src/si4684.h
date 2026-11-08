@@ -124,6 +124,7 @@ class DAB {
     uint8_t Days;
     uint8_t EnsembleLabelCharset;
     uint8_t fic;
+    uint16_t fibErrors;                 // FIB error count since previous DIGRAD_STATUS poll
     uint8_t getFIC(void);
     uint8_t Hours;
     uint8_t Minutes;
