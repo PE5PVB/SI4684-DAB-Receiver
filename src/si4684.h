@@ -163,6 +163,7 @@ class DAB {
     String getDynamicFilename(void);
     uint32_t componentID;
     uint32_t CurrentServiceID;
+    uint32_t CurrentComponentID;         // CompID of the active service, for setService() dedup
     uint32_t dataServiceCheck;
     uint32_t serviceID;
     uint32_t SlideShowByteCounter;

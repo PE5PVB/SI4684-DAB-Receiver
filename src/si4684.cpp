@@ -1173,6 +1173,19 @@ void DAB::setFreq(uint8_t freq) {
 // Start audio for service[_index] in the current ensemble. Resets the
 // slideshow segment buffer because the new service has its own MOT stream.
 void DAB::setService(uint8_t _index) {
+  // Dedup guard: skip entirely if this exact service (by ServiceID+CompID,
+  // not just array index — the list gets re-sorted on every EnsembleInfo()
+  // qsort) is already the active one. Without this, a redundant call —
+  // e.g. an external PC client re-sending the same SERIAL "SERVICE=N"
+  // command, or any future retry path — would wipe valid in-progress state
+  // (PS text, ECC, the slideshow segment buffer) and restart the MOT
+  // carousel from empty for no reason.
+  if (ServiceStart && _index < numberofservices
+      && CurrentServiceID   == service[_index].ServiceID
+      && CurrentComponentID == service[_index].CompID) {
+    return;
+  }
+
   union {
     uint32_t combine;
     uint8_t monoctet[4];
@@ -1231,6 +1244,7 @@ void DAB::setService(uint8_t _index) {
     }
   }
   CurrentServiceID = service[ServiceIndex].ServiceID;
+  CurrentComponentID = service[ServiceIndex].CompID;
   SlideShowRecover = true;
   ServiceInfo();
   SlideShowRecoverTimer = millis();
