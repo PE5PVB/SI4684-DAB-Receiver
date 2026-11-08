@@ -1150,7 +1150,21 @@ void ShowSignalLevel(void) {
     // Exponential moving average (same 0.9/0.1 shape as the S-meter above)
     // so the bar glides between the limiting factors instead of snapping
     // whenever min(FIC, CNR*5) swaps which input it tracks.
+    //
+    // Lock transitions are the exception: snap qAvg straight to the fresh
+    // qscore instead of smoothing. Without this, a cold boot where
+    // signallock flickers a few times while the chip is still settling
+    // (AGC/PLL/crystal ranging) repeatedly drags qAvg back toward 0 via the
+    // decay term, so the display can sit near ~10% for several seconds
+    // even once a clean lock is already established — a plain retune
+    // "fixes" it only because it forces a fresh acquisition, not because
+    // anything was actually wrong with the signal.
     static uint16_t qAvg = 0;
+    static bool qLockedPrev = false;
+    if (radio.signallock != qLockedPrev) {
+      qAvg = (uint16_t)qscore * 10;
+      qLockedPrev = radio.signallock;
+    }
     qAvg = (((qAvg * 9) + 5) / 10) + qscore;
     byte qDisplay = qAvg / 10;
     if (qDisplay > 100) qDisplay = 100;
