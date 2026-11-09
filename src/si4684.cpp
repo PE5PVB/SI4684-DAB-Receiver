@@ -283,11 +283,25 @@ bool DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 2);
     cts();
 
-    // Write bootloader patch. Chunked at 2044 payload bytes/transfer (same
-    // size the firmware upload below already uses successfully) instead of
-    // the previous 124-byte chunks — that cut this loop from ~47 SPI
-    // round-trips down to ~3 for the 5.8 KB rom_patch_016 blob, shaving a
-    // measurable chunk off boot time.
+    // Write bootloader patch. Chunked at 508 payload bytes/transfer instead
+    // of the original 124-byte chunks — cuts this loop from ~47 SPI
+    // round-trips down to ~12 for the 5.8 KB rom_patch_016 blob.
+    //
+    // NOTE: an earlier attempt used the same 2044-byte chunk size as the
+    // firmware upload below, reasoning that since that loop already proves
+    // the chip accepts large HOST_LOAD chunks, this one safely could too.
+    // That reasoning missed a difference between the two upload phases:
+    // this patch upload happens immediately after POWER_UP, while the
+    // crystal oscillator may still be stabilizing, whereas the firmware
+    // upload happens after a second LOAD_INIT once the clock is already
+    // running. cts()'s fixed 400 ms ceiling (200 x 2 ms polls) that is
+    // plenty of margin for a small chunk may not be enough time for the
+    // chip to absorb a 2+ KB chunk this early in boot — if cts() times out
+    // before the chip actually finished, the loop proceeds to the next
+    // chunk regardless, silently corrupting the patch. Chip responds fine
+    // afterwards (begin() still returns true, splash screen looks normal)
+    // but RF reception and RSSI readback end up broken. Keeping this chunk
+    // size modest leaves comfortable margin within the existing timeout.
     uint32_t index = 0;
     uint16_t romChunkLen = 0;
     while (index < sizeof(rom_patch_016)) {
@@ -295,7 +309,7 @@ bool DAB::begin(uint8_t SSpin) {
       SPIbuffer[1] = 0x00;
       SPIbuffer[2] = 0x00;
       SPIbuffer[3] = 0x00;
-      for (romChunkLen = 4; (romChunkLen < 2048) && (index < sizeof(rom_patch_016)); romChunkLen++, index++) {
+      for (romChunkLen = 4; (romChunkLen < 512) && (index < sizeof(rom_patch_016)); romChunkLen++, index++) {
         SPIbuffer[romChunkLen] = pgm_read_byte_near(rom_patch_016 + index);
       }
       SPIwrite(SPIbuffer, romChunkLen);
@@ -344,7 +358,7 @@ bool DAB::begin(uint8_t SSpin) {
     Set_Property(0x0200, 0x8000);  // Set properties
     Set_Property(0x0202, 0x1600);
     Set_Property(0x0800, 0x0003);
-    Set_Property(0x1710, 0xFC4A);
+    Set_Property(0x1710, 0xFC4A);  // Front-end varactor matching (slope/intercept), reference-design defaults
     Set_Property(0x1711, 0x00F8);
     Set_Property(0x8100, 0x0001);
     Set_Property(0x8101, 0x0064);

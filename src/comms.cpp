@@ -33,7 +33,7 @@ void Communication(void) {
     unsigned int equalsIndex = input.indexOf('=');
 
     if (equalsIndex == -1) {
-      // Bare keyword (no '='): only DEBUG is recognised; anything else is #2 (unknown)
+      // Bare keyword (no '='): DEBUG. Anything else is #2 (unknown).
       input.trim();
       input.toUpperCase();
       if (input.equals("DEBUG")) {
