@@ -1485,13 +1485,29 @@ String DAB::ASCII(const char* input, uint8_t charset, int length) {
 }
 
 
-// qsort() comparator: order services by component ID low byte ascending.
+// qsort() comparator: order services by component ID low byte ascending,
+// then by ServiceID (guaranteed unique) as a tie-breaker.
+//
+// Multiple services commonly share the same CompID low byte (that byte
+// alone doesn't uniquely identify a component -- see AN649/EN 300 401,
+// the distinguishing bits aren't confined to it). qsort() is NOT required
+// by the C standard to be stable for equal keys, so without a tie-breaker,
+// services that tie on the low byte could silently swap relative order
+// between one EnsembleInfo() refresh and the next even though the
+// underlying ensemble hasn't changed at all. Since this runs every ~500 ms,
+// that reshuffling could happen mid-scroll -- the channel list visibly
+// jumbling services around, and ServiceIndex's neighbours (what the next
+// rotary tick lands on) changing out from under an in-progress selection.
 static int compareCompID(const void* a, const void* b) {
-  uint32_t compID_a = (*((DABService*)a)).CompID & 0xFF;
-  uint32_t compID_b = (*((DABService*)b)).CompID & 0xFF;
+  const DABService* sa = (const DABService*)a;
+  const DABService* sb = (const DABService*)b;
+  uint32_t compID_a = sa->CompID & 0xFF;
+  uint32_t compID_b = sb->CompID & 0xFF;
 
   if (compID_a < compID_b) return -1;
   if (compID_a > compID_b) return 1;
+  if (sa->ServiceID < sb->ServiceID) return -1;
+  if (sa->ServiceID > sb->ServiceID) return 1;
   return 0;
 }
 
