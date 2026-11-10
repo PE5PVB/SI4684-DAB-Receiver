@@ -293,22 +293,28 @@ void setup(void) {
 
   OneBigLineSprite.createSprite(270, 30);
   OneBigLineSprite.setSwapBytes(true);
+  OneBigLineSprite.setTextWrap(false);
 
   ShortSprite.createSprite(36, 16);
   ShortSprite.setSwapBytes(true);
+  ShortSprite.setTextWrap(false);
 
   MediumSprite.createSprite(70, 16);
   MediumSprite.setSwapBytes(true);
+  MediumSprite.setTextWrap(false);
 
   LongSprite.createSprite(150, 17);
   LongSprite.setSwapBytes(true);
+  LongSprite.setTextWrap(false);
 
   FullLineSprite.createSprite(308, 20);
   FullLineSprite.setSwapBytes(true);
+  FullLineSprite.setTextWrap(false);
 
   ModeSprite.createSprite(46, 47);
   ModeSprite.setTextDatum(TC_DATUM);
   ModeSprite.setSwapBytes(true);
+  ModeSprite.setTextWrap(false);
 
   loadFonts(true);
 
