@@ -87,6 +87,7 @@ bool DAB::panic(void) {
   if (ctsStalled) {
     // One-shot: hand off to the recovery path and clear the latch so the
     // next cycle starts a fresh measurement window.
+    if (SlideShowDebug) Serial.printf("[DIAG] panic(): ctsStalled latched at %lu -> recovery\n", millis());
     ctsStalled     = false;
     ctsFailures    = 0;
     ctsFirstFailure = 0;
@@ -98,6 +99,7 @@ bool DAB::panic(void) {
   cts();
   SPIread(6);
   if (SPIbuffer[5] == 0x09) {
+    if (SlideShowDebug) Serial.printf("[DIAG] panic(): chip reported hung (0x09) at %lu -> recovery\n", millis());
     return true;
   }
   return false;
@@ -875,6 +877,41 @@ void DAB::assembleSlideshow(void) {
     }
   }
 
+  // Skip the redisplay if the new slideshow is byte-for-byte identical to
+  // what's already showing. Many stations (e.g. a single static station
+  // logo) keep retransmitting the same slideshow on a cycle even though
+  // nothing changed — without this check, ShowSlideShow()'s fade-down/
+  // fade-up would retrigger every cycle for no visible reason.
+  {
+    File oldFile = LittleFS.open("/slideshow.img", "rb");
+    File newFile = LittleFS.open("/temp.img", "rb");
+    bool identical = oldFile && newFile && oldFile.size() == newFile.size();
+    if (identical) {
+      uint8_t bufOld[256], bufNew[256];
+      while (oldFile.available()) {
+        size_t n1 = oldFile.read(bufOld, sizeof(bufOld));
+        size_t n2 = newFile.read(bufNew, sizeof(bufNew));
+        if (n1 != n2 || memcmp(bufOld, bufNew, n1) != 0) { identical = false; break; }
+      }
+    }
+    if (oldFile) oldFile.close();
+    if (newFile) newFile.close();
+
+    if (identical) {
+      if (SlideShowDebug) Serial.println("[SLS] Unchanged image, skipping redisplay");
+      LittleFS.remove("/temp.img");
+      clearSegmentBuffer();
+      SlideShowTransportID = 0;
+      SlideShowByteCounter = 0;
+      SlideShowHighestSegment = 0;
+      SlideShowTotalSegments = 0;
+      SlideShowLength = 0;
+      SlideShowInit = false;
+      SlideShowAvailable = true;
+      return;
+    }
+  }
+
   // Validation passed — replace old slideshow with new one
   if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
   if (!LittleFS.rename("/temp.img", "/slideshow.img")) {
@@ -1147,7 +1184,7 @@ void DAB::setFreq(uint8_t freq) {
   serviceHasOwnEcc = false;
   protectionlevel = 0;
   bitrate = 0;
-  dataServiceCheck = 0;
+  dataServiceStartedCount = 0;
   ServiceStart = false;
   SlideShowInit = false;
   SlideShowAvailable = false;
@@ -1334,9 +1371,33 @@ void DAB::Update(void) {
     if (ServiceStart) RecoverSlideShow();
 
     if (ServiceStart) {
+      // Start each non-tpeg data-type component exactly once. A mux that
+      // carries more than one such component (e.g. EPG + journaline) used
+      // to desync the chip: the old code remembered only the single most
+      // recently started CompID, so on every 500 ms poll it would find a
+      // *different* already-seen-but-not-last component, re-issue START for
+      // it, and keep oscillating between components forever.
+      //
+      // Also exclude EPG, for a different reason: EPG objects (ETSI TS 102
+      // 818, binary XML) are not MOT/slideshow data, but DIGITAL_SERVICE_START
+      // makes the chip start feeding their data through the same path this
+      // loop otherwise uses to pick up companion-channel slideshows. On a
+      // real-world mux (confirmed: Polish public broadcaster, 12C) with a
+      // component labelled "EPG", starting it left the chip's command
+      // interface (CTS) permanently unresponsive about 20-30 s later, while
+      // the audio decode path kept running fine — i.e. the chip's firmware
+      // got stuck specifically parsing data this command was never meant to
+      // request from an EPG component. Excluding it, like tpeg already was,
+      // avoids sending that START at all.
       for (int i = 0; i < numberofservices; i++) {
-        if (service[i].ServiceType == 3 && strstr(service[i].Label, "tpeg") == NULL && strstr(service[i].Label, "TPEG") == NULL) {
-          if (service[i].CompID != dataServiceCheck) {
+        if (service[i].ServiceType == 3
+            && strstr(service[i].Label, "tpeg") == NULL && strstr(service[i].Label, "TPEG") == NULL
+            && strstr(service[i].Label, "epg") == NULL && strstr(service[i].Label, "EPG") == NULL) {
+          bool alreadyStarted = false;
+          for (uint8_t j = 0; j < dataServiceStartedCount; j++) {
+            if (dataServiceStartedIDs[j] == service[i].CompID) { alreadyStarted = true; break; }
+          }
+          if (!alreadyStarted) {
             SPIbuffer[0] = 0x81;
             SPIbuffer[1] = 0x01;
             SPIbuffer[2] = 0x00;
@@ -1350,7 +1411,9 @@ void DAB::Update(void) {
             SPIbuffer[10] = (service[i].CompID >> 16) & 0xff;
             SPIbuffer[11] = (service[i].CompID >> 24) & 0xff;
             SPIwrite(SPIbuffer, 12);
-            dataServiceCheck = service[i].CompID;
+            if (dataServiceStartedCount < sizeof(dataServiceStartedIDs) / sizeof(dataServiceStartedIDs[0])) {
+              dataServiceStartedIDs[dataServiceStartedCount++] = service[i].CompID;
+            }
             break;
           }
         }

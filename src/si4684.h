@@ -168,7 +168,13 @@ class DAB {
     uint32_t componentID;
     uint32_t CurrentServiceID;
     uint32_t CurrentComponentID;         // CompID of the active service, for setService() dedup
-    uint32_t dataServiceCheck;
+    // Tracks which non-audio (data-type) services have already had their
+    // DIGITAL_SERVICE_START command sent, keyed by CompID rather than array
+    // index since EnsembleInfo() re-sorts the service[] array on every poll.
+    // See the dedicated comment at the Update() call site for why this
+    // can't be a single "last started" variable.
+    uint32_t dataServiceStartedIDs[32];
+    uint8_t dataServiceStartedCount;
     uint32_t serviceID;
     uint32_t SlideShowByteCounter;
     uint32_t SlideShowLengthOld;
