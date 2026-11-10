@@ -100,6 +100,11 @@ class DAB {
     bool SlideShowDebug;
     bool SlideShowUpdate;
     bool SlideShowUpdate2;
+    // True once a live MOT decode has completed for the service currently
+    // selected (reset in setService()). Lets assembleSlideshow() tell "first
+    // confirmation for this service" apart from "N-th repeat of the same
+    // carousel image" -- see the dedup check there.
+    bool SlideShowLiveConfirmed;
     char EID[5];
     char EnsembleLabel[17];
     char PStext[17];

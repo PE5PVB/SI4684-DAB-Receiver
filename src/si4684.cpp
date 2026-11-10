@@ -882,6 +882,13 @@ void DAB::assembleSlideshow(void) {
   // logo) keep retransmitting the same slideshow on a cycle even though
   // nothing changed — without this check, ShowSlideShow()'s fade-down/
   // fade-up would retrigger every cycle for no visible reason.
+  //
+  // Exception: the very first live decode for the currently selected
+  // service (SlideShowLiveConfirmed still false) always counts as a real
+  // update, even if /slideshow.img already holds byte-identical content
+  // restored from the per-service cache by RecoverSlideShow(). Otherwise
+  // auto-slideshow would never fire for a station whose image happens to
+  // match what was already cached from a previous visit.
   {
     File oldFile = LittleFS.open("/slideshow.img", "rb");
     File newFile = LittleFS.open("/temp.img", "rb");
@@ -897,7 +904,7 @@ void DAB::assembleSlideshow(void) {
     if (oldFile) oldFile.close();
     if (newFile) newFile.close();
 
-    if (identical) {
+    if (identical && SlideShowLiveConfirmed) {
       if (SlideShowDebug) Serial.println("[SLS] Unchanged image, skipping redisplay");
       LittleFS.remove("/temp.img");
       clearSegmentBuffer();
@@ -987,6 +994,7 @@ void DAB::assembleSlideshow(void) {
   SlideShowUpdate = true;
   SlideShowUpdate2 = true;
   SlideShowAvailable = true;
+  SlideShowLiveConfirmed = true;
   SlideShowInit = false;
 
   // Reset collection state so next image can be received
@@ -1261,6 +1269,7 @@ void DAB::setService(uint8_t _index) {
   SlideShowAvailable = false;
   SlideShowNew = true;
   SlideShowInit = false;
+  SlideShowLiveConfirmed = false;
   ServiceStart = true;
   ServiceIndex = _index;
   ecc = 0;  // Reset so ServiceInfo() picks up the new service's ECC
@@ -1328,6 +1337,12 @@ void DAB::RecoverSlideShow(void) {
             destinationFile.write(buf, bytesRead);
           }
           destinationFile.close();
+          // Deliberately NOT SlideShowUpdate = true here: this is a cached
+          // copy from a previous visit, shown only on manual request (SL
+          // button) until the live MOT carousel actually confirms an image
+          // for this service -- see SlideShowLiveConfirmed in
+          // assembleSlideshow(). Auto-slideshow must wait for that live
+          // confirmation even if the result turns out byte-identical.
           SlideShowAvailable = true;
           SlideShowNew = false;
         }
