@@ -21,8 +21,6 @@ void IRReceiver() {
  if (irrecv.decode(&results)) {
     uint32_t code = results.value;
 
-    Serial.println(code ,HEX);
-
    if (code == 0xFFFFFFFF) {
         // NEC repeat marker — only honor it for keys where auto-repeat feels right
         if (lastCode == 0x77E1604F || lastCode == 0x77E1E04E || lastCode == 0xFF5AA5 || lastCode == 0x77E1904F || lastCode == 0x77E1104E || lastCode == 0xFF10EF) {

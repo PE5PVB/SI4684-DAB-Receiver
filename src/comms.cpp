@@ -2,7 +2,7 @@
 //
 // Inbound (PC -> radio): newline-terminated text. Two forms:
 //   "DEBUG"        bare keyword → toggle slideshow debug logging
-//   "CMD=VALUE"    key/value pair → see hashCommand() / handleCommunication()
+//   "CMD=VALUE"    key/value pair → see hashCommand() below
 //
 // Outbound (radio -> PC): event-driven, only while connectedSerial is true:
 //   $L=...   service list changed
@@ -14,6 +14,20 @@
 //   #0..#2   numeric status replies (#0 OK, #1 bad arg, #2 unknown cmd)
 
 #include "comms.h"
+#include "language.h"  // VERSION string, used in the ENABLE handshake reply
+
+// Forward declarations: Communication() (below) calls these before their
+// definitions appear further down this file. Local to this translation
+// unit only -- unlike Communication(), nothing outside comms.cpp calls them,
+// so they don't belong in comms.h (declaring them there just produced a
+// "declared static but never defined" warning in every other file that
+// includes it).
+static char hashCommand(String command);
+static void DataPrint(String data);
+static String ServiceList(void);
+static String ServiceInfo(void);
+static void doEnableConnection(void);
+static void doMOTShow(void);
 
 unsigned long signalMillis;          // last time the periodic signal line was emitted
 unsigned int interval = 100;         // signal-line emission interval (ms), configurable via INTERVAL=
@@ -76,51 +90,51 @@ void Communication(void) {
               } else {
                 DataPrint("#1\n");
               }
-              break;
-
-            case 'T':
-              if (command.equals("TUNE")) {
-                if (intValue < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
-                  radio.ServiceStart = false;
-                  radio.ServiceIndex = 0;
-                  radio.clearData();
-                  for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
-                  dabfreq = intValue;
-                  radio.setFreq(dabfreq);
-                  if (SlideShowView || ChannelListView || ShowServiceInformation || menu) {
-                    SlideShowView = false;
-                    ChannelListView = false;
-                    ShowServiceInformation = false;
-                    menu = false;
-                    BuildDisplay();
-                  } else {
-                    ShowFreq();
-                  }
-                  DataPrint("#0\n*TUNE=" + String(dabfreq) + "\n");
-                  DataPrint("$M=SLIDESHOW=0\n");
-                } else {
-                  DataPrint("#1\n");
-                }
-              }
-              break;
-            case 'S':
-              if (command.equals("SERVICE")) {
-                if (intValue < radio.numberofservices) {
-                  radio.ServiceIndex = intValue;
-                  radio.setService(radio.ServiceIndex);
-                  radio.ServiceStart = true;
-                  store = true;
-                  DataPrint("#0\n*SERVICE=" + String(radio.ServiceIndex) + "\n");
-                  DataPrint("$M=SLIDESHOW=0\n");
-                } else {
-                  DataPrint("#1\n");
-                }
-              }
-              break;
-            default:
-              DataPrint("#2\n");
-              break;
             }
+            break;
+
+          case 'T':
+            if (command.equals("TUNE")) {
+              if (intValue < sizeof(DABfrequencyTable_DAB) / sizeof(DABfrequencyTable_DAB[0])) {
+                radio.ServiceStart = false;
+                radio.ServiceIndex = 0;
+                radio.clearData();
+                for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
+                dabfreq = intValue;
+                radio.setFreq(dabfreq);
+                if (SlideShowView || ChannelListView || ShowServiceInformation || menu) {
+                  SlideShowView = false;
+                  ChannelListView = false;
+                  ShowServiceInformation = false;
+                  menu = false;
+                  BuildDisplay();
+                } else {
+                  ShowFreq();
+                }
+                DataPrint("#0\n*TUNE=" + String(dabfreq) + "\n");
+                DataPrint("$M=SLIDESHOW=0\n");
+              } else {
+                DataPrint("#1\n");
+              }
+            }
+            break;
+          case 'S':
+            if (command.equals("SERVICE")) {
+              if (intValue < radio.numberofservices) {
+                radio.ServiceIndex = intValue;
+                radio.setService(radio.ServiceIndex);
+                radio.ServiceStart = true;
+                store = true;
+                DataPrint("#0\n*SERVICE=" + String(radio.ServiceIndex) + "\n");
+                DataPrint("$M=SLIDESHOW=0\n");
+              } else {
+                DataPrint("#1\n");
+              }
+            }
+            break;
+          default:
+            DataPrint("#2\n");
+            break;
         }
       } else {
         if (command == "ENABLE") {
@@ -324,6 +338,14 @@ static void doMOTShow(void) {
     uint8_t header[8];
     size_t bytesRead = file.read(header, sizeof(header));
     file.close();
+
+    if (bytesRead < sizeof(header)) {
+      DataPrint("3\n");
+      free(image);
+      free(buffer);
+      radio.SlideShowUpdate2 = false;
+      return;
+    }
 
     if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
       DataPrint("2,");

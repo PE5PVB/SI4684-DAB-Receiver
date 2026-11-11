@@ -134,7 +134,6 @@ class DAB {
     uint8_t EnsembleLabelCharset;
     uint8_t fic;
     uint16_t fibErrors;                 // FIB error count since previous DIGRAD_STATUS poll
-    uint8_t getFIC(void);
     uint8_t Hours;
     uint8_t Minutes;
     uint8_t Months;
@@ -163,10 +162,9 @@ class DAB {
 
   private:
     bool SlideShowInit;
-    bool SlideShowNew;
     bool SlideShowRecover;
-    char ChipType[7];
-    char FirmwVersion[6];
+    char ChipType[10];
+    char FirmwVersion[16];
     bool deleteOldestSlideshow(void);
     bool ensureFreeSpace(size_t requiredBytes);
     String getDynamicFilename(void);

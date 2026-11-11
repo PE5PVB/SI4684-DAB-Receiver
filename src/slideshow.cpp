@@ -88,7 +88,7 @@ void ShowSlideShow(void) {
   size_t hdrRead = file.read(header, sizeof(header));
   file.close();
 
-  bool isJPG = (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF);
+  bool isJPG = (hdrRead >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF);
   bool isPNG = (hdrRead >= 8
                 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
                 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A);

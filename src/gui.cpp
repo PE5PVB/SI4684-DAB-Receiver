@@ -724,7 +724,6 @@ void ShowRT(void) {
     } else {
       if (millis() - rtticker >= 20) {
         xPos --;
-        rttickerhold = millis();
 
         if (xPos < -RTWidth - 50) xPos = 0;
         FullLineSprite.setTextDatum(TL_DATUM);
@@ -1101,7 +1100,11 @@ void ShowSignalLevel(void) {
       if (constrainedSegments > 85) constrainedSegments = 85;
       if (significantSegments > 85) significantSegments = 85;
 
-      int length1 = 2 * segments;
+      // Use the clamped segment count here too -- a strong/local signal can
+      // push the raw `segments` map() result well past 85 (the meter's full
+      // width in segments), which used to paint this bar past the track and
+      // into the MER/dB readout area to its right.
+      int length1 = 2 * constrainedSegments;
       int length2 = 2 * (significantSegments - 56);
       int length3 = 2 * (85 - constrainedSegments);
 

@@ -94,7 +94,6 @@ int PrimaryColorSmooth;
 volatile int rotary;
 volatile int rotary2;
 int rssi;
-int rssiold = 200;
 int RTlengthold;
 int RTWidth;
 int SecondaryColor;
@@ -127,7 +126,6 @@ uint8_t service = 0;
 unsigned long tottimer;
 unsigned long rssiTimer;
 unsigned long rtticker;
-unsigned long rttickerhold;
 unsigned long TuningTimer;
 unsigned long VolumeTimer;
 
@@ -1206,10 +1204,22 @@ void tftPrint(int8_t offset, const String & text, int16_t x, int16_t y, int colo
   tft.drawString(modifiedText, x, y, 1);
 }
 
-// Final-stage shutdown: detach interrupts, mute amp, blank screen, and call
+// Final-stage shutdown: mute amp, blank screen, and call
 // esp_deep_sleep_start(). Wakes only on a button-pin trigger.
 void deepSleep(void) {
   StoreFrequency();
+
+  // Same fade/blank/mute sequence as the manual standby button (doStandby())
+  // -- this path is reached from the auto time-out-of-standby (tot) timer,
+  // which previously skipped straight to deep sleep with the screen still
+  // lit and the headphone amp still powered.
+  for (int x = ContrastSet; x > 0; x--) {
+    analogWrite(CONTRASTPIN, x * 2);
+    delay(25);
+  }
+  tft.writecommand(0x10);
+  Headphones.Shutdown();
+
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_34, LOW);
   esp_deep_sleep_start();
 }

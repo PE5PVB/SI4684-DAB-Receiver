@@ -12,11 +12,9 @@
 #include "mbedtls/base64.h"
 
 unsigned char SPIbuffer[4096];      // shared SPI tx/rx buffer (commands and replies)
-bool once = false;
 
 unsigned long DataUpdate = 0;       // millis() of last EnsembleInfo/ServiceInfo refresh (500 ms throttle)
 unsigned long SlideShowRecoverTimer = 0;
-bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
 
 // CTS watchdog state (populated by ctsRecordOutcome, consumed by panic()).
@@ -38,7 +36,6 @@ static void cts(void);
 static uint16_t crc16_ccitt(const uint8_t* data, size_t len);
 static void Set_Property(uint16_t property, uint16_t value);
 static String convertToUTF8(const wchar_t* input);
-static String extractUTF8Substring(const String& utf8String, size_t start, size_t length);
 static void charConverter(const char* input, wchar_t* output, size_t size);
 static int compareCompID(const void* a, const void* b);
 
@@ -49,10 +46,13 @@ char* DAB::getChipID(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(23);
-  itoa((SPIbuffer[10] << 8) + SPIbuffer[9], ChipType + 2, 10);
   ChipType[0] = 'S';
   ChipType[1] = 'I';
-  ChipType[6] = '\0';
+  // sizeof(ChipType) - 2 leaves room for the "SI" prefix already written
+  // above; itoa() always NUL-terminates, so no separate ChipType[...] = '\0'
+  // is needed (the previous fixed offset silently truncated into a 1-byte
+  // buffer overflow if the chip ever reported a 5-digit part number).
+  itoa((SPIbuffer[10] << 8) + SPIbuffer[9], ChipType + 2, 10);
   return ChipType;
 }
 
@@ -63,16 +63,14 @@ char* DAB::getFirmwareVersion(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(12);
-  char buffer[5];
-  itoa(SPIbuffer[5], buffer, 10);
-  FirmwVersion[0] = buffer[0];
-  FirmwVersion[1] = '.';
-  itoa(SPIbuffer[6], buffer, 10);
-  FirmwVersion[2] = buffer[0];
-  FirmwVersion[3] = '.';
-  itoa(SPIbuffer[7], buffer, 10);
-  FirmwVersion[4] = buffer[0];
-  FirmwVersion[5] = '\0';
+  // Each version component is formatted in full (itoa(), not just its
+  // first digit) -- the previous version kept only buffer[0], silently
+  // truncating any component >= 10 (e.g. ".12." displayed as ".1.").
+  char major[5], minor[5], build[5];
+  itoa(SPIbuffer[5], major, 10);
+  itoa(SPIbuffer[6], minor, 10);
+  itoa(SPIbuffer[7], build, 10);
+  snprintf(FirmwVersion, sizeof(FirmwVersion), "%s.%s.%s", major, minor, build);
   return FirmwVersion;
 }
 
@@ -111,7 +109,13 @@ uint16_t DAB::getRSSI(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(6);
-  int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(SPIbuffer[5] + (SPIbuffer[6] << 8)) * 10) / 256);
+  // RSSI is a signed 8.8 fixed-point dBuV value (AN649, TEST_GET_RSSI).
+  // SPIbuffer[5]/[6] are plain bytes, so combining them without this cast
+  // always yields a non-negative 16-bit pattern -- the "rssi < -1000" clamp
+  // below could then never trigger, and a genuinely weak/negative reading
+  // would be misreported as a large positive value instead.
+  int16_t raw = (int16_t)((uint16_t)SPIbuffer[5] | ((uint16_t)SPIbuffer[6] << 8));
+  int16_t rssi = static_cast<int16_t>((static_cast<int32_t>(raw) * 10) / 256);
   if (rssi > 1200) rssi = 1200;
   if (rssi < -1000) rssi = -1000;
   return rssi;
@@ -381,9 +385,6 @@ bool DAB::begin(uint8_t SSpin) {
 // EID, ensemble label) and populate the public fields. Also fetches the
 // service list when freshly locked. Called periodically from Update().
 void DAB::EnsembleInfo(void) {
-  static bool lastSignalLock = false;
-  static uint8_t lastFic = 0;
-
   SPIbuffer[0] = 0xB2;  // Get signalstatus
   SPIbuffer[1] = 0x09;
   SPIwrite(SPIbuffer, 2);
@@ -396,13 +397,6 @@ void DAB::EnsembleInfo(void) {
   fibErrors = (uint16_t)SPIbuffer[11] | ((uint16_t)SPIbuffer[12] << 8);
   if (fic > 0) signallock = true;
   else signallock = false;
-
-  // Log signal changes
-  if (signallock != lastSignalLock) {
-    lastSignalLock = signallock;
-  }
-
-  lastFic = fic;
   if (signallock) {
     SPIbuffer[0] = 0x80;  // Get servicelist
     SPIbuffer[1] = 0x00;
@@ -493,8 +487,6 @@ void DAB::EnsembleInfo(void) {
 
       uint16_t eidRaw = ((uint16_t)SPIbuffer[6] << 8) | SPIbuffer[5];
       if (eidRaw != 0x0000 && eidRaw != 0xFFFF) {
-        EnsembleInfoSet = true;
-
         // Only set EID/EnsembleLabel/ECC once after tuning; they don't change on the same frequency
         // This prevents corrupted data during marginal signal from overwriting valid values
         if (EID[0] == '\0' || EnsembleLabel[0] == '\0') {
@@ -528,8 +520,6 @@ void DAB::EnsembleInfo(void) {
         if (ensembleEcc == 0 && SPIbuffer[23] != 0) {
           ensembleEcc = SPIbuffer[23];
         }
-      } else {
-        EnsembleInfoSet = false;
       }
     }
     SPIbuffer[0] = 0xBC;
@@ -617,9 +607,8 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
               }
 
               SlideShowTransportID = transportID;
-              SlideShowNew = true;
               SlideShowInit = true;
-              if (SlideShowDebug) Serial.printf("[SLS] Header received, length=%u, bytes so far=%u, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
+              if (SlideShowDebug) Serial.printf("[SLS] Header received, length=%lu, bytes so far=%lu, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
 
               if (SlideShowByteCounter >= SlideShowLength && allSegmentsReceived()) {
                 SlideShowTotalSegments = SlideShowHighestSegment + 1;
@@ -629,7 +618,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
             } else if (SlideShowLength == newLength) {
               // Same image, new carousel cycle - update TID to accept segments again
               SlideShowTransportID = transportID;
-              if (SlideShowDebug) Serial.printf("[SLS] Header confirmed, length=%u, bytes so far=%u, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
+              if (SlideShowDebug) Serial.printf("[SLS] Header confirmed, length=%lu, bytes so far=%lu, TID=%u\n", SlideShowLength, SlideShowByteCounter, transportID);
 
               if (SlideShowByteCounter >= SlideShowLength && allSegmentsReceived()) {
                 SlideShowTotalSegments = SlideShowHighestSegment + 1;
@@ -638,11 +627,11 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
               }
             } else {
               // Different length - other carousel image, ignore
-              if (SlideShowDebug) Serial.printf("[SLS] Ignoring header length=%u (collecting %u), TID=%u\n", newLength, SlideShowLength, transportID);
+              if (SlideShowDebug) Serial.printf("[SLS] Ignoring header length=%lu (collecting %lu), TID=%u\n", newLength, SlideShowLength, transportID);
             }
           } else if (newLength > 0 && SlideShowInit) {
             // Same image as already displayed — discard collected segments
-            if (SlideShowDebug) Serial.printf("[SLS] Same image (%u bytes), discarding collection\n", newLength);
+            if (SlideShowDebug) Serial.printf("[SLS] Same image (%lu bytes), discarding collection\n", newLength);
             clearSegmentBuffer();
             SlideShowTransportID = 0;
             SlideShowByteCounter = 0;
@@ -704,7 +693,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
                 }
                 SlideShowInit = true;
                 SlideShowLastActivity = millis();
-                if (SlideShowDebug) Serial.printf("[SLS] Segment %u saved, %u bytes (total %u/%u) TID=%u\n", segmentNumber, dataLen, SlideShowByteCounter, SlideShowLength, transportID);
+                if (SlideShowDebug) Serial.printf("[SLS] Segment %u saved, %u bytes (total %lu/%lu) TID=%u\n", segmentNumber, dataLen, SlideShowByteCounter, SlideShowLength, transportID);
 
                 // Three independent completion triggers:
                 //   a) last-segment flag seen (reliable, works mid-carousel)
@@ -730,7 +719,7 @@ if (SlideShowDebug) Serial.printf("[SLS] Header TID=%u != segments TID=%u, disca
               if (allSegmentsReceived()) {
                 // Check if this is the same image we already displayed
                 if (SlideShowLengthOld > 0 && SlideShowByteCounter == SlideShowLengthOld) {
-                  if (SlideShowDebug) Serial.printf("[SLS] Same image detected (%u bytes), skipping\n", SlideShowByteCounter);
+                  if (SlideShowDebug) Serial.printf("[SLS] Same image detected (%lu bytes), skipping\n", SlideShowByteCounter);
                   clearSegmentBuffer();
                   SlideShowTransportID = 0;
                   SlideShowByteCounter = 0;
@@ -792,7 +781,7 @@ bool DAB::allSegmentsReceived(void) {
 // slideshow stays intact on validation failure. Optionally also caches a
 // per-service copy as /<serviceID>.img when BufferSlideShow is enabled.
 void DAB::assembleSlideshow(void) {
-  if (SlideShowDebug) Serial.printf("[SLS] Assembling: %u segments, %u bytes received, %u bytes expected\n", SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
+  if (SlideShowDebug) Serial.printf("[SLS] Assembling: %u segments, %lu bytes received, %lu bytes expected\n", SlideShowTotalSegments, SlideShowByteCounter, SlideShowLength);
 
   // Ensure enough free space for assembled slideshow
   ensureFreeSpace(SlideShowByteCounter + 4096);
@@ -834,7 +823,7 @@ void DAB::assembleSlideshow(void) {
       checkFile.close();
 
       if (actualSize != SlideShowLength) {
-        if (SlideShowDebug) Serial.printf("[SLS] REJECTED: size mismatch (got %u, expected %u)\n", actualSize, SlideShowLength);
+        if (SlideShowDebug) Serial.printf("[SLS] REJECTED: size mismatch (got %u, expected %lu)\n", actualSize, SlideShowLength);
         LittleFS.remove("/temp.img");
         clearSegmentBuffer();
         SlideShowTransportID = 0;
@@ -852,7 +841,7 @@ void DAB::assembleSlideshow(void) {
   {
     File imgFile = LittleFS.open("/temp.img", "rb");
     if (imgFile) {
-      uint8_t hdr[8];
+      uint8_t hdr[8] = {0};
       imgFile.read(hdr, sizeof(hdr));
       imgFile.close();
 
@@ -1267,7 +1256,6 @@ void DAB::setService(uint8_t _index) {
   SlideShowLength = 0;
   SlideShowLengthOld = 0;
   SlideShowAvailable = false;
-  SlideShowNew = true;
   SlideShowInit = false;
   SlideShowLiveConfirmed = false;
   ServiceStart = true;
@@ -1344,7 +1332,6 @@ void DAB::RecoverSlideShow(void) {
           // assembleSlideshow(). Auto-slideshow must wait for that live
           // confirmation even if the result turns out byte-identical.
           SlideShowAvailable = true;
-          SlideShowNew = false;
         }
         sourceFile.close();
       }
@@ -1693,39 +1680,6 @@ static void charConverter(const char* input, wchar_t* output, size_t outSize) {
         i++;
     }
     output[i] = L'\0';
-}
-
-// Substring helper that operates on code-points (not bytes) so cutting a
-// UTF-8 string at index N doesn't slice a multi-byte sequence in half.
-static String extractUTF8Substring(const String& utf8String, size_t start, size_t length) {
-  String substring;
-  size_t utf8Length = utf8String.length();
-  size_t utf8Index = 0;
-  size_t charIndex = 0;
-
-  while (utf8Index < utf8Length && charIndex < start + length) {
-    uint8_t currentByte = utf8String.charAt(utf8Index);
-    uint8_t numBytes = 0;
-
-    if (currentByte < 0x80) {
-      numBytes = 1;
-    } else if ((currentByte >> 5) == 0x6) {
-      numBytes = 2;
-    } else if ((currentByte >> 4) == 0xE) {
-      numBytes = 3;
-    } else if ((currentByte >> 3) == 0x1E) {
-      numBytes = 4;
-    }
-
-    if (charIndex >= start) {
-      substring += utf8String.substring(utf8Index, utf8Index + numBytes);
-    }
-
-    utf8Index += numBytes;
-    charIndex++;
-  }
-
-  return substring;
 }
 
 // Encode the wchar_t code points produced by charConverter() into a UTF-8
