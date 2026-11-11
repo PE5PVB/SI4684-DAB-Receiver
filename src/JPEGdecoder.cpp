@@ -985,11 +985,22 @@ static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
               for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
               d->br.reset();
             }
-            if (d->br.hitMarker) break;
+            // Deliberately NOT breaking the loop on a plain (non-restart)
+            // hitMarker here. PJBitReader::fillBits() prefetches up to 32
+            // bits (4 bytes) ahead of what's actually been consumed, so it
+            // routinely reads the real EOI marker into view while decoding
+            // one of the last few MCUs of a perfectly valid image -- well
+            // before those MCUs are actually exhausted of legitimate,
+            // already-buffered bits. Breaking here abandoned every
+            // remaining MCU in the row (and all subsequent rows below),
+            // rendering them as flat mid-grey blocks even though the real
+            // bitstream had more valid data buffered. Once truly out of
+            // real data, getBits()/peekBits() fall back to returning 0,
+            // which pjDecodeBaseline() already handles safely (bounded
+            // loops, no crash), so no explicit bailout is needed.
           }
 
           pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
-          if (d->br.hitMarker) break;
         }
 
         free(baseBuf);
