@@ -510,7 +510,10 @@ void closeVolume(void) {
   } else if (ShowServiceInformation) {
     ShowServiceInfo();
   } else if (SlideShowView) {
-    SlideShowView = false;
+    // Let SlideShowButtonPress() see SlideShowView still true so it takes
+    // its "leave" branch (BuildDisplay() + SlideShowView = false) itself.
+    // Pre-clearing it here used to make that function think we were
+    // instead *entering* the slideshow, re-triggering its black fillScreen.
     SlideShowButtonPress();
   } else {
     BuildDisplay();
