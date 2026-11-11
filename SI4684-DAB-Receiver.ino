@@ -788,7 +788,19 @@ void KeyUp(void) {
   tottimer = millis();
   rotary = 0;
   rotary2 = 0;
-  if (SlideShowView) SlideShowButtonPress();
+  // Leaving the slideshow to retune: don't let SlideShowButtonPress() redraw
+  // the background right now with the stale (pre-increment) frequency still
+  // showing -- that produced a visible flash of the new frequency floating
+  // on the slideshow's black backdrop before the real background caught up.
+  // Apply the tuning change first, below, and do the one full redraw once
+  // that's already reflected.
+  bool wasSlideShowView = SlideShowView;
+  if (wasSlideShowView) {
+    setvolume = false;
+    memorystore = false;
+    memoryposstatus = MEM_NORMAL;
+    SlideShowView = false;
+  }
   if (!menu) {
     if (!ChannelListView) {
       if (ShowServiceInformation) BuildDisplay();
@@ -801,7 +813,7 @@ void KeyUp(void) {
           radio.ServiceStart = false;
           radio.clearData();
           for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
-          ShowFreq();
+          if (wasSlideShowView) BuildDisplay(); else ShowFreq();
           break;
 
         case TUNE_AUTO:
@@ -810,6 +822,7 @@ void KeyUp(void) {
           radio.clearData();
           direction = true;
           seek = true;
+          if (wasSlideShowView) BuildDisplay();
           break;
 
         case TUNE_MEM:
@@ -830,6 +843,7 @@ void KeyUp(void) {
             if (!IsStationEmpty()) memoryposstatus = MEM_EXIST;
             else memoryposstatus = MEM_NORMAL;
           }
+          if (wasSlideShowView) BuildDisplay();
           ShowMemoryPos();
           break;
       }
@@ -873,7 +887,15 @@ void KeyDown(void) {
   tottimer = millis();
   rotary = 0;
   rotary2 = 0;
-  if (SlideShowView) SlideShowButtonPress();
+  // See KeyUp() for why this is deferred instead of calling
+  // SlideShowButtonPress() directly.
+  bool wasSlideShowView = SlideShowView;
+  if (wasSlideShowView) {
+    setvolume = false;
+    memorystore = false;
+    memoryposstatus = MEM_NORMAL;
+    SlideShowView = false;
+  }
   if (!menu) {
     if (!ChannelListView) {
       if (ShowServiceInformation) BuildDisplay();
@@ -886,7 +908,7 @@ void KeyDown(void) {
           radio.ServiceStart = false;
           radio.clearData();
           for (byte x = 0; x < 17; x++) _serviceName[x] = '\0';
-          ShowFreq();
+          if (wasSlideShowView) BuildDisplay(); else ShowFreq();
           break;
 
         case TUNE_AUTO:
@@ -895,6 +917,7 @@ void KeyDown(void) {
           radio.clearData();
           direction = false;
           seek = true;
+          if (wasSlideShowView) BuildDisplay();
           break;
 
         case TUNE_MEM:
@@ -915,6 +938,7 @@ void KeyDown(void) {
             if (!IsStationEmpty()) memoryposstatus = MEM_EXIST;
             else memoryposstatus = MEM_NORMAL;
           }
+          if (wasSlideShowView) BuildDisplay();
           ShowMemoryPos();
           break;
       }
