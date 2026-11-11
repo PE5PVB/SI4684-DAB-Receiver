@@ -539,6 +539,25 @@ void DAB::EnsembleInfo(void) {
   }
 }
 
+// A genuine MOT header and a single-segment MOT body that is both segment 0
+// and the last segment produce the identical byte27/28/29 signature (see the
+// header/segment checks in getServiceData() below) -- the chip forwards raw
+// MSC data groups and exposes no field of its own that tells the two apart
+// (confirmed against AN649: no such discriminator is documented). A real
+// header's bytes from offset 34 are metadata (TransportID/BodySize); a body
+// segment's bytes there are the start of the image file itself, so a PNG/JPEG
+// magic number at that offset means "this is image data, not a header".
+static bool looksLikeImageStart(const uint8_t* p, uint16_t len) {
+  if (len >= 8 && p[0] == 0x89 && p[1] == 0x50 && p[2] == 0x4E && p[3] == 0x47 &&
+      p[4] == 0x0D && p[5] == 0x0A && p[6] == 0x1A && p[7] == 0x0A) {
+    return true;  // PNG
+  }
+  if (len >= 3 && p[0] == 0xFF && p[1] == 0xD8 && p[2] == 0xFF) {
+    return true;  // JPEG
+  }
+  return false;
+}
+
 // Pull one chunk of service-data from the chip. Each chunk is either:
 //   - Dynamic Label / Radiotext (group flag 0x02) → copy into ServiceData
 //   - MOT slideshow header     (0x80 0x00 0x12 ...) → record total length, TID
@@ -574,7 +593,8 @@ void DAB::getServiceData(void) {
           ServiceDataLen = (uint8_t)copyLen;
 
           // Read Slideshow header - extract total length
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count >= 13 && byte_count < 200) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count >= 13 && byte_count < 200
+                   && !looksLikeImageStart(&SPIbuffer[34], (byte_count >= 9) ? (uint16_t)(byte_count - 9) : 0)) {
           // MOT trailer: the final two bytes of the body are the CRC-16 over
           // everything preceding them. Drop corrupt headers before they can
           // lock us onto a bogus BodySize.
