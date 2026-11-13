@@ -386,14 +386,20 @@ bool DAB::begin(uint8_t SSpin) {
 // service list when freshly locked. Called periodically from Update().
 void DAB::EnsembleInfo(void) {
   SPIbuffer[0] = 0xB2;  // Get signalstatus
-  SPIbuffer[1] = 0x09;
+  // ARG1: DIGRAD_ACK (0x08) | FIBERR_ACK (0x02) | STC_ACK (0x01). FIBERR_ACK
+  // is what actually clears FIB_ERROR_COUNT after each read (AN649) -- without
+  // it the counter just accumulates for the whole tuned session, so a burst
+  // of errors (e.g. briefly unplugging the antenna) pins the quality score
+  // low forever afterwards even once the signal is clean again.
+  SPIbuffer[1] = 0x0B;
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(19);
   fic = SPIbuffer[9];
   cnr = SPIbuffer[10];
   // fibErrorCount (16-bit LE) at offsets 11..12 — number of uncorrectable
-  // FIB errors seen in the period since the previous STATUSACK poll.
+  // FIB errors since the previous poll (FIBERR_ACK above resets the chip's
+  // counter back to 0 after every read).
   fibErrors = (uint16_t)SPIbuffer[11] | ((uint16_t)SPIbuffer[12] << 8);
   if (fic > 0) signallock = true;
   else signallock = false;
@@ -1241,7 +1247,7 @@ void DAB::setFreq(uint8_t freq) {
   }
 
   SPIbuffer[0] = 0xB2;
-  SPIbuffer[1] = 0x01;
+  SPIbuffer[1] = 0x03;  // STC_ACK | FIBERR_ACK -- start the new tune with FIB_ERROR_COUNT at 0
   SPIwrite(SPIbuffer, 2);
   cts();
 }
